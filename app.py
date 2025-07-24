@@ -23,8 +23,13 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit
 import numpy as np
 import torch
+import sys
+from pathlib import Path
 
-from depth_surge_3d import StereoProjector
+# Add src to path for package imports
+sys.path.insert(0, str(Path(__file__).parent / 'src'))
+
+from depth_surge_3d.core.stereo_projector import create_stereo_projector
 
 # Global verbose flag
 VERBOSE = False
@@ -263,7 +268,7 @@ def process_video_async(session_id, video_path, settings, output_dir):
         if device == 'auto':
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
             
-        projector = StereoProjector(model_path, device)
+        projector = create_stereo_projector(model_path, device)
         
         # Get video info for progress tracking
         video_info = get_video_info(video_path)
