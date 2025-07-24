@@ -330,6 +330,10 @@ def process_video_async(session_id, video_path, settings, output_dir):
             
         projector = create_stereo_projector(model_path, device)
         
+        # Ensure the model is loaded before processing
+        if not projector.depth_estimator.load_model():
+            raise Exception("Failed to load depth estimation model")
+        
         # Get video info for progress tracking
         video_info = get_video_info(video_path)
         if not video_info:
