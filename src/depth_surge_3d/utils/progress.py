@@ -9,7 +9,24 @@ import time
 from typing import Optional, List, Callable, Any
 from abc import ABC, abstractmethod
 
+try:
+    from tqdm import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
+
 from ..core.constants import PROGRESS_UPDATE_INTERVAL, BATCH_PROCESSING_STEPS
+
+# Processing phases with weight distribution
+PROCESSING_PHASES = {
+    'extraction': {'weight': 15, 'description': 'Extracting frames'},
+    'super_sampling': {'weight': 10, 'description': 'Super sampling frames'},
+    'depth_estimation': {'weight': 30, 'description': 'Estimating depth'},
+    'stereo_generation': {'weight': 25, 'description': 'Creating stereo pairs'},
+    'distortion': {'weight': 10, 'description': 'Applying fisheye distortion'},
+    'vr_assembly': {'weight': 5, 'description': 'Assembling VR frames'},
+    'video_creation': {'weight': 5, 'description': 'Creating final video'}
+}
 
 
 class ProgressReporter(ABC):
@@ -27,38 +44,69 @@ class ProgressReporter(ABC):
 
 
 class ConsoleProgressReporter(ProgressReporter):
-    """Console-based progress reporter."""
+    """Console-based progress reporter with tqdm support."""
     
-    def __init__(self, show_eta: bool = True):
+    def __init__(self, show_eta: bool = True, use_tqdm: bool = True):
         self.show_eta = show_eta
+        self.use_tqdm = use_tqdm and HAS_TQDM
         self.start_time = time.time()
         self.last_update_time = 0
+        self.current_pbar = None
+        self.current_phase = None
+    
+    def _get_phase_description(self, phase: str) -> str:
+        """Get a user-friendly description for a phase."""
+        return PROCESSING_PHASES.get(phase, {}).get('description', phase.replace('_', ' ').title())
     
     def report_progress(self, current: int, total: int, message: str = "") -> None:
-        """Report progress to console."""
+        """Report progress to console with optional tqdm support."""
         current_time = time.time()
         
-        # Throttle updates
-        if current_time - self.last_update_time < PROGRESS_UPDATE_INTERVAL:
+        # Throttle updates for non-tqdm mode
+        if not self.use_tqdm and current_time - self.last_update_time < PROGRESS_UPDATE_INTERVAL:
             return
         
         self.last_update_time = current_time
         
-        if total > 0:
-            percentage = (current / total) * 100
-            elapsed = current_time - self.start_time
+        if self.use_tqdm and total > 0:
+            # Use tqdm for better progress display
+            if self.current_pbar is None:
+                self.current_pbar = tqdm(
+                    total=total,
+                    desc=message,
+                    unit="frame",
+                    position=0,
+                    leave=True
+                )
             
-            if self.show_eta and current > 0:
-                eta = (elapsed / current) * (total - current)
-                eta_str = f" - ETA: {eta:.1f}s"
-            else:
-                eta_str = ""
+            # Update progress bar
+            self.current_pbar.n = current
+            self.current_pbar.refresh()
             
-            progress_line = f"\r{message} {percentage:.1f}% ({current}/{total}){eta_str}"
-            print(progress_line, end="", flush=True)
+            if current >= total:
+                self.current_pbar.close()
+                self.current_pbar = None
+        else:
+            # Fallback to simple console output
+            if total > 0:
+                percentage = (current / total) * 100
+                elapsed = current_time - self.start_time
+                
+                if self.show_eta and current > 0:
+                    eta = (elapsed / current) * (total - current)
+                    eta_str = f" - ETA: {eta:.1f}s"
+                else:
+                    eta_str = ""
+                
+                progress_line = f"\r{message} {percentage:.1f}% ({current}/{total}){eta_str}"
+                print(progress_line, end="", flush=True)
     
     def report_completion(self, message: str = "") -> None:
         """Report completion to console."""
+        if self.current_pbar:
+            self.current_pbar.close()
+            self.current_pbar = None
+            
         elapsed = time.time() - self.start_time
         print(f"\r{message} - Completed in {elapsed:.1f}s")
         print()  # New line
