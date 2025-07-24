@@ -1,0 +1,57 @@
+[project]
+name = "depth-surge-3d"
+version = "1.0.0"
+description = "Convert 2D videos to immersive 3D VR format using advanced AI depth estimation"
+authors = [
+    { name = "Depth Surge 3D Team", email = "contact@depthsurge3d.com" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "Pillow>=10.0.0",
+    "tqdm>=4.65.0",
+    "transformers>=4.30.0",
+    "flask>=3.0.0",
+    "flask-socketio>=5.3.0",
+    "eventlet>=0.35.0",
+]
+
+[project.scripts]
+depth-surge-3d = "stereo_projector:main"
+
+[project.urls]
+Homepage = "https://github.com/your-username/depth-surge-3d"
+Repository = "https://github.com/your-username/depth-surge-3d"
+Issues = "https://github.com/your-username/depth-surge-3d/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]

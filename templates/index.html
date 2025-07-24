@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Depth Surge 3D - 2D to Immersive 3D VR Converter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Dark theme */
+        :root {
+            --bs-body-bg: #1a1a1a;
+            --bs-body-color: #e9ecef;
+            --bs-card-bg: #2d2d2d;
+            --bs-border-color: #404040;
+            --bs-input-bg: #343a40;
+            --bs-input-color: #e9ecef;
+            --bs-input-border-color: #6c757d;
+        }
+        
+        body {
+            background-color: var(--bs-body-bg);
+            color: var(--bs-body-color);
+        }
+        
+        .card {
+            background-color: var(--bs-card-bg);
+            border-color: var(--bs-border-color);
+        }
+        
+        .form-control, .form-select {
+            background-color: var(--bs-input-bg);
+            color: var(--bs-input-color);
+            border-color: var(--bs-input-border-color);
+        }
+        
+        .form-control:focus, .form-select:focus {
+            background-color: var(--bs-input-bg);
+            color: var(--bs-input-color);
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        
+        /* File input styling for dark theme */
+        .form-control[type="file"] {
+            background-color: var(--bs-input-bg);
+            color: var(--bs-input-color);
+            border-color: var(--bs-input-border-color);
+        }
+        
+        .form-control[type="file"]:focus {
+            background-color: var(--bs-input-bg);
+            color: var(--bs-input-color);
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        
+        /* File input button styling */
+        .form-control[type="file"]::file-selector-button {
+            background-color: #495057;
+            color: var(--bs-input-color);
+            border: 1px solid var(--bs-input-border-color);
+            border-radius: 0.375rem;
+            padding: 0.375rem 0.75rem;
+            margin-right: 0.75rem;
+            cursor: pointer;
+        }
+        
+        .form-control[type="file"]::file-selector-button:hover {
+            background-color: #5a6268;
+        }
+        
+        .alert-info {
+            background-color: #0c4a6e;
+            border-color: #075985;
+            color: #bfdbfe;
+        }
+        
+        .video-preview {
+            max-width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        
+        .preview-images {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .preview-item {
+            text-align: center;
+        }
+        
+        .preview-images img {
+            width: 240px;
+            height: 180px;
+            object-fit: cover;
+            border: 2px solid var(--bs-border-color);
+            border-radius: 8px;
+            background: #000;
+        }
+        
+        .preview-images .preview-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        
+        .progress-container {
+            display: none;
+        }
+        
+        .time-input {
+            width: 120px;
+        }
+        
+        .video-info, .system-info {
+            background: var(--bs-card-bg);
+            border: 1px solid var(--bs-border-color);
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .settings-panel {
+            background: var(--bs-card-bg);
+            border: 1px solid var(--bs-border-color);
+            padding: 25px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #adb5bd;
+        }
+        
+        .info-value {
+            color: var(--bs-body-color);
+        }
+        
+        .progress-section {
+            margin: 15px 0;
+        }
+        
+        .sub-progress {
+            height: 8px;
+            margin: 8px 0;
+        }
+        
+        .frame-update-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8em;
+        }
+        
+        .system-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            color: #adb5bd;
+        }
+        
+        .text-muted {
+            color: #6c757d !important;
+        }
+        
+        /* Progress animations */
+        .progress-bar-animated {
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        
+        @keyframes progress-bar-stripes {
+            0% { background-position: 1rem 0; }
+            100% { background-position: 0 0; }
+        }
+        
+        /* Enhanced buttons */
+        .btn-primary {
+            background: linear-gradient(45deg, #0d6efd, #6610f2);
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #0b5ed7, #5a0fc9);
+            transform: translateY(-1px);
+        }
+        
+        .btn-success {
+            background: linear-gradient(45deg, #198754, #20c997);
+            border: none;
+        }
+        
+        .btn-success:hover {
+            background: linear-gradient(45deg, #157347, #1aa179);
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center mb-4">
+                    <i class="fas fa-video"></i> Depth Surge 3D
+                    <small class="text-muted d-block">2D to 3D VR Video Converter</small>
+                </h1>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="row">
+            <div class="col-12">
+                <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="processing-tab" data-bs-toggle="tab" data-bs-target="#processing" type="button" role="tab">
+                            <i class="fas fa-magic"></i> Processing
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="stitching-tab" data-bs-toggle="tab" data-bs-target="#stitching" type="button" role="tab">
+                            <i class="fas fa-film"></i> Video Stitching
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- Processing Tab Content -->
+            <div class="tab-pane fade show active" id="processing" role="tabpanel">
+        
+        <!-- Video Upload Section -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-upload"></i> Upload Video</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <input type="file" class="form-control" id="videoFile" accept="video/*">
+                        </div>
+                        <button type="button" class="btn btn-primary" id="uploadBtn">
+                            <i class="fas fa-upload"></i> Upload Video
+                        </button>
+                        
+                        <!-- Video Preview -->
+                        <div id="videoPreview" style="display: none;" class="mt-3">
+                            <video class="video-preview" controls>
+                                Your browser does not support the video tag.
+                            </video>
+                        </div>
+                        
+                        <!-- Video Info -->
+                        <div id="videoInfo" class="video-info" style="display: none;">
+                            <h6><i class="fas fa-info-circle"></i> Video Information</h6>
+                            <div class="info-row">
+                                <span class="info-label">Resolution:</span>
+                                <span class="info-value" id="videoResolution"></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Source FPS:</span>
+                                <span class="info-value" id="videoFps"></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Aspect Ratio:</span>
+                                <span class="info-value" id="videoAspect"></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Duration:</span>
+                                <span class="info-value" id="videoDuration"></span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">Frame Count:</span>
+                                <span class="info-value" id="videoFrames"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Resume Processing Section -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5><i class="fas fa-play"></i> Resume Processing</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="resumeDirectory" class="form-label">Output Directory to Resume</label>
+                            <input type="text" class="form-control" id="resumeDirectory" 
+                                   placeholder="e.g., output/video_name_20231215_143022">
+                        </div>
+                        <button type="button" class="btn btn-warning" id="resumeBtn">
+                            <i class="fas fa-play"></i> Resume Processing
+                        </button>
+                        <small class="form-text text-muted mt-2">
+                            Resumes an interrupted processing job from the output directory timestamp.
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Time Range Selection and System Info -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-clock"></i> Time Range Selection</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Start Time (mm:ss or hh:mm:ss)</label>
+                            <input type="text" class="form-control time-input" id="startTime" placeholder="00:00" value="">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">End Time (mm:ss or hh:mm:ss)</label>
+                            <input type="text" class="form-control time-input" id="endTime" placeholder="00:30" value="">
+                        </div>
+                        
+                        <!-- Range Info -->
+                        <div id="rangeInfo" class="alert alert-info" style="display: none;">
+                            <div class="row">
+                                <div class="col-6">
+                                    <strong>Duration:</strong> <span id="rangeDuration">--</span>
+                                </div>
+                                <div class="col-6">
+                                    <strong>Est. Frames:</strong> <span id="rangeFrames">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <small>
+                                <i class="fas fa-info-circle"></i>
+                                Leave empty to process entire video. Format: mm:ss (e.g., 01:30) or hh:mm:ss (e.g., 00:01:30)
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- System Information -->
+                <div class="system-info">
+                    <h6><i class="fas fa-desktop"></i> System Information</h6>
+                    <div class="system-stats">
+                        <div class="stat-item">
+                            <div class="stat-value" id="gpuDevice">--</div>
+                            <div class="stat-label">GPU Device</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="vramUsage">--</div>
+                            <div class="stat-label">VRAM Usage</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="deviceMode">--</div>
+                            <div class="stat-label">Processing Mode</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="row">
+            <div class="col-12">
+                <div class="settings-panel">
+                    <h5><i class="fas fa-cog"></i> Processing Settings</h5>
+                    <div class="row">
+                        <!-- VR Format & Resolution -->
+                        <div class="col-md-4">
+                            <h6><i class="fas fa-vr-cardboard"></i> VR Format & Resolution</h6>
+                            <div class="mb-3">
+                                <label class="form-label">VR Format</label>
+                                <select class="form-select" id="vrFormat">
+                                    <option value="side_by_side" selected>Side by Side (SBS)</option>
+                                    <option value="side_by_side_lr">Side by Side LR (Left-Right)</option>
+                                    <option value="side_by_side_rl">Side by Side RL (Right-Left)</option>
+                                    <option value="over_under">Over Under (Top-Bottom)</option>
+                                    <option value="over_under_lr">Over Under LR (Left-Top)</option>
+                                    <option value="over_under_rl">Over Under RL (Right-Top)</option>
+                                </select>
+                                <small class="form-text text-muted">Choose format compatible with your VR headset</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">VR Resolution <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Square formats optimize pixel usage for VR headsets. Auto matches source quality."></i></label>
+                                <select class="form-select" id="vrResolution">
+                                    <option value="auto" selected>Auto (Match Source Quality)</option>
+                                    <option value="square-1k">Square 1K (1080×1080 per eye → 2160×1080 side-by-side)</option>
+                                    <option value="square-2k">Square 2K (1536×1536 per eye → 3072×1536 side-by-side)</option>
+                                    <option value="square-3k">Square 3K (1920×1920 per eye → 3840×1920 side-by-side)</option>
+                                    <option value="square-4k">Square 4K (2048×2048 per eye → 4096×2048 side-by-side)</option>
+                                    <option value="square-5k">Square 5K (2560×2560 per eye → 5120×2560 side-by-side)</option>
+                                    <option value="ultrawide">Ultra-wide (3840×2160 per eye → 7680×2160 side-by-side)</option>
+                                </select>
+                                <small class="form-text text-muted">Square formats are optimized for VR viewing and use pixels more efficiently</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Stereo Baseline</label>
+                                <input type="number" class="form-control" id="baseline" value="0.065" step="0.005" min="0.055" max="0.075">
+                                <small class="form-text text-muted">Distance between virtual cameras in meters (0.055-0.075, default: 0.065 = average human IPD)</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Focal Length</label>
+                                <input type="number" class="form-control" id="focalLength" value="1000" step="100" min="500" max="5000">
+                                <small class="form-text text-muted">Virtual camera focal length (500-5000)</small>
+                            </div>
+                        </div>
+
+                        <!-- Video Enhancement & Processing -->
+                        <div class="col-md-4">
+                            <h6><i class="fas fa-video"></i> Video Enhancement & Processing</h6>
+                            <div class="mb-3">
+                                <label class="form-label">Target Resolution</label>
+                                <select class="form-select" id="resolution">
+                                    <option value="original">Keep Original</option>
+                                    <option value="720p">720p (1280x720)</option>
+                                    <option value="1080p" selected>1080p (1920x1080)</option>
+                                    <option value="4k">4K (3840x2160)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Super Sampling</label>
+                                <select class="form-select" id="superSample">
+                                    <option value="auto" selected>Auto (Recommended)</option>
+                                    <option value="none">None (Keep Original)</option>
+                                    <option value="1080p">Force 1080p</option>
+                                    <option value="4k">Force 4K</option>
+                                </select>
+                                <small class="form-text text-muted">Compensates for resolution loss in side-by-side format. Auto: 720p→1080p, 1080p→4K</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Target FPS</label>
+                                <select class="form-select" id="targetFps">
+                                    <option value="original" selected>Keep Original FPS</option>
+                                    <option value="30">30 FPS</option>
+                                    <option value="60">60 FPS</option>
+                                    <option value="120">120 FPS</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Processing Device</label>
+                                <select class="form-select" id="device">
+                                    <option value="auto" selected>Auto (GPU if available)</option>
+                                    <option value="cuda">Force GPU (CUDA)</option>
+                                    <option value="cpu">Force CPU</option>
+                                </select>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="preserveAudio" checked>
+                                <label class="form-check-label" for="preserveAudio">
+                                    Preserve Audio
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="keepIntermediates" checked>
+                                <label class="form-check-label" for="keepIntermediates">
+                                    Keep Intermediate Files
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Fisheye & Cropping -->
+                        <div class="col-md-4">
+                            <h6><i class="fas fa-circle"></i> Fisheye & Cropping</h6>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="applyDistortion" checked>
+                                    <label class="form-check-label" for="applyDistortion">
+                                        Apply Fisheye Distortion
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">Enable fisheye distortion for hemispherical VR projection</small>
+                            </div>
+                            <div class="mb-3" id="distortionOptions">
+                                <label class="form-label">Fisheye Projection</label>
+                                <select class="form-select" id="fisheyeProjection">
+                                    <option value="equidistant" selected>Equidistant (f*θ)</option>
+                                    <option value="stereographic">Stereographic (2f*tan(θ/2))</option>
+                                    <option value="equisolid">Equisolid Angle (2f*sin(θ/2))</option>
+                                    <option value="orthographic">Orthographic (f*sin(θ))</option>
+                                </select>
+                                <small class="form-text text-muted">Mathematical projection model for fisheye lens</small>
+                            </div>
+                            <div class="mb-3" id="distortionK2Options">
+                                <label class="form-label">Field of View (degrees)</label>
+                                <input type="number" class="form-control" id="fisheyeFov" value="180" step="5" min="120" max="220">
+                                <small class="form-text text-muted">Fisheye field of view (120-220 degrees, default: 180)</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Crop Factor</label>
+                                <input type="number" class="form-control" id="cropFactor" value="0.7" step="0.05" min="0.5" max="1.0">
+                                <small class="form-text text-muted">Center crop factor to reduce edge artifacts (0.5-1.0, default: 0.7)</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Fisheye Crop Factor <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Controls how much fisheye content to capture. 1.0 = perfect inscribed square, >1.0 extends beyond circle for maximum content."></i></label>
+                                <input type="number" class="form-control" id="fisheyeCropFactor" value="1.25" step="0.05" min="0.8" max="1.5">
+                                <small class="form-text text-muted">Fisheye square crop factor relative to circle (0.8-1.5, default: 1.25)</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Hole Filling Quality <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Advanced uses depth-guided multi-stage filling for better quality but slower processing. Fast uses simple inpainting for speed."></i></label>
+                                <select class="form-select" id="holeFillQuality">
+                                    <option value="fast">Fast (Simple Inpainting)</option>
+                                    <option value="advanced" selected>Advanced (Multi-Stage + Depth Guidance)</option>
+                                </select>
+                                <small class="form-text text-muted">Balance between processing speed and stereo quality</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Process Button -->
+                    <div class="text-center mt-3">
+                        <button type="button" class="btn btn-success btn-lg" id="processBtn" disabled>
+                            <i class="fas fa-magic"></i> Start Processing
+                        </button>
+                        <button type="button" class="btn btn-danger btn-lg ms-2" id="stopBtn" style="display: none;">
+                            <i class="fas fa-stop"></i> Stop Processing
+                        </button>
+                        <br>
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="resetSettingsBtn">
+                            <i class="fas fa-undo"></i> Reset to Defaults
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="row">
+            <div class="col-12">
+                <div class="progress-container">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-spinner fa-spin"></i> Processing Progress</h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Overall Progress -->
+                            <div class="progress-section">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span id="progressText">Initializing...</span>
+                                    <span id="progressPercent">0%</span>
+                                </div>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Sub Progress Bars -->
+                            <div class="progress-section">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Frame Extraction</small>
+                                        <div class="progress sub-progress">
+                                            <div class="progress-bar bg-info" id="extractProgress" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Depth Processing</small>
+                                        <div class="progress sub-progress">
+                                            <div class="progress-bar bg-warning" id="depthProgress" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Video Assembly</small>
+                                        <div class="progress sub-progress">
+                                            <div class="progress-bar bg-success" id="videoProgress" style="width: 0%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Processing Stats -->
+                            <div class="progress-section">
+                                <div class="row text-center">
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-value" id="currentFrame">0</div>
+                                            <div class="stat-label">Current Frame</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-value" id="totalFrames">0</div>
+                                            <div class="stat-label">Total Frames</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-value" id="processingSpeed">--</div>
+                                            <div class="stat-label">Frames/sec</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-item">
+                                            <div class="stat-value" id="estimatedTime">--</div>
+                                            <div class="stat-label">Est. Time Left</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Current Batch Directory -->
+                            <div class="mb-3" id="currentBatchDirectory" style="display: none;">
+                                <h6><i class="fas fa-folder"></i> Current Batch Directory</h6>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <code id="currentBatchPath">--</code>
+                                    </div>
+                                    <div>
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="openCurrentBatchBtn">
+                                            <i class="fas fa-folder-open"></i> Open Directory
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Directory -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card mt-4" id="outputDirectoryCard" style="display: none;">
+                    <div class="card-header">
+                        <h5><i class="fas fa-folder-open"></i> Output Directory</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Processing output saved to:</strong><br>
+                                <code id="outputPath">--</code>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-primary" id="openDirectoryBtn">
+                                    <i class="fas fa-folder-open"></i> Open in File Explorer
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="copyPathBtn">
+                                    <i class="fas fa-copy"></i> Copy Path
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+            </div> <!-- End Processing Tab -->
+            
+            <!-- Video Stitching Tab Content -->
+            <div class="tab-pane fade" id="stitching" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-film"></i> Video Stitching from Incomplete Batches</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted">Generate final videos from incomplete processing batches using existing intermediate frames.</p>
+                                
+                                <!-- Batch Directory Input -->
+                                <div class="mb-3">
+                                    <label class="form-label">Batch Output Directory</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="stitchBatchDir" placeholder="/path/to/output/batch_directory">
+                                        <button class="btn btn-outline-secondary" type="button" id="browseBatchBtn">
+                                            <i class="fas fa-folder-open"></i> Browse
+                                        </button>
+                                    </div>
+                                    <small class="form-text text-muted">Select a directory containing processed frames (e.g., output/video_20250615_143022/)</small>
+                                </div>
+                                
+                                <!-- Batch Analysis -->
+                                <div id="batchAnalysis" class="mb-3" style="display: none;">
+                                    <h6><i class="fas fa-search"></i> Batch Analysis</h6>
+                                    <div class="alert alert-info">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Available Frames:</strong> <span id="availableFrames">--</span><br>
+                                                <strong>VR Format:</strong> <span id="detectedFormat">--</span><br>
+                                                <strong>Resolution:</strong> <span id="detectedResolution">--</span>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <strong>Processing Stage:</strong> <span id="processingStage">--</span><br>
+                                                <strong>Audio Available:</strong> <span id="audioAvailable">--</span><br>
+                                                <strong>Settings:</strong> <span id="detectedSettings">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Stitching Options -->
+                                <div id="stitchingOptions" style="display: none;">
+                                    <h6><i class="fas fa-cog"></i> Stitching Options</h6>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label class="form-label">Frame Source</label>
+                                                <select class="form-select" id="frameSource">
+                                                    <option value="auto">Auto-detect highest stage</option>
+                                                    <option value="vr_frames">Final VR frames (7_vr_frames)</option>
+                                                    <option value="left_right_final">Final stereo pairs (6_*_frames_final)</option>
+                                                    <option value="left_right_fisheye">Fisheye frames (5_*_frames_fisheye)</option>
+                                                    <option value="left_right_basic">Basic stereo pairs (4_*_frames)</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label class="form-label">Video Quality</label>
+                                                <select class="form-select" id="stitchQuality">
+                                                    <option value="high">High (x264 CRF 18)</option>
+                                                    <option value="medium" selected>Medium (x264 CRF 23)</option>
+                                                    <option value="fast">Fast (x264 CRF 28)</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label class="form-label">Frame Rate</label>
+                                                <select class="form-select" id="stitchFps">
+                                                    <option value="original">Original (detected)</option>
+                                                    <option value="24">24 fps</option>
+                                                    <option value="30">30 fps</option>
+                                                    <option value="60">60 fps</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="includeAudio" checked>
+                                                    <label class="form-check-label" for="includeAudio">
+                                                        Include Original Audio
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Output Settings -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Output Filename</label>
+                                        <input type="text" class="form-control" id="outputFilename" placeholder="custom_video_name.mp4">
+                                        <small class="form-text text-muted">Leave empty for auto-generated name based on batch directory</small>
+                                    </div>
+                                </div>
+                                
+                                <!-- Action Buttons -->
+                                <div class="text-center">
+                                    <button type="button" class="btn btn-primary" id="analyzeBatchBtn">
+                                        <i class="fas fa-search"></i> Analyze Batch
+                                    </button>
+                                    <button type="button" class="btn btn-success" id="stitchVideoBtn" style="display: none;">
+                                        <i class="fas fa-film"></i> Create Video
+                                    </button>
+                                </div>
+                                
+                                <!-- Stitching Progress -->
+                                <div id="stitchProgress" class="mt-4" style="display: none;">
+                                    <h6><i class="fas fa-spinner fa-spin"></i> Video Creation Progress</h6>
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="stitchProgressBar" style="width: 0%"></div>
+                                    </div>
+                                    <div class="text-center mt-2">
+                                        <span id="stitchStatusText">Initializing...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div> <!-- End Video Stitching Tab -->
+        </div> <!-- End Tab Content -->
+    </div>
+
+    <!-- Success/Error Modals -->
+    <div class="modal fade" id="successModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-check-circle"></i> Processing Complete</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="successMessage">Your video has been processed successfully!</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="errorModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Processing Error</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="errorMessage">An error occurred during processing.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script>
+        // Global variables
+        let socket;
+        let currentSessionId = null;
+        let uploadedFilename = null;
+        let currentVideoInfo = null;
+
+        // Initialize socket connection
+        function initSocket() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('Connected to server');
+            });
+            
+            socket.on('progress_update', function(data) {
+                console.log('Progress update received:', data);
+                updateProgress(data);
+            });
+            
+            socket.on('processing_complete', function(data) {
+                handleProcessingComplete(data);
+            });
+            
+            socket.on('processing_error', function(data) {
+                handleProcessingError(data);
+            });
+            
+            socket.on('processing_stopped', function(data) {
+                handleProcessingStopped(data);
+            });
+        }
+
+        // Upload video
+        document.getElementById('uploadBtn').addEventListener('click', function() {
+            const fileInput = document.getElementById('videoFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a video file');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('video', file);
+            
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    uploadedFilename = data.filename;
+                    displayVideoInfo(data.video_info, file);
+                    document.getElementById('processBtn').disabled = false;
+                } else {
+                    alert('Upload failed: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                alert('Upload failed');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-upload"></i> Upload Video';
+            });
+        });
+
+        // Display video info
+        function displayVideoInfo(info, file) {
+            currentVideoInfo = info;
+            
+            // Show video preview
+            const videoPreview = document.getElementById('videoPreview');
+            const video = videoPreview.querySelector('video');
+            video.src = URL.createObjectURL(file);
+            videoPreview.style.display = 'block';
+            
+            // Show video info
+            document.getElementById('videoResolution').textContent = `${info.width}×${info.height}`;
+            document.getElementById('videoAspect').textContent = info.aspect_ratio_text;
+            document.getElementById('videoDuration').textContent = `${info.duration}s`;
+            document.getElementById('videoFps').textContent = `${info.fps} fps`;
+            document.getElementById('videoFrames').textContent = info.frame_count;
+            document.getElementById('videoInfo').style.display = 'block';
+            
+            // Update system info
+            updateSystemInfo();
+            
+            // Set default end time to video duration
+            const minutes = Math.floor(info.duration / 60);
+            const seconds = Math.floor(info.duration % 60);
+            document.getElementById('endTime').value = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            // Calculate range info
+            updateRangeInfo();
+        }
+
+        // Update system information
+        function updateSystemInfo() {
+            fetch('/system_info')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('gpuDevice').textContent = data.gpu_device || '--';
+                document.getElementById('vramUsage').textContent = data.vram_usage || '--';
+                document.getElementById('deviceMode').textContent = data.device_mode || '--';
+            })
+            .catch(error => {
+                console.error('Failed to load system info:', error);
+                document.getElementById('gpuDevice').textContent = '--';
+                document.getElementById('vramUsage').textContent = '--';
+                document.getElementById('deviceMode').textContent = '--';
+            });
+        }
+
+        // Parse time string to seconds
+        function timeToSeconds(timeStr) {
+            if (!timeStr || timeStr.trim() === '') return null;
+            
+            const parts = timeStr.split(':');
+            if (parts.length === 2) {
+                const [minutes, seconds] = parts.map(Number);
+                return minutes * 60 + seconds;
+            } else if (parts.length === 3) {
+                const [hours, minutes, seconds] = parts.map(Number);
+                return hours * 3600 + minutes * 60 + seconds;
+            }
+            return null;
+        }
+
+        // Update range information
+        function updateRangeInfo() {
+            if (!currentVideoInfo) return;
+            
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            let startSeconds = timeToSeconds(startTime) || 0;
+            let endSeconds = timeToSeconds(endTime) || currentVideoInfo.duration;
+            
+            // Ensure end is after start
+            if (endSeconds <= startSeconds) {
+                document.getElementById('rangeInfo').style.display = 'none';
+                return;
+            }
+            
+            const duration = endSeconds - startSeconds;
+            const targetFps = document.getElementById('targetFps').value;
+            const fps = targetFps === 'original' ? currentVideoInfo.fps : parseInt(targetFps);
+            const estimatedFrames = Math.round(duration * fps);
+            
+            // Format duration
+            const durationMinutes = Math.floor(duration / 60);
+            const durationSeconds = Math.floor(duration % 60);
+            const durationStr = `${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
+            
+            document.getElementById('rangeDuration').textContent = durationStr;
+            document.getElementById('rangeFrames').textContent = estimatedFrames.toLocaleString();
+            document.getElementById('rangeInfo').style.display = 'block';
+        }
+
+        // Start processing
+        document.getElementById('processBtn').addEventListener('click', function() {
+            if (!uploadedFilename) {
+                alert('Please upload a video first');
+                return;
+            }
+            
+            const settings = {
+                start_time: document.getElementById('startTime').value || null,
+                end_time: document.getElementById('endTime').value || null,
+                resolution: document.getElementById('resolution').value,
+                target_fps: document.getElementById('targetFps').value === 'original' ? null : parseInt(document.getElementById('targetFps').value),
+                vr_format: document.getElementById('vrFormat').value,
+                vr_resolution: document.getElementById('vrResolution').value,
+                baseline: parseFloat(document.getElementById('baseline').value),
+                focal_length: parseInt(document.getElementById('focalLength').value),
+                preserve_audio: document.getElementById('preserveAudio').checked,
+                keep_intermediates: document.getElementById('keepIntermediates').checked,
+                device: document.getElementById('device').value,
+                super_sample: document.getElementById('superSample').value,
+                apply_distortion: document.getElementById('applyDistortion').checked,
+                fisheye_projection: document.getElementById('fisheyeProjection').value,
+                fisheye_fov: parseFloat(document.getElementById('fisheyeFov').value),
+                crop_factor: document.getElementById('cropFactor') ? parseFloat(document.getElementById('cropFactor').value) : 0.7,
+                fisheye_crop_factor: parseFloat(document.getElementById('fisheyeCropFactor').value),
+                hole_fill_quality: document.getElementById('holeFillQuality').value
+            };
+            
+            fetch('/process', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    filename: uploadedFilename,
+                    settings: settings
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    currentSessionId = data.session_id;
+                    socket.emit('join_session', {session_id: currentSessionId});
+                    showProgressPanel();
+                    showCurrentBatchDirectory(data.output_dir);
+                } else {
+                    alert('Failed to start processing: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Processing error:', error);
+                alert('Failed to start processing');
+            });
+        });
+        
+        // Resume processing
+        document.getElementById('resumeBtn').addEventListener('click', function() {
+            const resumeDirectory = document.getElementById('resumeDirectory').value.trim();
+            
+            if (!resumeDirectory) {
+                alert('Please enter an output directory to resume');
+                return;
+            }
+            
+            fetch('/resume', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    output_dir: resumeDirectory
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    currentSessionId = data.session_id;
+                    socket.emit('join_session', {session_id: currentSessionId});
+                    showProgressPanel();
+                    showCurrentBatchDirectory(data.output_dir);
+                } else {
+                    alert('Failed to resume processing: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Resume error:', error);
+                alert('Failed to resume processing');
+            });
+        });
+        
+        // Stop processing
+        document.getElementById('stopBtn').addEventListener('click', function() {
+            if (currentSessionId) {
+                fetch('/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        hideProgressPanel();
+                        currentSessionId = null;
+                        // Reset progress displays
+                        resetProgressDisplay();
+                    } else {
+                        alert('Failed to stop processing: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Stop error:', error);
+                    alert('Failed to stop processing');
+                });
+            }
+        });
+
+        // Show progress panel
+        function showProgressPanel() {
+            document.querySelector('.progress-container').style.display = 'block';
+            document.getElementById('processBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'inline-block';
+            document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight;
+        }
+        
+        // Hide progress panel
+        function hideProgressPanel() {
+            document.querySelector('.progress-container').style.display = 'none';
+            document.getElementById('processBtn').style.display = 'inline-block';
+            document.getElementById('processBtn').disabled = false;
+            document.getElementById('stopBtn').style.display = 'none';
+            hideCurrentBatchDirectory();
+        }
+        
+        // Show current batch directory
+        function showCurrentBatchDirectory(outputDir) {
+            document.getElementById('currentBatchPath').textContent = outputDir;
+            document.getElementById('currentBatchDirectory').style.display = 'block';
+        }
+        
+        // Hide current batch directory
+        function hideCurrentBatchDirectory() {
+            document.getElementById('currentBatchDirectory').style.display = 'none';
+        }
+        
+        // Reset progress display
+        function resetProgressDisplay() {
+            const progressBar = document.querySelector('.progress-bar');
+            progressBar.style.width = '0%';
+            progressBar.classList.remove('bg-success', 'bg-danger');
+            progressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
+            
+            document.getElementById('progressText').textContent = 'Initializing...';
+            document.getElementById('progressPercent').textContent = '0%';
+            document.getElementById('currentFrame').textContent = '0';
+            document.getElementById('totalFrames').textContent = '0';
+            document.getElementById('processingSpeed').textContent = '--';
+            document.getElementById('estimatedTime').textContent = '--';
+            
+            // Reset sub-progress bars
+            document.getElementById('extractProgress').style.width = '0%';
+            document.getElementById('depthProgress').style.width = '0%';
+            document.getElementById('videoProgress').style.width = '0%';
+        }
+
+        // Processing start time for speed calculation
+        let processingStartTime = null;
+        let lastFrameTime = null;
+        let frameProcessingTimes = [];
+
+        // Update progress
+        function updateProgress(data) {
+            const progressBar = document.querySelector('.progress-bar');
+            const progressText = document.getElementById('progressText');
+            const progressPercent = document.getElementById('progressPercent');
+            
+            progressBar.style.width = data.progress + '%';
+            progressText.textContent = data.stage;
+            progressPercent.textContent = data.progress + '%';
+            
+            // Update frame counters
+            if (data.current_frame !== undefined) {
+                document.getElementById('currentFrame').textContent = data.current_frame;
+                document.getElementById('totalFrames').textContent = data.total_frames;
+                
+                // Calculate processing speed
+                const now = Date.now();
+                if (lastFrameTime && data.current_frame > 0) {
+                    const timeDiff = (now - lastFrameTime) / 1000;
+                    frameProcessingTimes.push(timeDiff);
+                    
+                    // Keep only last 10 measurements for moving average
+                    if (frameProcessingTimes.length > 10) {
+                        frameProcessingTimes.shift();
+                    }
+                    
+                    const avgTime = frameProcessingTimes.reduce((a, b) => a + b, 0) / frameProcessingTimes.length;
+                    const framesPerSecond = 1 / avgTime;
+                    document.getElementById('processingSpeed').textContent = framesPerSecond.toFixed(1);
+                    
+                    // Estimate remaining time
+                    const remainingFrames = data.total_frames - data.current_frame;
+                    const estimatedSeconds = remainingFrames * avgTime;
+                    const minutes = Math.floor(estimatedSeconds / 60);
+                    const seconds = Math.floor(estimatedSeconds % 60);
+                    document.getElementById('estimatedTime').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
+                lastFrameTime = now;
+            }
+            
+            // Update sub-progress bars based on stage
+            updateSubProgress(data.stage, data.progress);
+            
+            // Remove old preview code - no longer needed
+        }
+
+        // Update sub-progress bars
+        function updateSubProgress(stage, overallProgress) {
+            const extractBar = document.getElementById('extractProgress');
+            const depthBar = document.getElementById('depthProgress');
+            const videoBar = document.getElementById('videoProgress');
+            
+            if (!extractBar || !depthBar || !videoBar) return;
+            
+            // Determine progress distribution based on stage
+            if (stage.toLowerCase().includes('extracting') || stage.toLowerCase().includes('enhancing') || stage.toLowerCase().includes('frame')) {
+                // Frame extraction phase (0-20%)
+                extractBar.style.width = Math.min(100, (overallProgress / 20) * 100) + '%';
+                depthBar.style.width = '0%';
+                videoBar.style.width = '0%';
+            } else if (stage.toLowerCase().includes('processing') || stage.toLowerCase().includes('depth') || /frame \d+/.test(stage.toLowerCase())) {
+                // Depth processing phase (20-85%)
+                extractBar.style.width = '100%';
+                if (overallProgress > 20) {
+                    depthBar.style.width = Math.min(100, ((overallProgress - 20) / 65) * 100) + '%';
+                }
+                videoBar.style.width = '0%';
+            } else if (stage.toLowerCase().includes('video') || stage.toLowerCase().includes('audio') || stage.toLowerCase().includes('creating') || stage.toLowerCase().includes('final')) {
+                // Video assembly phase (85-100%)
+                extractBar.style.width = '100%';
+                depthBar.style.width = '100%';
+                if (overallProgress > 85) {
+                    videoBar.style.width = Math.min(100, ((overallProgress - 85) / 15) * 100) + '%';
+                }
+            }
+        }
+
+        // Handle processing complete
+        function handleProcessingComplete(data) {
+            const progressBar = document.querySelector('.progress-bar');
+            progressBar.style.width = '100%';
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-success');
+            
+            document.getElementById('progressText').textContent = 'Processing complete!';
+            document.getElementById('progressPercent').textContent = '100%';
+            
+            // Hide stop button, show start button
+            hideProgressPanel();
+            currentSessionId = null;
+            
+            // Show output directory card
+            document.getElementById('outputPath').textContent = data.output_dir;
+            document.getElementById('outputDirectoryCard').style.display = 'block';
+            
+            document.getElementById('successMessage').textContent = data.message;
+            new bootstrap.Modal(document.getElementById('successModal')).show();
+        }
+
+        // Handle processing error
+        function handleProcessingError(data) {
+            const progressBar = document.querySelector('.progress-bar');
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-danger');
+            
+            document.getElementById('progressText').textContent = 'Processing failed';
+            
+            // Hide stop button, show start button
+            hideProgressPanel();
+            currentSessionId = null;
+            
+            document.getElementById('errorMessage').textContent = data.error;
+            new bootstrap.Modal(document.getElementById('errorModal')).show();
+        }
+        
+        // Handle processing stopped
+        function handleProcessingStopped(data) {
+            const progressBar = document.querySelector('.progress-bar');
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-warning');
+            
+            document.getElementById('progressText').textContent = 'Processing stopped';
+            
+            // Hide stop button, show start button
+            hideProgressPanel();
+            currentSessionId = null;
+            
+            // Show info message
+            alert('Processing has been stopped: ' + data.message);
+        }
+
+
+        // Update range info based on video duration and selected range
+        function updateRangeInfo() {
+            if (!currentVideoInfo) return;
+            
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            
+            // Convert time to seconds for calculation
+            function timeToSeconds(timeStr) {
+                if (!timeStr) return null;
+                const parts = timeStr.split(':').map(Number);
+                if (parts.length === 2) {
+                    return parts[0] * 60 + parts[1]; // mm:ss
+                } else if (parts.length === 3) {
+                    return parts[0] * 3600 + parts[1] * 60 + parts[2]; // hh:mm:ss
+                }
+                return null;
+            }
+            
+            const startSeconds = timeToSeconds(startTime) || 0;
+            const endSeconds = timeToSeconds(endTime) || currentVideoInfo.duration;
+            const duration = Math.max(0, endSeconds - startSeconds);
+            const frameCount = Math.round(duration * currentVideoInfo.fps);
+            
+            // Update display elements if they exist
+            const rangeInfo = document.getElementById('rangeInfo');
+            if (rangeInfo) {
+                rangeInfo.textContent = `${duration.toFixed(1)}s (${frameCount} frames)`;
+            }
+        }
+
+
+        // Directory operations
+        document.getElementById('openCurrentBatchBtn').addEventListener('click', function() {
+            const currentBatchPath = document.getElementById('currentBatchPath').textContent;
+            fetch('/open_directory', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({path: currentBatchPath})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Could not open directory: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error opening directory:', error);
+                alert('Error opening directory');
+            });
+        });
+        
+        document.getElementById('openDirectoryBtn').addEventListener('click', function() {
+            const outputPath = document.getElementById('outputPath').textContent;
+            fetch('/open_directory', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({path: outputPath})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert('Could not open directory: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error opening directory:', error);
+                alert('Error opening directory');
+            });
+        });
+
+        document.getElementById('copyPathBtn').addEventListener('click', function() {
+            const outputPath = document.getElementById('outputPath').textContent;
+            navigator.clipboard.writeText(outputPath).then(() => {
+                // Visual feedback
+                const btn = document.getElementById('copyPathBtn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                btn.classList.add('btn-success');
+                btn.classList.remove('btn-outline-secondary');
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-outline-secondary');
+                }, 2000);
+            });
+        });
+
+        // Update system info when settings change
+        document.getElementById('resolution').addEventListener('change', updateSystemInfo);
+        document.getElementById('targetFps').addEventListener('change', function() {
+            updateSystemInfo();
+            updateRangeInfo();
+        });
+        document.getElementById('device').addEventListener('change', updateSystemInfo);
+        
+        // Toggle fisheye distortion options
+        document.getElementById('applyDistortion').addEventListener('change', function() {
+            const distortionOptions = document.getElementById('distortionOptions');
+            const distortionK2Options = document.getElementById('distortionK2Options');
+            if (this.checked) {
+                distortionOptions.style.display = 'block';
+                distortionK2Options.style.display = 'block';
+            } else {
+                distortionOptions.style.display = 'none';
+                distortionK2Options.style.display = 'none';
+            }
+        });
+        
+        // Update range info when time inputs change
+        document.getElementById('startTime').addEventListener('input', updateRangeInfo);
+        document.getElementById('endTime').addEventListener('input', updateRangeInfo);
+
+        // Video Stitching Tab Functionality
+        document.getElementById('analyzeBatchBtn').addEventListener('click', function() {
+            const batchDir = document.getElementById('stitchBatchDir').value.trim();
+            if (!batchDir) {
+                alert('Please enter a batch directory path');
+                return;
+            }
+            
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            
+            fetch('/analyze_batch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({batch_dir: batchDir})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayBatchAnalysis(data.analysis);
+                } else {
+                    alert('Analysis failed: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Analysis error:', error);
+                alert('Analysis failed');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-search"></i> Analyze Batch';
+            });
+        });
+        
+        function displayBatchAnalysis(analysis) {
+            // Show analysis results
+            document.getElementById('availableFrames').textContent = analysis.frame_count || '--';
+            document.getElementById('detectedFormat').textContent = analysis.vr_format || '--';
+            document.getElementById('detectedResolution').textContent = analysis.resolution || '--';
+            document.getElementById('processingStage').textContent = analysis.highest_stage || '--';
+            document.getElementById('audioAvailable').textContent = analysis.has_audio ? 'Yes' : 'No';
+            document.getElementById('detectedSettings').textContent = analysis.settings_summary || '--';
+            
+            document.getElementById('batchAnalysis').style.display = 'block';
+            document.getElementById('stitchingOptions').style.display = 'block';
+            document.getElementById('stitchVideoBtn').style.display = 'inline-block';
+        }
+        
+        document.getElementById('stitchVideoBtn').addEventListener('click', function() {
+            const batchDir = document.getElementById('stitchBatchDir').value.trim();
+            const settings = {
+                batch_dir: batchDir,
+                frame_source: document.getElementById('frameSource').value,
+                quality: document.getElementById('stitchQuality').value,
+                fps: document.getElementById('stitchFps').value,
+                include_audio: document.getElementById('includeAudio').checked,
+                output_filename: document.getElementById('outputFilename').value.trim() || null
+            };
+            
+            const btn = this;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Video...';
+            
+            document.getElementById('stitchProgress').style.display = 'block';
+            
+            fetch('/stitch_video', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(settings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('stitchProgressBar').style.width = '100%';
+                    document.getElementById('stitchStatusText').textContent = 'Video created successfully!';
+                    setTimeout(() => {
+                        alert('Video created: ' + data.output_path);
+                        document.getElementById('stitchProgress').style.display = 'none';
+                    }, 1000);
+                } else {
+                    alert('Video creation failed: ' + data.error);
+                    document.getElementById('stitchProgress').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Stitching error:', error);
+                alert('Video creation failed');
+                document.getElementById('stitchProgress').style.display = 'none';
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-film"></i> Create Video';
+            });
+        });
+        
+        // Browse batch directory button
+        document.getElementById('browseBatchBtn').addEventListener('click', function() {
+            // For now, just show a hint about common locations
+            const outputDirs = [
+                'output/',
+                './output/',
+                '/home/user/workspace/stereo-projector/output/'
+            ];
+            alert('Common batch directory locations:\n\n' + outputDirs.join('\n') + '\n\nLook for directories with timestamp format like:\nvideo_name_20250615_143022/');
+        });
+
+        // Settings persistence functions
+        function saveSettings() {
+            const settings = {
+                // Time range
+                startTime: document.getElementById('startTime').value,
+                endTime: document.getElementById('endTime').value,
+                
+                // VR settings
+                vrFormat: document.getElementById('vrFormat').value,
+                vrResolution: document.getElementById('vrResolution').value,
+                baseline: document.getElementById('baseline').value,
+                focalLength: document.getElementById('focalLength').value,
+                
+                // Video enhancement
+                resolution: document.getElementById('resolution').value,
+                targetFps: document.getElementById('targetFps').value,
+                superSample: document.getElementById('superSample').value,
+                device: document.getElementById('device').value,
+                
+                // Audio and intermediates
+                preserveAudio: document.getElementById('preserveAudio').checked,
+                keepIntermediates: document.getElementById('keepIntermediates').checked,
+                
+                // Fisheye and cropping
+                applyDistortion: document.getElementById('applyDistortion').checked,
+                fisheyeProjection: document.getElementById('fisheyeProjection').value,
+                fisheyeFov: document.getElementById('fisheyeFov').value,
+                cropFactor: document.getElementById('cropFactor').value,
+                fisheyeCropFactor: document.getElementById('fisheyeCropFactor').value,
+                holeFillQuality: document.getElementById('holeFillQuality').value
+            };
+            
+            localStorage.setItem('stereoProjectorSettings', JSON.stringify(settings));
+        }
+        
+        function loadSettings() {
+            const savedSettings = localStorage.getItem('stereoProjectorSettings');
+            if (!savedSettings) return;
+            
+            try {
+                const settings = JSON.parse(savedSettings);
+                
+                // Apply settings to form elements
+                Object.keys(settings).forEach(key => {
+                    const element = document.getElementById(key);
+                    if (element) {
+                        if (element.type === 'checkbox') {
+                            element.checked = settings[key];
+                        } else {
+                            element.value = settings[key];
+                        }
+                    }
+                });
+                
+                // Trigger change events for elements that have dependencies
+                if (settings.applyDistortion !== undefined) {
+                    document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
+                }
+                
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        }
+        
+        function resetToDefaults() {
+            const defaults = {
+                startTime: '',
+                endTime: '',
+                vrFormat: 'side_by_side',
+                vrResolution: 'auto',
+                baseline: '0.065',
+                focalLength: '1000',
+                resolution: '1080p',
+                targetFps: 'original',
+                superSample: 'auto',
+                device: 'auto',
+                preserveAudio: true,
+                keepIntermediates: true,
+                applyDistortion: true,
+                fisheyeProjection: 'equidistant',
+                fisheyeFov: '180',
+                cropFactor: '0.7',
+                fisheyeCropFactor: '1.25',
+                holeFillQuality: 'advanced'
+            };
+            
+            Object.keys(defaults).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    if (element.type === 'checkbox') {
+                        element.checked = defaults[key];
+                    } else {
+                        element.value = defaults[key];
+                    }
+                }
+            });
+            
+            // Trigger change events
+            document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
+            
+            // Clear saved settings
+            localStorage.removeItem('stereoProjectorSettings');
+            
+            alert('Settings reset to defaults');
+        }
+        
+        // Auto-save settings when they change
+        function setupAutoSave() {
+            const settingsElements = [
+                'startTime', 'endTime', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
+                'resolution', 'targetFps', 'superSample', 'device', 'preserveAudio', 'keepIntermediates',
+                'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor', 'fisheyeCropFactor', 'holeFillQuality'
+            ];
+            
+            settingsElements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('change', saveSettings);
+                    element.addEventListener('input', saveSettings);
+                }
+            });
+        }
+        
+        // Reset settings button
+        document.getElementById('resetSettingsBtn').addEventListener('click', function() {
+            if (confirm('This will reset all settings to their default values. Are you sure?')) {
+                resetToDefaults();
+            }
+        });
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initSocket();
+            updateSystemInfo();
+            loadSettings();
+            setupAutoSave();
+            
+            // Update system info every 5 seconds
+            setInterval(updateSystemInfo, 5000);
+        });
+    </script>
+</body>
+</html>
