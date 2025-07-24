@@ -344,6 +344,9 @@ class VideoProcessor:
         
         # Build FFmpeg command
         base_fps = settings.get('target_fps', 30)
+        # Handle None or 'None' string values
+        if base_fps is None or str(base_fps) == 'None' or base_fps == 'original':
+            base_fps = 30
         cmd = [
             'ffmpeg', '-y',
             '-framerate', str(base_fps),
