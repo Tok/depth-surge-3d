@@ -424,6 +424,72 @@ Run `./test.sh` to verify your installation:
 3. **Slow processing**: GPU acceleration requires CUDA-compatible hardware
 4. **Out of memory**: Reduce resolution with `--resolution 720p` or use `--device cpu`
 
+## Processing Settings & Resume
+
+### Automatic Settings Recording
+
+Every processing job automatically creates a `[batchname].settings.json` file in the output directory containing:
+
+- **Complete processing parameters**: All settings used for the conversion
+- **Video metadata**: Source video properties and technical details  
+- **Timestamps**: Creation time, completion time, and processing duration
+- **Status tracking**: Current processing state and progress information
+- **Output information**: Expected filenames and directory structure
+
+### Resume Interrupted Processing
+
+If processing is interrupted (power failure, system crash, manual stop), you can resume from where it left off:
+
+```bash
+# Resume processing from any output directory
+python depth_surge_3d.py --resume ./output/my_video_1234567890/
+
+# Check what can be resumed
+python depth_surge_3d.py --resume ./output/my_video_1234567890/
+```
+
+**Resume Process:**
+1. **Validates directory**: Checks for valid settings file and intermediate files
+2. **Analyzes progress**: Determines how many frames were already processed
+3. **Loads original settings**: Uses exact same parameters as the original run
+4. **Continues processing**: Picks up from the last completed frame
+
+**Resume Capability:**
+- ✅ **Supported**: Interrupted processing (`in_progress`, `failed`, `paused`)
+- ✅ **Smart detection**: Automatically finds completed intermediate stages
+- ✅ **Progress analysis**: Shows exactly how much work was completed
+- ❌ **Not needed**: Already completed processing (`completed`)
+
+### Settings File Example
+
+```json
+{
+  "metadata": {
+    "batch_name": "sample_video_1703123456",
+    "source_video": "/path/to/sample_video.mp4",
+    "created_at": "2024-01-20 15:30:56",
+    "processing_status": "completed",
+    "processing_duration_formatted": "12m 34s"
+  },
+  "video_properties": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30.0,
+    "frame_count": 1800
+  },
+  "processing_settings": {
+    "vr_format": "side_by_side",
+    "vr_resolution": "16x9-1080p", 
+    "baseline": 0.065,
+    "fisheye_fov": 105,
+    "processing_mode": "serial"
+  },
+  "output_info": {
+    "expected_output_filename": "sample_video_side-by-side_16x9-1080p_serial.mp4"
+  }
+}
+```
+
 ## Attribution
 
 This project builds upon the excellent **Depth-Anything-V2** model:
