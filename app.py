@@ -34,14 +34,10 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from depth_surge_3d.core.stereo_projector import create_stereo_projector
 
-# Import utility functions (optional - only used when available)
-try:
-    from depth_surge_3d.utils.video_processing import process_video_serial, process_video_batch
-    from depth_surge_3d.utils.batch_analysis import analyze_batch_directory, create_video_from_batch
-    UTILS_AVAILABLE = True
-except ImportError:
-    # Utils not available - use original app.py functions
-    UTILS_AVAILABLE = False
+# Import utility functions - these are part of our project and must be available
+from depth_surge_3d.utils.video_processing import process_video_serial, process_video_batch
+from depth_surge_3d.utils.batch_analysis import analyze_batch_directory, create_video_from_batch
+from depth_surge_3d.processing.video_processor import VideoProcessor
 
 # Global flags and state
 VERBOSE = False
@@ -346,32 +342,17 @@ def process_video_async(session_id, video_path, settings, output_dir):
         processing_mode = settings.get('processing_mode', 'serial')
         callback = ProgressCallback(session_id, expected_frames, processing_mode)
         
-        # Create custom projector with progress callbacks
-        projector_with_progress = StereoProjectorWithProgress(projector, callback)
-        
-        # Process video
-        projector_with_progress.process_video(
+        # Use the new VideoProcessor approach
+        processor = VideoProcessor(projector.depth_estimator)
+        success = processor.process(
             video_path=video_path,
             output_dir=output_dir,
-            vr_format=settings.get('vr_format', 'side_by_side'),
-            baseline=settings.get('baseline', 0.065),
-            focal_length=settings.get('focal_length', 1000),
-            keep_intermediates=settings.get('keep_intermediates', True),
-            start_time=start_time,
-            end_time=end_time,
-            preserve_audio=settings.get('preserve_audio', True),
-            target_fps=target_fps,
-            min_resolution=settings.get('resolution', '1080p'),
-            super_sample=settings.get('super_sample', 'auto'),
-            apply_distortion=settings.get('apply_distortion', True),
-            fisheye_projection=settings.get('fisheye_projection', 'stereographic'),
-            fisheye_fov=settings.get('fisheye_fov', 105),
-            crop_factor=settings.get('crop_factor', 1.0),
-            vr_resolution=settings.get('vr_resolution', 'auto'),
-            fisheye_crop_factor=settings.get('fisheye_crop_factor', 1.0),
-            hole_fill_quality=settings.get('hole_fill_quality', 'fast'),
-            processing_mode=settings.get('processing_mode', 'serial')
+            video_properties=video_info,
+            settings=settings
         )
+        
+        if not success:
+            raise Exception("Video processing failed")
         
         # Processing complete
         try:
@@ -408,264 +389,6 @@ def process_video_async(session_id, video_path, settings, output_dir):
         current_processing['session_id'] = None
         current_processing['stop_requested'] = False
         current_processing['thread'] = None
-
-class StereoProjectorWithProgress:
-    """Wrapper around StereoProjector to add progress callbacks"""
-    
-    def __init__(self, projector, callback):
-        self.projector = projector
-        self.callback = callback
-        self.processing_mode = getattr(callback, 'processing_mode', 'serial')
-    
-    def __getattr__(self, name):
-        """Delegate all missing attributes to the underlying projector"""
-        return getattr(self.projector, name)
-        
-    def process_video(self, **kwargs):
-        """Process video with progress tracking"""
-        # Update callback for frame extraction
-        self.callback.update_progress("Extracting and enhancing frames...", phase="extraction")
-        
-        # Get original video fps
-        cap = cv2.VideoCapture(str(kwargs['video_path']))
-        original_fps = cap.get(cv2.CAP_PROP_FPS)
-        cap.release()
-        
-        # Handle target fps for final video
-        target_fps = kwargs.get('target_fps')
-        if target_fps is None or target_fps == 'original':
-            target_fps = original_fps
-        
-        # Extract frames at original fps (interpolation happens during final video creation)
-        frame_files = self.projector.extract_frames(
-            kwargs['video_path'], 
-            kwargs['output_dir'], 
-            kwargs.get('start_time'), 
-            kwargs.get('end_time'),
-            target_fps,  # Pass target_fps but extraction uses original_fps internally
-            "original"
-        )
-        
-        # Update total frames based on actual extraction
-        self.callback.total_frames = len(frame_files)
-        current_processing['total_frames'] = len(frame_files)
-        
-        # Get original frame dimensions to determine super sampling resolution
-        if frame_files:
-            sample_frame = cv2.imread(str(frame_files[0]))
-            original_height, original_width = sample_frame.shape[:2]
-            super_sample_width, super_sample_height = self.projector.determine_super_sample_resolution(
-                original_width, original_height, kwargs.get('super_sample', 'auto')
-            )
-            
-            # Determine VR output resolution
-            vr_output_width, vr_output_height = self.projector.determine_vr_output_resolution(
-                original_width, original_height, kwargs.get('vr_resolution', 'auto'), kwargs.get('vr_format', 'side_by_side')
-            )
-        else:
-            raise Exception("No frames extracted")
-        
-        # Frame extraction is complete - show 100% for extraction phase
-        self.callback.update_progress(f"Frame extraction complete - {len(frame_files)} frames extracted", len(frame_files), phase="extraction")
-        
-        # Switch to processing phase
-        self.callback.update_progress(f"Frame extraction complete - {len(frame_files)} frames extracted", len(frame_files), phase="processing")
-        self.callback.current_frame = 0
-        current_processing['current_frame'] = 0
-        
-        # Create numbered output directories that match the processing flow
-        output_path = Path(kwargs['output_dir'])
-        if kwargs.get('keep_intermediates', True):
-            # Step 1: Original frames (already extracted)
-            
-            # Step 2: Super sampled frames (if applicable)
-            if super_sample_width != original_width or super_sample_height != original_height:
-                super_sampled_dir = output_path / INTERMEDIATE_DIRS["supersampled"]
-                super_sampled_dir.mkdir(exist_ok=True)
-            
-            # Step 3: Depth maps
-            depth_dir = output_path / INTERMEDIATE_DIRS["depth_maps"]
-            depth_dir.mkdir(exist_ok=True)
-            
-            # Step 4: Initial stereo pairs
-            left_dir = output_path / INTERMEDIATE_DIRS["left_frames"]
-            right_dir = output_path / INTERMEDIATE_DIRS["right_frames"]
-            left_dir.mkdir(exist_ok=True)
-            right_dir.mkdir(exist_ok=True)
-            
-            # Step 5: Fisheye frames (if distortion is applied)
-            apply_distortion = kwargs.get('apply_distortion', True)
-            if apply_distortion:
-                left_distorted_dir = output_path / INTERMEDIATE_DIRS["left_distorted"]
-                right_distorted_dir = output_path / INTERMEDIATE_DIRS["right_distorted"]
-                left_distorted_dir.mkdir(exist_ok=True)
-                right_distorted_dir.mkdir(exist_ok=True)
-            
-            # Step 6: Final cropped frames
-            left_final_dir = output_path / INTERMEDIATE_DIRS["left_final"]
-            right_final_dir = output_path / INTERMEDIATE_DIRS["right_final"]
-            left_final_dir.mkdir(exist_ok=True)
-            right_final_dir.mkdir(exist_ok=True)
-        
-        # Step 7: Final VR frames
-        vr_dir = output_path / INTERMEDIATE_DIRS["vr_frames"]
-        vr_dir.mkdir(exist_ok=True)
-        
-        # Start processing phase
-        self.callback.update_progress("Starting frame processing...", phase="processing")
-        
-        # Process each frame (with resume support)
-        for i, frame_file in enumerate(frame_files):
-            try:
-                # Check for stop request at the beginning of each frame
-                if current_processing.get('stop_requested', False):
-                    raise InterruptedError("Processing stopped by user request")
-                
-                frame_name = frame_file.stem
-                
-                # Check if this frame is already processed (resume support)
-                vr_frame_path = vr_dir / f"{frame_name}.png"
-                if vr_frame_path.exists():
-                    # Frame already processed, skip it
-                    self.callback.update_progress(f"Skipping frame {i+1}/{len(frame_files)} - Already processed", i+1, phase="extraction")
-                    continue
-                    
-                # Update progress at start of each frame
-                self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Loading...", i+1, phase="extraction")
-                
-                original_image = cv2.imread(str(frame_file))
-                if original_image is None:
-                    vprint(f"Warning: Could not load frame {frame_file}, skipping...")
-                    continue
-                
-                # Note: Original frames are already saved in 1_frames/ from extraction
-                
-                # Apply super sampling if needed
-                if super_sample_width != original_width or super_sample_height != original_height:
-                    self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Super sampling...", i+1, phase="super_sampling")
-                    image = self.projector.apply_super_sampling(original_image, super_sample_width, super_sample_height)
-                    
-                    # Save super sampled frame if keeping intermediates
-                    if kwargs.get('keep_intermediates', True):
-                        cv2.imwrite(str(super_sampled_dir / f"{frame_name}.png"), image)
-                else:
-                    image = original_image
-                
-                # Update progress - depth map generation
-                self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Generating depth map...", i+1, phase="depth_estimation")
-                
-                # Generate depth map (on super sampled image if applicable)
-                if super_sample_width != original_width or super_sample_height != original_height:
-                    temp_frame_path = output_path / f"temp_frame_{i}.png"
-                    cv2.imwrite(str(temp_frame_path), image)
-                    depth_map = self.projector.generate_depth_map(temp_frame_path)
-                    temp_frame_path.unlink()  # Clean up temp file
-                else:
-                    depth_map = self.projector.generate_depth_map(frame_file)
-                
-                # Update progress - stereo pair creation
-                self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Creating stereo pair...", i+1, phase="stereo_generation")
-                
-                # Create stereo pair
-                left_img, right_img = self.projector.create_stereo_pair(
-                    image, depth_map, kwargs.get('baseline', 0.1), kwargs.get('focal_length', 1000),
-                    hole_fill_quality=kwargs.get('hole_fill_quality', 'advanced')
-                )
-                
-                # Save intermediates if keeping them
-                if kwargs.get('keep_intermediates', True):
-                    # Save depth map as grayscale
-                    depth_vis = (depth_map * 255).astype(np.uint8)
-                    cv2.imwrite(str(depth_dir / f"{frame_name}.png"), depth_vis)
-                    cv2.imwrite(str(left_dir / f"{frame_name}.png"), left_img)
-                    cv2.imwrite(str(right_dir / f"{frame_name}.png"), right_img)
-                
-                # Apply fisheye distortion if enabled
-                if apply_distortion:
-                    self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Fisheye projection...", i+1, phase="distortion")
-                    left_distorted = self.projector.apply_fisheye_distortion(
-                        left_img, kwargs.get('fisheye_projection', 'equidistant'), kwargs.get('fisheye_fov', 180)
-                    )
-                    right_distorted = self.projector.apply_fisheye_distortion(
-                        right_img, kwargs.get('fisheye_projection', 'equidistant'), kwargs.get('fisheye_fov', 180)
-                    )
-                    
-                    # Save fisheye frames if keeping intermediates
-                    if kwargs.get('keep_intermediates', True):
-                        cv2.imwrite(str(left_distorted_dir / f"{frame_name}.png"), left_distorted)
-                        cv2.imwrite(str(right_distorted_dir / f"{frame_name}.png"), right_distorted)
-                    
-                    # Apply fisheye-aware square cropping and scaling directly to target VR eye format
-                    self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Fisheye square crop & scale...", i+1, phase="vr_assembly")
-                    vr_format = kwargs.get('vr_format', 'side_by_side')
-                    if vr_format.startswith('side_by_side'):
-                        eye_width = vr_output_width // 2
-                        eye_height = vr_output_height
-                    elif vr_format.startswith('over_under'):
-                        eye_width = vr_output_width
-                        eye_height = vr_output_height // 2
-                    else:
-                        eye_width = vr_output_width // 2
-                        eye_height = vr_output_height
-                    
-                    # Use fisheye-aware cropping that optimally fits square within circle
-                    fisheye_crop_factor = kwargs.get('fisheye_crop_factor', 1.25)
-                    left_final = self.projector.apply_fisheye_square_crop(left_distorted, eye_width, eye_height, fisheye_crop_factor)
-                    right_final = self.projector.apply_fisheye_square_crop(right_distorted, eye_width, eye_height, fisheye_crop_factor)
-                    
-                    # Save final square eye frames if keeping intermediates
-                    if kwargs.get('keep_intermediates', True):
-                        cv2.imwrite(str(left_final_dir / f"{frame_name}.png"), left_final)
-                        cv2.imwrite(str(right_final_dir / f"{frame_name}.png"), right_final)
-                        
-                else:
-                    # Apply center cropping and VR eye scaling to undistorted frames
-                    self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Cropping & scaling...", i+1, phase="vr_assembly")
-                    left_cropped = self.projector.apply_center_crop(left_img, kwargs.get('crop_factor', 0.7))
-                    right_cropped = self.projector.apply_center_crop(right_img, kwargs.get('crop_factor', 0.7))
-                    
-                    # Scale to VR eye format
-                    vr_format = kwargs.get('vr_format', 'side_by_side')
-                    if vr_format.startswith('side_by_side'):
-                        eye_width = vr_output_width // 2
-                        eye_height = vr_output_height
-                    elif vr_format.startswith('over_under'):
-                        eye_width = vr_output_width
-                        eye_height = vr_output_height // 2
-                    else:
-                        eye_width = vr_output_width // 2
-                        eye_height = vr_output_height
-                    
-                    left_final = self.projector._scale_to_eye_format(left_cropped, eye_width, eye_height)
-                    right_final = self.projector._scale_to_eye_format(right_cropped, eye_width, eye_height)
-                    
-                    # Save final square eye frames if keeping intermediates
-                    if kwargs.get('keep_intermediates', True):
-                        cv2.imwrite(str(left_final_dir / f"{frame_name}.png"), left_final)
-                        cv2.imwrite(str(right_final_dir / f"{frame_name}.png"), right_final)
-                
-                # Create final VR frame by combining already-scaled eye frames (no additional processing needed)
-                self.callback.update_progress(f"Processing frame {i+1}/{len(frame_files)} - Creating VR frame...", i+1, phase="vr_assembly")
-                vr_frame = self.projector.create_vr_format(left_final, right_final, kwargs.get('vr_format', 'side_by_side'), apply_crop=False, target_resolution=None)
-            
-                # Final frame completion update
-                self.callback.update_progress(f"Completed frame {i+1}/{len(frame_files)}", i+1)
-                
-                # Save final VR frame (already cropped)
-                cv2.imwrite(str(vr_dir / f"{frame_name}.png"), vr_frame)
-                
-            except Exception as frame_error:
-                vprint(f"Error processing frame {i+1}: {frame_error}")
-                # Continue with next frame instead of stopping entire processing
-                continue
-        
-        # Create final video
-        self.callback.update_progress("Creating final video with audio...", phase="video_creation")
-        self.projector.create_output_video(
-            vr_dir, output_path, kwargs['video_path'], kwargs.get('vr_format', 'side_by_side'),
-            kwargs.get('start_time'), kwargs.get('end_time'), kwargs.get('preserve_audio', True),
-            target_fps
-        )
 
 @app.route('/')
 def index():
