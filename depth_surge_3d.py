@@ -293,7 +293,7 @@ def main():
         # Process video
         print(f"Starting Depth Surge 3D processing...")
         print(f"Input: {args.input_video}")
-        print(f"Output: {args.output_dir}")
+        print(f"Output: {args.output_dir} (batch subdirectory will be created)")
         print(f"Mode: {args.processing_mode}")
         print(f"Format: {args.format}")
         print(f"Resolution: {args.vr_resolution}")
@@ -305,9 +305,22 @@ def main():
             print("   Recommended for artistic experimentation only.")
             print()
 
+        # Create batch-specific output directory
+        if args.resume:
+            # Use existing directory for resume
+            batch_output_dir = args.resume
+        else:
+            # Create new batch directory
+            from datetime import datetime
+            from pathlib import Path
+            
+            video_name = Path(args.input_video).stem
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            batch_output_dir = Path(args.output_dir) / f"{video_name}_{timestamp}"
+        
         success = projector.process_video(
             video_path=args.input_video,
-            output_dir=args.output_dir,
+            output_dir=str(batch_output_dir),
             vr_format=args.format,
             vr_resolution=args.vr_resolution,
             processing_mode=args.processing_mode,
@@ -329,6 +342,7 @@ def main():
         
         if success:
             print("🎉 Processing completed successfully!")
+            print(f"📁 Output saved to: {batch_output_dir}")
             return 0
         else:
             print("❌ Processing failed. Check error messages above.")
