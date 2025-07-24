@@ -274,19 +274,37 @@ class VideoProcessor:
                 
                 # Apply fisheye-aware cropping
                 progress_tracker.update_serial(frame_num, f"Cropping and scaling frame {frame_num}")
-                left_final = apply_fisheye_square_crop(
+                left_cropped = apply_fisheye_square_crop(
                     left_distorted, settings['per_eye_width'], settings['per_eye_height'], 
                     settings['fisheye_crop_factor']
                 )
-                right_final = apply_fisheye_square_crop(
+                right_cropped = apply_fisheye_square_crop(
                     right_distorted, settings['per_eye_width'], settings['per_eye_height'], 
                     settings['fisheye_crop_factor']
                 )
+                
+                # Save cropped frames if keeping intermediates
+                if settings['keep_intermediates']:
+                    if 'left_cropped' in directories:
+                        cv2.imwrite(str(directories['left_cropped'] / f"{frame_name}.png"), left_cropped)
+                    if 'right_cropped' in directories:
+                        cv2.imwrite(str(directories['right_cropped'] / f"{frame_name}.png"), right_cropped)
+                
+                # For fisheye, cropped frames are already final size
+                left_final = left_cropped
+                right_final = right_cropped
             else:
                 # Apply center cropping
                 progress_tracker.update_serial(frame_num, f"Cropping and scaling frame {frame_num}")
                 left_cropped = apply_center_crop(left_img, settings['crop_factor'])
                 right_cropped = apply_center_crop(right_img, settings['crop_factor'])
+                
+                # Save cropped frames if keeping intermediates
+                if settings['keep_intermediates']:
+                    if 'left_cropped' in directories:
+                        cv2.imwrite(str(directories['left_cropped'] / f"{frame_name}.png"), left_cropped)
+                    if 'right_cropped' in directories:
+                        cv2.imwrite(str(directories['right_cropped'] / f"{frame_name}.png"), right_cropped)
                 
                 # Resize to target dimensions
                 left_final = resize_image(left_cropped, settings['per_eye_width'], settings['per_eye_height'])
