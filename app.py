@@ -239,7 +239,7 @@ def process_video_async(session_id, video_path, settings, output_dir):
             video_path=video_path,
             output_dir=output_dir,
             vr_format=settings.get('vr_format', 'side_by_side'),
-            baseline=settings.get('baseline', 0.1),
+            baseline=settings.get('baseline', 0.065),
             focal_length=settings.get('focal_length', 1000),
             keep_intermediates=settings.get('keep_intermediates', True),
             start_time=start_time,
@@ -249,12 +249,12 @@ def process_video_async(session_id, video_path, settings, output_dir):
             min_resolution=settings.get('resolution', '1080p'),
             super_sample=settings.get('super_sample', 'auto'),
             apply_distortion=settings.get('apply_distortion', True),
-            fisheye_projection=settings.get('fisheye_projection', 'equidistant'),
-            fisheye_fov=settings.get('fisheye_fov', 180),
-            crop_factor=settings.get('crop_factor', 0.7),
+            fisheye_projection=settings.get('fisheye_projection', 'stereographic'),
+            fisheye_fov=settings.get('fisheye_fov', 105),
+            crop_factor=settings.get('crop_factor', 1.0),
             vr_resolution=settings.get('vr_resolution', 'auto'),
-            fisheye_crop_factor=settings.get('fisheye_crop_factor', 1.25),
-            hole_fill_quality=settings.get('hole_fill_quality', 'advanced')
+            fisheye_crop_factor=settings.get('fisheye_crop_factor', 1.0),
+            hole_fill_quality=settings.get('hole_fill_quality', 'fast')
         )
         
         # Processing complete
@@ -698,11 +698,12 @@ def detect_resume_settings(output_path):
         'device': 'auto',
         'super_sample': 'auto',
         'apply_distortion': True,
-        'fisheye_projection': 'equidistant',
-        'fisheye_fov': 180,
-        'crop_factor': 0.7,
+        'fisheye_projection': 'stereographic',
+        'fisheye_fov': 105,
+        'crop_factor': 1.0,
         'vr_resolution': 'auto',
-        'fisheye_crop_factor': 1.25
+        'fisheye_crop_factor': 1.0,
+        'hole_fill_quality': 'fast'
     }
     
     # Try to detect VR format from directory structure

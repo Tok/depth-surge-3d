@@ -419,17 +419,27 @@
                                 <small class="form-text text-muted">Choose format compatible with your VR headset</small>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">VR Resolution <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Square formats optimize pixel usage for VR headsets. Auto matches source quality."></i></label>
+                                <label class="form-label">VR Resolution <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Square formats optimize for VR headsets, wide formats preserve more original content."></i></label>
                                 <select class="form-select" id="vrResolution">
-                                    <option value="auto" selected>Auto (Match Source Quality)</option>
-                                    <option value="square-1k">Square 1K (1080×1080 per eye → 2160×1080 side-by-side)</option>
-                                    <option value="square-2k">Square 2K (1536×1536 per eye → 3072×1536 side-by-side)</option>
-                                    <option value="square-3k">Square 3K (1920×1920 per eye → 3840×1920 side-by-side)</option>
-                                    <option value="square-4k">Square 4K (2048×2048 per eye → 4096×2048 side-by-side)</option>
-                                    <option value="square-5k">Square 5K (2560×2560 per eye → 5120×2560 side-by-side)</option>
-                                    <option value="ultrawide">Ultra-wide (3840×2160 per eye → 7680×2160 side-by-side)</option>
+                                    <option value="auto" selected>Auto (Match Source Quality & Aspect)</option>
+                                    <optgroup label="Square Formats (VR Optimized)">
+                                        <option value="square-1k">Square 1K (1080×1080 per eye)</option>
+                                        <option value="square-2k">Square 2K (1536×1536 per eye)</option>
+                                        <option value="square-3k">Square 3K (1920×1920 per eye)</option>
+                                        <option value="square-4k">Square 4K (2048×2048 per eye)</option>
+                                        <option value="square-5k">Square 5K (2560×2560 per eye)</option>
+                                    </optgroup>
+                                    <optgroup label="Wide Formats (Content Preservation)">
+                                        <option value="wide-2k">Wide 2K (2560×1440 per eye)</option>
+                                        <option value="wide-4k">Wide 4K (3840×2160 per eye)</option>
+                                        <option value="ultrawide">Ultra-wide (3840×2160 per eye)</option>
+                                    </optgroup>
+                                    <optgroup label="Cinema Formats (Ultra-wide, recommend over-under)">
+                                        <option value="cinema-2k">Cinema 2K (2048×858 per eye)</option>
+                                        <option value="cinema-4k">Cinema 4K (4096×1716 per eye)</option>
+                                    </optgroup>
                                 </select>
-                                <small class="form-text text-muted">Square formats are optimized for VR viewing and use pixels more efficiently</small>
+                                <small class="form-text text-muted">Wide/cinema formats preserve more content but may appear distorted in side-by-side</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Stereo Baseline</label>
@@ -511,8 +521,8 @@
                             <div class="mb-3" id="distortionOptions">
                                 <label class="form-label">Fisheye Projection</label>
                                 <select class="form-select" id="fisheyeProjection">
-                                    <option value="equidistant" selected>Equidistant (f*θ)</option>
-                                    <option value="stereographic">Stereographic (2f*tan(θ/2))</option>
+                                    <option value="equidistant">Equidistant (f*θ)</option>
+                                    <option value="stereographic" selected>Stereographic (2f*tan(θ/2))</option>
                                     <option value="equisolid">Equisolid Angle (2f*sin(θ/2))</option>
                                     <option value="orthographic">Orthographic (f*sin(θ))</option>
                                 </select>
@@ -520,24 +530,24 @@
                             </div>
                             <div class="mb-3" id="distortionK2Options">
                                 <label class="form-label">Field of View (degrees)</label>
-                                <input type="number" class="form-control" id="fisheyeFov" value="180" step="5" min="120" max="220">
-                                <small class="form-text text-muted">Fisheye field of view (120-220 degrees, default: 180)</small>
+                                <input type="number" class="form-control" id="fisheyeFov" value="105" step="5" min="75" max="180">
+                                <small class="form-text text-muted">Fisheye field of view (75-180 degrees, default: 105)</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Crop Factor</label>
-                                <input type="number" class="form-control" id="cropFactor" value="0.7" step="0.05" min="0.5" max="1.0">
-                                <small class="form-text text-muted">Center crop factor to reduce edge artifacts (0.5-1.0, default: 0.7)</small>
+                                <input type="number" class="form-control" id="cropFactor" value="1.0" step="0.05" min="0.5" max="1.0">
+                                <small class="form-text text-muted">Center crop factor to reduce edge artifacts (0.5-1.0, default: 1.0 - no crop)</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Fisheye Crop Factor <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Controls how much fisheye content to capture. 1.0 = perfect inscribed square, >1.0 extends beyond circle for maximum content."></i></label>
-                                <input type="number" class="form-control" id="fisheyeCropFactor" value="1.25" step="0.05" min="0.8" max="1.5">
-                                <small class="form-text text-muted">Fisheye square crop factor relative to circle (0.8-1.5, default: 1.25)</small>
+                                <input type="number" class="form-control" id="fisheyeCropFactor" value="1.0" step="0.05" min="0.8" max="1.5">
+                                <small class="form-text text-muted">Fisheye square crop factor relative to circle (0.8-1.5, default: 1.0 - no crop)</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Hole Filling Quality <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Advanced uses depth-guided multi-stage filling for better quality but slower processing. Fast uses simple inpainting for speed."></i></label>
                                 <select class="form-select" id="holeFillQuality">
-                                    <option value="fast">Fast (Simple Inpainting)</option>
-                                    <option value="advanced" selected>Advanced (Multi-Stage + Depth Guidance)</option>
+                                    <option value="fast" selected>Fast (Simple Inpainting)</option>
+                                    <option value="advanced">Advanced (Multi-Stage + Depth Guidance)</option>
                                 </select>
                                 <small class="form-text text-muted">Balance between processing speed and stereo quality</small>
                             </div>
@@ -1628,11 +1638,11 @@
                 preserveAudio: true,
                 keepIntermediates: true,
                 applyDistortion: true,
-                fisheyeProjection: 'equidistant',
-                fisheyeFov: '180',
-                cropFactor: '0.7',
-                fisheyeCropFactor: '1.25',
-                holeFillQuality: 'advanced'
+                fisheyeProjection: 'stereographic',
+                fisheyeFov: '105',
+                cropFactor: '1.0',
+                fisheyeCropFactor: '1.0',
+                holeFillQuality: 'fast'
             };
             
             Object.keys(defaults).forEach(key => {

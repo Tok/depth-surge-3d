@@ -770,58 +770,90 @@ class StereoProjector:
     
     def determine_vr_output_resolution(self, original_width, original_height, vr_resolution_setting, vr_format):
         """Determine target VR per-eye resolution based on input and setting"""
-        # Define per-eye square resolutions (final output will be calculated based on format)
+        # Define per-eye resolutions (both square and wide formats)
         per_eye_resolutions = {
+            # Square formats (optimized for VR headsets)
             "square-1k": (1080, 1080),    # 1080x1080 per eye
             "square-2k": (1536, 1536),    # 1536x1536 per eye 
             "square-3k": (1920, 1920),    # 1920x1920 per eye
             "square-4k": (2048, 2048),    # 2048x2048 per eye - industry standard
             "square-5k": (2560, 2560),    # 2560x2560 per eye - premium
-            "ultrawide": (3840, 2160),    # 3840x2160 per eye - traditional
+            # Wide formats (preserve more of original content, good for over-under)
+            "ultrawide": (3840, 2160),    # 3840x2160 per eye - ultra-wide 16:9
+            "wide-2k": (2560, 1440),     # 2560x1440 per eye - 16:9 2K
+            "wide-4k": (3840, 2160),     # 3840x2160 per eye - 16:9 4K  
+            # Cinema formats (ultra-wide aspect ratios, recommend over-under)
+            "cinema-2k": (2048, 858),    # 2048x858 per eye - 2.39:1 cinema
+            "cinema-4k": (4096, 1716),   # 4096x1716 per eye - 2.39:1 4K cinema
         }
         
         if vr_resolution_setting in per_eye_resolutions:
             per_eye_width, per_eye_height = per_eye_resolutions[vr_resolution_setting]
         elif vr_resolution_setting == "auto":
-            # Auto resolution logic based on source material quality
+            # Auto resolution logic based on source material quality and aspect ratio
             source_pixels = original_width * original_height
+            source_aspect = original_width / original_height
             
-            if source_pixels <= 640 * 480:      # SD content -> square-1k
-                per_eye_width, per_eye_height = per_eye_resolutions["square-1k"]
-            elif source_pixels <= 1280 * 720:   # 720p content -> square-2k  
-                per_eye_width, per_eye_height = per_eye_resolutions["square-2k"]
-            elif source_pixels <= 1920 * 1080:  # 1080p content -> square-3k
-                per_eye_width, per_eye_height = per_eye_resolutions["square-3k"]
-            elif source_pixels <= 2560 * 1440:  # 1440p content -> square-4k
-                per_eye_width, per_eye_height = per_eye_resolutions["square-4k"]
-            else:                                # 4K+ content -> square-5k
-                per_eye_width, per_eye_height = per_eye_resolutions["square-5k"]
+            # Detect content type based on aspect ratio
+            if source_aspect > 2.2:  # Ultra-wide content (cinema aspect ratios)
+                print(f"Detected ultra-wide content ({source_aspect:.2f}:1) - recommending over-under format for best quality")
+                if source_pixels <= 1920 * 1080:
+                    per_eye_width, per_eye_height = per_eye_resolutions["cinema-2k"]
+                else:
+                    per_eye_width, per_eye_height = per_eye_resolutions["cinema-4k"]
+            elif source_aspect > 1.6:  # Wide content (16:9, 16:10, etc.)
+                print(f"Detected wide content ({source_aspect:.2f}:1) - consider over-under format to preserve more content")
+                if source_pixels <= 1280 * 720:
+                    per_eye_width, per_eye_height = per_eye_resolutions["wide-2k"]
+                else:
+                    per_eye_width, per_eye_height = per_eye_resolutions["wide-4k"]
+            else:  # Standard or square content
+                # Use square formats for better VR headset compatibility
+                if source_pixels <= 640 * 480:      # SD content -> square-1k
+                    per_eye_width, per_eye_height = per_eye_resolutions["square-1k"]
+                elif source_pixels <= 1280 * 720:   # 720p content -> square-2k  
+                    per_eye_width, per_eye_height = per_eye_resolutions["square-2k"]
+                elif source_pixels <= 1920 * 1080:  # 1080p content -> square-3k
+                    per_eye_width, per_eye_height = per_eye_resolutions["square-3k"]
+                elif source_pixels <= 2560 * 1440:  # 1440p content -> square-4k
+                    per_eye_width, per_eye_height = per_eye_resolutions["square-4k"]
+                else:                                # 4K+ content -> square-5k
+                    per_eye_width, per_eye_height = per_eye_resolutions["square-5k"]
         else:
             # Fallback to square-4k (industry standard)
             per_eye_width, per_eye_height = per_eye_resolutions["square-4k"]
         
         # Calculate final output dimensions based on VR format
         if vr_format.startswith('side_by_side'):
-            # Side-by-side: two square eyes horizontally
+            # Side-by-side: two eyes horizontally
             final_width = per_eye_width * 2
             final_height = per_eye_height
         elif vr_format.startswith('over_under'):
-            # Over-under: two square eyes vertically  
+            # Over-under: two eyes vertically  
             final_width = per_eye_width
             final_height = per_eye_height * 2
         else:
             # Default to side-by-side
             final_width = per_eye_width * 2
             final_height = per_eye_height
+        
+        # Add format recommendation for wide aspect ratios
+        per_eye_aspect = per_eye_width / per_eye_height
+        if per_eye_aspect > 1.8 and vr_format.startswith('side_by_side'):
+            print(f"Note: Wide aspect ratio ({per_eye_aspect:.2f}:1) detected. Over-under format recommended for:")
+            print(f"  - Better content preservation (no horizontal squashing)")
+            print(f"  - More comfortable viewing on wide screens")
+            print(f"  - Current: {final_width}x{final_height} side-by-side")
+            print(f"  - Over-under would be: {per_eye_width}x{per_eye_height * 2}")
             
         return final_width, final_height
     
     def process_video(self, video_path, output_dir, vr_format='side_by_side', 
-                     baseline=0.1, focal_length=1000, keep_intermediates=True,
+                     baseline=0.065, focal_length=1000, keep_intermediates=True,
                      start_time=None, end_time=None, preserve_audio=True, 
                      target_fps=60, min_resolution="1080p", super_sample="auto",
-                     apply_distortion=True, fisheye_projection='equidistant', fisheye_fov=180,
-                     crop_factor=0.7, vr_resolution='auto', fisheye_crop_factor=1.25):
+                     apply_distortion=True, fisheye_projection='stereographic', fisheye_fov=105,
+                     crop_factor=1.0, vr_resolution='auto', fisheye_crop_factor=1.0, hole_fill_quality='fast'):
         """Process entire video to create 3D VR version"""
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -935,7 +967,7 @@ class StereoProjector:
             
             # Create stereo pair
             left_img, right_img = self.create_stereo_pair(
-                image, depth_map, baseline, focal_length
+                image, depth_map, baseline, focal_length, hole_fill_quality
             )
             
             # Save intermediates if keeping them
@@ -1177,8 +1209,8 @@ def main():
                        help='Path to Depth Anything V2 model file')
     parser.add_argument('-f', '--format', choices=['side_by_side', 'over_under'], 
                        default='side_by_side', help='VR output format (default: side_by_side)')
-    parser.add_argument('--vr-resolution', choices=['square-1k', 'square-2k', 'square-3k', 'square-4k', 'square-5k', 'ultrawide', 'auto'], 
-                       default='auto', help='VR output resolution format: square-1k (1080x1080 per eye), square-2k (1536x1536 per eye), square-3k (1920x1920 per eye), square-4k (2048x2048 per eye), square-5k (2560x2560 per eye), ultrawide (3840x2160 per eye), auto (matches source) (default: auto)')
+    parser.add_argument('--vr-resolution', choices=['square-1k', 'square-2k', 'square-3k', 'square-4k', 'square-5k', 'ultrawide', 'wide-2k', 'wide-4k', 'cinema-2k', 'cinema-4k', 'auto'], 
+                       default='auto', help='VR output resolution format: square-1k (1080x1080 per eye), square-2k (1536x1536 per eye), square-3k (1920x1920 per eye), square-4k (2048x2048 per eye), square-5k (2560x2560 per eye), ultrawide (3840x2160 per eye), wide-2k (2560x1440 per eye), wide-4k (3840x2160 per eye), cinema-2k (2048x858 per eye), cinema-4k (4096x1716 per eye), auto (matches source) (default: auto)')
     parser.add_argument('-b', '--baseline', type=float, default=0.065, 
                        help='Stereo baseline distance in meters (default: 0.065 - average human IPD)')
     parser.add_argument('-fl', '--focal-length', type=float, default=1000,
@@ -1204,13 +1236,15 @@ def main():
     parser.add_argument('--no-fisheye-distortion', dest='fisheye_distortion', action='store_false',
                        help='Disable fisheye distortion')
     parser.add_argument('--fisheye-projection', choices=['equidistant', 'stereographic', 'equisolid', 'orthographic'], 
-                       default='equidistant', help='Fisheye projection model (default: equidistant)')
-    parser.add_argument('--fisheye-fov', type=float, default=180,
-                       help='Fisheye field of view in degrees (120-220, default: 180)')
-    parser.add_argument('--crop-factor', type=float, default=0.7,
-                       help='Center crop factor for final VR frames to reduce edge artifacts (0.5-1.0, default: 0.7)')
-    parser.add_argument('--fisheye-crop-factor', type=float, default=1.25,
-                       help='Fisheye square crop factor relative to circle diameter (0.8-1.5, default: 1.25)')
+                       default='stereographic', help='Fisheye projection model (default: stereographic)')
+    parser.add_argument('--fisheye-fov', type=float, default=105,
+                       help='Fisheye field of view in degrees (75-180, default: 105)')
+    parser.add_argument('--crop-factor', type=float, default=1.0,
+                       help='Center crop factor for final VR frames to reduce edge artifacts (0.5-1.0, default: 1.0 - no crop)')
+    parser.add_argument('--fisheye-crop-factor', type=float, default=1.0,
+                       help='Fisheye square crop factor relative to circle diameter (0.8-1.5, default: 1.0 - no crop)')
+    parser.add_argument('--hole-fill-quality', choices=['fast', 'advanced'], default='fast',
+                       help='Hole filling quality for stereo pair generation (default: fast)')
     
     args = parser.parse_args()
     
@@ -1259,7 +1293,8 @@ def main():
         args.fisheye_fov,
         args.crop_factor,
         getattr(args, 'vr_resolution'),
-        getattr(args, 'fisheye_crop_factor')
+        getattr(args, 'fisheye_crop_factor'),
+        getattr(args, 'hole_fill_quality')
     )
 
 if __name__ == "__main__":
