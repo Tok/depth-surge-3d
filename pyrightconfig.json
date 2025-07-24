@@ -1,0 +1,14 @@
+{
+    "include": [
+        "."
+    ],
+    "exclude": [
+        "**/__pycache__",
+        "**/node_modules"
+    ],
+    "extraPaths": [
+        "./src"
+    ],
+    "pythonVersion": "3.8",
+    "typeCheckingMode": "basic"
+} 
