@@ -301,6 +301,17 @@ class ProgressCallback:
         except Exception as e:
             vprint(f"Error emitting progress: {e}")
             # Don't let SocketIO errors stop processing - continue silently
+    
+    def finish(self, message: str = "Processing complete"):
+        """Finish progress tracking (compatibility with ProgressTracker interface)."""
+        print(f"[{self.processing_mode.upper()}] {message}")
+        try:
+            socketio.emit('processing_complete', {
+                'success': True,
+                'message': message
+            }, room=self.session_id)
+        except Exception as e:
+            vprint(f"Error emitting completion: {e}")
 
 def process_video_async(session_id, video_path, settings, output_dir):
     """Process video in background thread"""
@@ -344,6 +355,36 @@ def process_video_async(session_id, video_path, settings, output_dir):
         
         # Use the new VideoProcessor approach
         processor = VideoProcessor(projector.depth_estimator)
+        
+        # Calculate resolution settings that VideoProcessor expects
+        from depth_surge_3d.utils.resolution import get_resolution_dimensions, calculate_vr_output_dimensions, auto_detect_resolution
+        
+        # Resolve VR resolution if auto
+        vr_resolution = settings.get('vr_resolution', 'auto')
+        if vr_resolution == 'auto':
+            vr_resolution = auto_detect_resolution(
+                video_info['width'], 
+                video_info['height'], 
+                settings.get('vr_format', 'side_by_side')
+            )
+        
+        # Get resolution dimensions
+        per_eye_width, per_eye_height = get_resolution_dimensions(vr_resolution)
+        vr_output_width, vr_output_height = calculate_vr_output_dimensions(
+            per_eye_width, per_eye_height, settings.get('vr_format', 'side_by_side')
+        )
+        
+        # Add calculated dimensions to settings
+        settings.update({
+            'per_eye_width': per_eye_width,
+            'per_eye_height': per_eye_height,
+            'vr_output_width': vr_output_width,
+            'vr_output_height': vr_output_height,
+            'source_width': video_info['width'],
+            'source_height': video_info['height'],
+            'source_fps': video_info['fps']
+        })
+        
         success = processor.process(
             video_path=video_path,
             output_dir=output_dir,
