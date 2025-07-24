@@ -11,55 +11,110 @@ import cv2
 import numpy as np
 import torch
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
+import time
 
+class ProgressTracker:
+    """Enhanced progress tracking for both serial and batch processing modes"""
+    def __init__(self, total_frames, processing_mode='serial'):
+        self.total_frames = total_frames
+        self.processing_mode = processing_mode
+        self.start_time = time.time()
+        
+        if processing_mode == 'serial':
+            self.current_frame = 0
+            self.current_step = ""
+        else:  # batch mode
+            self.steps = [
+                "Frame Extraction",
+                "Super Sampling", 
+                "Depth Map Generation",
+                "Stereo Pair Creation",
+                "Fisheye Distortion",
+                "Final Processing",
+                "Video Creation"
+            ]
+            self.current_step_index = 0
+            self.step_progress = 0
+            self.step_total = 0
+            
+    def update_serial(self, frame_num, step_description):
+        """Update progress for serial processing"""
+        self.current_frame = frame_num
+        self.current_step = step_description
+        self._display_serial()
+        
+    def update_batch_step(self, step_name, progress=0, total=0):
+        """Update progress for batch processing step"""
+        if step_name in self.steps:
+            self.current_step_index = self.steps.index(step_name)
+        self.step_progress = progress
+        self.step_total = total
+        self._display_batch()
+        
+    def update_batch_progress(self, progress, total=None):
+        """Update progress within current batch step"""
+        self.step_progress = progress
+        if total is not None:
+            self.step_total = total
+        self._display_batch()
+        
+    def _display_serial(self):
+        """Display serial mode progress"""
+        if self.total_frames > 0:
+            percentage = (self.current_frame / self.total_frames) * 100
+            elapsed = time.time() - self.start_time
+            if self.current_frame > 0:
+                eta = (elapsed / self.current_frame) * (self.total_frames - self.current_frame)
+                eta_str = f"ETA: {eta:.1f}s"
+            else:
+                eta_str = "ETA: --"
+            print(f"\r[SERIAL] Frame {self.current_frame}/{self.total_frames} ({percentage:.1f}%) - {self.current_step} - {eta_str}", end="", flush=True)
+    
+    def _display_batch(self):
+        """Display batch mode progress"""
+        step_name = self.steps[self.current_step_index] if self.current_step_index < len(self.steps) else "Processing"
+        overall_percentage = ((self.current_step_index + (self.step_progress / max(self.step_total, 1))) / len(self.steps)) * 100
+        
+        elapsed = time.time() - self.start_time
+        eta = (elapsed / max(overall_percentage, 1)) * (100 - overall_percentage) if overall_percentage > 0 else 0
+        eta_str = f"ETA: {eta:.1f}s" if eta > 0 else "ETA: --"
+        
+        if self.step_total > 0:
+            step_percentage = (self.step_progress / self.step_total) * 100
+            print(f"\r[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: {step_name} ({step_percentage:.1f}%) | Overall: {overall_percentage:.1f}% - {eta_str}", end="", flush=True)
+        else:
+            print(f"\r[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: {step_name} | Overall: {overall_percentage:.1f}% - {eta_str}", end="", flush=True)
+    
+    def finish(self, message="Processing complete"):
+        """Finish progress tracking"""
+        elapsed = time.time() - self.start_time
+        print(f"\r{message} - Total time: {elapsed:.1f}s")
+        print()  # New line
+
+# Legacy ProgressBar for compatibility
 class ProgressBar:
-    """Simple console progress bar without external dependencies"""
+    """Simple console progress bar without external dependencies - Legacy wrapper"""
     def __init__(self, total, description="Processing", width=50):
-        self.total = total
-        self.current = 0
+        self.tracker = ProgressTracker(total, 'serial')
         self.description = description
-        self.width = width
-        self.last_printed_length = 0
         
     def update(self, step=1, description=None):
-        self.current += step
+        self.tracker.current_frame += step
         if description:
             self.description = description
-        self._print_progress()
-    
+        self.tracker.update_serial(self.tracker.current_frame, self.description)
+        
     def set_progress(self, current, description=None):
-        self.current = current
         if description:
             self.description = description
-        self._print_progress()
-    
-    def _print_progress(self):
-        if self.total <= 0:
-            return
-            
-        percent = min(100, (self.current / self.total) * 100)
-        filled_width = int(self.width * self.current / self.total)
-        bar = '█' * filled_width + '░' * (self.width - filled_width)
-        
-        # Format progress line
-        progress_line = f"\r{self.description}: [{bar}] {percent:.1f}% ({self.current}/{self.total})"
-        
-        # Clear previous line if it was longer
-        if len(progress_line) < self.last_printed_length:
-            progress_line += ' ' * (self.last_printed_length - len(progress_line))
-        
-        print(progress_line, end='', flush=True)
-        self.last_printed_length = len(progress_line)
-        
-        # Print newline when complete
-        if self.current >= self.total:
-            print()
+        self.tracker.update_serial(current, self.description)
     
     def finish(self, description=None):
         if description:
             self.description = description
-        self.current = self.total
-        self._print_progress()
+        self.tracker.finish(self.description)
 
 class StereoProjector:
     def __init__(self, model_path, device='cuda' if torch.cuda.is_available() else 'cpu'):
@@ -773,6 +828,8 @@ class StereoProjector:
         # Define per-eye resolutions (both square and wide formats)
         per_eye_resolutions = {
             # Square formats (optimized for VR headsets)
+            "square-480": (480, 480),     # 480x480 per eye - quick test
+            "square-720": (720, 720),     # 720x720 per eye - fast test
             "square-1k": (1080, 1080),    # 1080x1080 per eye
             "square-2k": (1536, 1536),    # 1536x1536 per eye 
             "square-3k": (1920, 1920),    # 1920x1920 per eye
@@ -853,10 +910,13 @@ class StereoProjector:
                      start_time=None, end_time=None, preserve_audio=True, 
                      target_fps=60, min_resolution="1080p", super_sample="auto",
                      apply_distortion=True, fisheye_projection='stereographic', fisheye_fov=105,
-                     crop_factor=1.0, vr_resolution='auto', fisheye_crop_factor=1.0, hole_fill_quality='fast'):
+                     crop_factor=1.0, vr_resolution='auto', fisheye_crop_factor=1.0, hole_fill_quality='fast',
+                     processing_mode='serial'):
         """Process entire video to create 3D VR version"""
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
+        
+        print(f"Processing mode: {processing_mode.upper()}")
         
         # Extract frames (at original resolution first, then we'll apply super sampling during processing)
         frame_files = self.extract_frames(video_path, output_dir, start_time, end_time, target_fps, "original")
@@ -925,12 +985,51 @@ class StereoProjector:
         
         print(f"Processing {len(frame_files)} frames...")
         
-        # Initialize progress bar
-        progress_bar = ProgressBar(len(frame_files), "Processing frames")
+        # Choose processing method based on mode
+        if processing_mode == 'batch':
+            self._process_video_batch(
+                frame_files, output_path, super_sample_width, super_sample_height,
+                original_width, original_height, vr_output_width, vr_output_height,
+                baseline, focal_length, hole_fill_quality, apply_distortion,
+                fisheye_projection, fisheye_fov, fisheye_crop_factor, crop_factor,
+                vr_format, keep_intermediates, depth_dir, left_dir, right_dir,
+                left_distorted_dir if apply_distortion else None,
+                right_distorted_dir if apply_distortion else None,
+                left_final_dir, right_final_dir, vr_dir
+            )
+        else:
+            self._process_video_serial(
+                frame_files, output_path, super_sample_width, super_sample_height,
+                original_width, original_height, vr_output_width, vr_output_height,
+                baseline, focal_length, hole_fill_quality, apply_distortion,
+                fisheye_projection, fisheye_fov, fisheye_crop_factor, crop_factor,
+                vr_format, keep_intermediates, depth_dir, left_dir, right_dir,
+                left_distorted_dir if apply_distortion else None,
+                right_distorted_dir if apply_distortion else None,
+                left_final_dir, right_final_dir, vr_dir
+            )
+        
+        # Create final video
+        print("Creating final video with audio...")
+        self.create_output_video(vr_dir, output_path, video_path, vr_format, 
+                                start_time, end_time, preserve_audio, target_fps)
+        
+        print(f"Processing complete. Output saved to: {output_path}")
+    
+    def _process_video_serial(self, frame_files, output_path, super_sample_width, super_sample_height,
+                             original_width, original_height, vr_output_width, vr_output_height,
+                             baseline, focal_length, hole_fill_quality, apply_distortion,
+                             fisheye_projection, fisheye_fov, fisheye_crop_factor, crop_factor,
+                             vr_format, keep_intermediates, depth_dir, left_dir, right_dir,
+                             left_distorted_dir, right_distorted_dir, left_final_dir, right_final_dir, vr_dir):
+        """Process frames serially (original behavior)"""
+        
+        # Initialize progress tracker
+        progress_tracker = ProgressTracker(len(frame_files), 'serial')
         
         for i, frame_file in enumerate(frame_files):
             # Update progress - starting frame
-            progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Loading...")
+            progress_tracker.update_serial(i + 1, f"Loading frame {i+1}")
             
             # Load original image
             original_image = cv2.imread(str(frame_file))
@@ -940,7 +1039,7 @@ class StereoProjector:
             
             # Apply super sampling if needed
             if super_sample_width != original_width or super_sample_height != original_height:
-                progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Super sampling...")
+                progress_tracker.update_serial(i + 1, f"Super sampling frame {i+1}")
                 image = self.apply_super_sampling(original_image, super_sample_width, super_sample_height)
                 
                 # Save super sampled frame if keeping intermediates
@@ -950,7 +1049,7 @@ class StereoProjector:
                 image = original_image
             
             # Update progress - depth map generation
-            progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Depth map...")
+            progress_tracker.update_serial(i + 1, f"Generating depth map for frame {i+1}")
             
             # Generate depth map (on super sampled image if applicable)
             # Note: we need to save the super sampled image temporarily for depth map generation
@@ -963,7 +1062,7 @@ class StereoProjector:
                 depth_map = self.generate_depth_map(frame_file)
             
             # Update progress - stereo pair creation
-            progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Stereo pair...")
+            progress_tracker.update_serial(i + 1, f"Creating stereo pair for frame {i+1}")
             
             # Create stereo pair
             left_img, right_img = self.create_stereo_pair(
@@ -980,7 +1079,7 @@ class StereoProjector:
             
             # Apply fisheye distortion if enabled
             if apply_distortion:
-                progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Fisheye projection...")
+                progress_tracker.update_serial(i + 1, f"Applying fisheye distortion to frame {i+1}")
                 left_distorted = self.apply_fisheye_distortion(left_img, fisheye_projection, fisheye_fov)
                 right_distorted = self.apply_fisheye_distortion(right_img, fisheye_projection, fisheye_fov)
                 
@@ -990,7 +1089,7 @@ class StereoProjector:
                     cv2.imwrite(str(right_distorted_dir / f"{frame_name}.png"), right_distorted)
                 
                 # Apply fisheye-aware square cropping and scaling directly to target VR eye format
-                progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Fisheye square crop & scale...")
+                progress_tracker.update_serial(i + 1, f"Cropping and scaling frame {i+1}")
                 if vr_format.startswith('side_by_side'):
                     eye_width = vr_output_width // 2
                     eye_height = vr_output_height
@@ -1012,7 +1111,7 @@ class StereoProjector:
                     
             else:
                 # Apply center cropping and VR eye scaling to undistorted frames
-                progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Cropping & scaling...")
+                progress_tracker.update_serial(i + 1, f"Cropping and scaling frame {i+1}")
                 left_cropped = self.apply_center_crop(left_img, crop_factor)
                 right_cropped = self.apply_center_crop(right_img, crop_factor)
                 
@@ -1036,28 +1135,256 @@ class StereoProjector:
                     cv2.imwrite(str(right_final_dir / f"{frame_name}.png"), right_final)
             
             # Create final VR frame by combining already-scaled eye frames (no additional processing needed)
-            progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Creating VR frame...")
+            progress_tracker.update_serial(i + 1, f"Creating final VR frame {i+1}")
             vr_frame = self.create_vr_format(left_final, right_final, vr_format, apply_crop=False, target_resolution=None)
-            
-            # Update progress - finalizing frame
-            progress_bar.set_progress(i, f"Frame {i+1}/{len(frame_files)} - Finalizing...")
             
             # Save final VR frame (already cropped)
             cv2.imwrite(str(vr_dir / f"{frame_name}.png"), vr_frame)
-            
-            # Update progress bar - frame complete
-            progress_bar.update(1)
         
-        # Finish progress bar
-        progress_bar.finish("Frame processing complete")
-        
-        # Create final video
-        print("Creating final video with audio...")
-        self.create_output_video(vr_dir, output_path, video_path, vr_format, 
-                                start_time, end_time, preserve_audio, target_fps)
-        
-        print(f"Processing complete. Output saved to: {output_path}")
+        # Finish progress tracking
+        progress_tracker.finish("Serial frame processing complete")
     
+    def _process_video_batch(self, frame_files, output_path, super_sample_width, super_sample_height,
+                            original_width, original_height, vr_output_width, vr_output_height,
+                            baseline, focal_length, hole_fill_quality, apply_distortion,
+                            fisheye_projection, fisheye_fov, fisheye_crop_factor, crop_factor,
+                            vr_format, keep_intermediates, depth_dir, left_dir, right_dir,
+                            left_distorted_dir, right_distorted_dir, left_final_dir, right_final_dir, vr_dir):
+        """Process frames in batch mode with parallelization"""
+        
+        # Initialize progress tracker for batch mode
+        progress_tracker = ProgressTracker(len(frame_files), 'batch')
+        
+        # Calculate VR eye dimensions
+        if vr_format.startswith('side_by_side'):
+            eye_width = vr_output_width // 2
+            eye_height = vr_output_height
+        elif vr_format.startswith('over_under'):
+            eye_width = vr_output_width
+            eye_height = vr_output_height // 2
+        else:
+            eye_width = vr_output_width // 2
+            eye_height = vr_output_height
+        
+        # Step 1: Super sampling (if needed)
+        if super_sample_width != original_width or super_sample_height != original_height:
+            progress_tracker.update_batch_step("Super Sampling", 0, len(frame_files))
+            self._batch_super_sample(frame_files, output_path, super_sample_width, super_sample_height, 
+                                   keep_intermediates, progress_tracker)
+            sampled_files = self._get_super_sampled_files(frame_files, output_path)
+        else:
+            sampled_files = frame_files
+        
+        # Step 2: Depth map generation
+        progress_tracker.update_batch_step("Depth Map Generation", 0, len(frame_files))
+        depth_maps = self._batch_generate_depth_maps(sampled_files, depth_dir, keep_intermediates, progress_tracker)
+        
+        # Step 3: Stereo pair creation
+        progress_tracker.update_batch_step("Stereo Pair Creation", 0, len(frame_files))
+        stereo_pairs = self._batch_create_stereo_pairs(sampled_files, depth_maps, baseline, focal_length, 
+                                                     hole_fill_quality, left_dir, right_dir, 
+                                                     keep_intermediates, progress_tracker)
+        
+        # Step 4: Fisheye distortion (if enabled)
+        if apply_distortion:
+            progress_tracker.update_batch_step("Fisheye Distortion", 0, len(frame_files))
+            distorted_pairs = self._batch_apply_fisheye(stereo_pairs, fisheye_projection, fisheye_fov,
+                                                      left_distorted_dir, right_distorted_dir,
+                                                      keep_intermediates, progress_tracker)
+            final_pairs = self._batch_fisheye_crop_scale(distorted_pairs, eye_width, eye_height, 
+                                                       fisheye_crop_factor, left_final_dir, right_final_dir,
+                                                       keep_intermediates, progress_tracker)
+        else:
+            # Step 5: Center crop and scale
+            progress_tracker.update_batch_step("Final Processing", 0, len(frame_files))
+            final_pairs = self._batch_center_crop_scale(stereo_pairs, crop_factor, eye_width, eye_height,
+                                                      left_final_dir, right_final_dir, 
+                                                      keep_intermediates, progress_tracker)
+        
+        # Step 6: VR frame creation
+        progress_tracker.update_batch_step("Video Creation", 0, len(frame_files))
+        self._batch_create_vr_frames(final_pairs, vr_format, vr_dir, progress_tracker)
+        
+        # Finish progress tracking
+        progress_tracker.finish("Batch processing complete")
+    
+    def _batch_super_sample(self, frame_files, output_path, target_width, target_height, keep_intermediates, progress_tracker):
+        """Batch super sampling with parallelization"""
+        if not keep_intermediates:
+            return
+        
+        super_sampled_dir = output_path / "2_supersampled_frames"
+        super_sampled_dir.mkdir(exist_ok=True)
+        
+        def process_frame(frame_file):
+            image = cv2.imread(str(frame_file))
+            if image is not None:
+                upsampled = self.apply_super_sampling(image, target_width, target_height)
+                output_path = super_sampled_dir / f"{frame_file.stem}.png"
+                cv2.imwrite(str(output_path), upsampled)
+                return output_path
+            return None
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(process_frame, frame_file) for frame_file in frame_files]
+            for i, future in enumerate(as_completed(futures)):
+                progress_tracker.update_batch_progress(i + 1, len(frame_files))
+    
+    def _get_super_sampled_files(self, frame_files, output_path):
+        """Get super sampled file paths"""
+        super_sampled_dir = output_path / "2_supersampled_frames"
+        if super_sampled_dir.exists():
+            return [super_sampled_dir / f"{f.stem}.png" for f in frame_files]
+        return frame_files
+    
+    def _batch_generate_depth_maps(self, frame_files, depth_dir, keep_intermediates, progress_tracker):
+        """Batch depth map generation"""
+        depth_maps = []
+        
+        for i, frame_file in enumerate(frame_files):
+            depth_map = self.generate_depth_map(frame_file)
+            depth_maps.append(depth_map)
+            
+            if keep_intermediates and depth_dir:
+                depth_vis = (depth_map * 255).astype(np.uint8)
+                cv2.imwrite(str(depth_dir / f"{frame_file.stem}.png"), depth_vis)
+            
+            progress_tracker.update_batch_progress(i + 1, len(frame_files))
+        
+        return depth_maps
+    
+    def _batch_create_stereo_pairs(self, frame_files, depth_maps, baseline, focal_length, hole_fill_quality,
+                                 left_dir, right_dir, keep_intermediates, progress_tracker):
+        """Batch stereo pair creation with parallelization"""
+        stereo_pairs = []
+        
+        def create_pair(frame_file, depth_map):
+            image = cv2.imread(str(frame_file))
+            if image is not None:
+                left_img, right_img = self.create_stereo_pair(image, depth_map, baseline, focal_length, hole_fill_quality)
+                return (left_img, right_img, frame_file.stem)
+            return None
+        
+        with ThreadPoolExecutor(max_workers=2) as executor:  # Limited workers due to GPU memory
+            futures = [executor.submit(create_pair, frame_file, depth_map) 
+                      for frame_file, depth_map in zip(frame_files, depth_maps)]
+            
+            for i, future in enumerate(as_completed(futures)):
+                result = future.result()
+                if result:
+                    left_img, right_img, frame_name = result
+                    stereo_pairs.append((left_img, right_img, frame_name))
+                    
+                    if keep_intermediates and left_dir and right_dir:
+                        cv2.imwrite(str(left_dir / f"{frame_name}.png"), left_img)
+                        cv2.imwrite(str(right_dir / f"{frame_name}.png"), right_img)
+                
+                progress_tracker.update_batch_progress(i + 1, len(frame_files))
+        
+        return stereo_pairs
+    
+    def _batch_apply_fisheye(self, stereo_pairs, fisheye_projection, fisheye_fov,
+                           left_distorted_dir, right_distorted_dir, keep_intermediates, progress_tracker):
+        """Batch fisheye distortion with parallelization"""
+        distorted_pairs = []
+        
+        def apply_fisheye(left_img, right_img, frame_name):
+            left_distorted = self.apply_fisheye_distortion(left_img, fisheye_projection, fisheye_fov)
+            right_distorted = self.apply_fisheye_distortion(right_img, fisheye_projection, fisheye_fov)
+            return (left_distorted, right_distorted, frame_name)
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(apply_fisheye, left_img, right_img, frame_name) 
+                      for left_img, right_img, frame_name in stereo_pairs]
+            
+            for i, future in enumerate(as_completed(futures)):
+                result = future.result()
+                if result:
+                    left_distorted, right_distorted, frame_name = result
+                    distorted_pairs.append((left_distorted, right_distorted, frame_name))
+                    
+                    if keep_intermediates and left_distorted_dir and right_distorted_dir:
+                        cv2.imwrite(str(left_distorted_dir / f"{frame_name}.png"), left_distorted)
+                        cv2.imwrite(str(right_distorted_dir / f"{frame_name}.png"), right_distorted)
+                
+                progress_tracker.update_batch_progress(i + 1, len(stereo_pairs))
+        
+        return distorted_pairs
+    
+    def _batch_fisheye_crop_scale(self, distorted_pairs, eye_width, eye_height, fisheye_crop_factor,
+                                left_final_dir, right_final_dir, keep_intermediates, progress_tracker):
+        """Batch fisheye crop and scale with parallelization"""
+        final_pairs = []
+        
+        def crop_scale(left_img, right_img, frame_name):
+            left_final = self.apply_fisheye_square_crop(left_img, eye_width, eye_height, fisheye_crop_factor)
+            right_final = self.apply_fisheye_square_crop(right_img, eye_width, eye_height, fisheye_crop_factor)
+            return (left_final, right_final, frame_name)
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(crop_scale, left_img, right_img, frame_name) 
+                      for left_img, right_img, frame_name in distorted_pairs]
+            
+            for i, future in enumerate(as_completed(futures)):
+                result = future.result()
+                if result:
+                    left_final, right_final, frame_name = result
+                    final_pairs.append((left_final, right_final, frame_name))
+                    
+                    if keep_intermediates and left_final_dir and right_final_dir:
+                        cv2.imwrite(str(left_final_dir / f"{frame_name}.png"), left_final)
+                        cv2.imwrite(str(right_final_dir / f"{frame_name}.png"), right_final)
+                
+                progress_tracker.update_batch_progress(i + 1, len(distorted_pairs))
+        
+        return final_pairs
+    
+    def _batch_center_crop_scale(self, stereo_pairs, crop_factor, eye_width, eye_height,
+                               left_final_dir, right_final_dir, keep_intermediates, progress_tracker):
+        """Batch center crop and scale with parallelization"""
+        final_pairs = []
+        
+        def crop_scale(left_img, right_img, frame_name):
+            left_cropped = self.apply_center_crop(left_img, crop_factor)
+            right_cropped = self.apply_center_crop(right_img, crop_factor)
+            left_final = self._scale_to_eye_format(left_cropped, eye_width, eye_height)
+            right_final = self._scale_to_eye_format(right_cropped, eye_width, eye_height)
+            return (left_final, right_final, frame_name)
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(crop_scale, left_img, right_img, frame_name) 
+                      for left_img, right_img, frame_name in stereo_pairs]
+            
+            for i, future in enumerate(as_completed(futures)):
+                result = future.result()
+                if result:
+                    left_final, right_final, frame_name = result
+                    final_pairs.append((left_final, right_final, frame_name))
+                    
+                    if keep_intermediates and left_final_dir and right_final_dir:
+                        cv2.imwrite(str(left_final_dir / f"{frame_name}.png"), left_final)
+                        cv2.imwrite(str(right_final_dir / f"{frame_name}.png"), right_final)
+                
+                progress_tracker.update_batch_progress(i + 1, len(stereo_pairs))
+        
+        return final_pairs
+    
+    def _batch_create_vr_frames(self, final_pairs, vr_format, vr_dir, progress_tracker):
+        """Batch VR frame creation with parallelization"""
+        
+        def create_vr_frame(left_img, right_img, frame_name):
+            vr_frame = self.create_vr_format(left_img, right_img, vr_format, apply_crop=False, target_resolution=None)
+            output_path = vr_dir / f"{frame_name}.png"
+            cv2.imwrite(str(output_path), vr_frame)
+            return output_path
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(create_vr_frame, left_img, right_img, frame_name) 
+                      for left_img, right_img, frame_name in final_pairs]
+            
+            for i, future in enumerate(as_completed(futures)):
+                progress_tracker.update_batch_progress(i + 1, len(final_pairs))
+
     def create_output_video(self, vr_frames_dir, output_dir, original_video, vr_format,
                            start_time=None, end_time=None, preserve_audio=True, target_fps=60):
         """Create final VR video from processed frames with optional frame interpolation"""
@@ -1209,8 +1536,8 @@ def main():
                        help='Path to Depth Anything V2 model file')
     parser.add_argument('-f', '--format', choices=['side_by_side', 'over_under'], 
                        default='side_by_side', help='VR output format (default: side_by_side)')
-    parser.add_argument('--vr-resolution', choices=['square-1k', 'square-2k', 'square-3k', 'square-4k', 'square-5k', 'ultrawide', 'wide-2k', 'wide-4k', 'cinema-2k', 'cinema-4k', 'auto'], 
-                       default='auto', help='VR output resolution format: square-1k (1080x1080 per eye), square-2k (1536x1536 per eye), square-3k (1920x1920 per eye), square-4k (2048x2048 per eye), square-5k (2560x2560 per eye), ultrawide (3840x2160 per eye), wide-2k (2560x1440 per eye), wide-4k (3840x2160 per eye), cinema-2k (2048x858 per eye), cinema-4k (4096x1716 per eye), auto (matches source) (default: auto)')
+    parser.add_argument('--vr-resolution', choices=['square-480', 'square-720', 'square-1k', 'square-2k', 'square-3k', 'square-4k', 'square-5k', 'ultrawide', 'wide-2k', 'wide-4k', 'cinema-2k', 'cinema-4k', 'auto'], 
+                       default='auto', help='VR output resolution format: square-480 (480x480 per eye - quick test), square-720 (720x720 per eye - fast test), square-1k (1080x1080 per eye), square-2k (1536x1536 per eye), square-3k (1920x1920 per eye), square-4k (2048x2048 per eye), square-5k (2560x2560 per eye), ultrawide (3840x2160 per eye), wide-2k (2560x1440 per eye), wide-4k (3840x2160 per eye), cinema-2k (2048x858 per eye), cinema-4k (4096x1716 per eye), auto (matches source) (default: auto)')
     parser.add_argument('-b', '--baseline', type=float, default=0.065, 
                        help='Stereo baseline distance in meters (default: 0.065 - average human IPD)')
     parser.add_argument('-fl', '--focal-length', type=float, default=1000,
@@ -1245,6 +1572,8 @@ def main():
                        help='Fisheye square crop factor relative to circle diameter (0.8-1.5, default: 1.0 - no crop)')
     parser.add_argument('--hole-fill-quality', choices=['fast', 'advanced'], default='fast',
                        help='Hole filling quality for stereo pair generation (default: fast)')
+    parser.add_argument('--processing-mode', choices=['serial', 'batch'], default='serial',
+                       help='Processing mode: serial (frame-by-frame) or batch (task-by-task with parallelization) (default: serial)')
     
     args = parser.parse_args()
     
@@ -1294,7 +1623,8 @@ def main():
         args.crop_factor,
         getattr(args, 'vr_resolution'),
         getattr(args, 'fisheye_crop_factor'),
-        getattr(args, 'hole_fill_quality')
+        getattr(args, 'hole_fill_quality'),
+        getattr(args, 'processing_mode')
     )
 
 if __name__ == "__main__":

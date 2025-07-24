@@ -423,6 +423,8 @@
                                 <select class="form-select" id="vrResolution">
                                     <option value="auto" selected>Auto (Match Source Quality & Aspect)</option>
                                     <optgroup label="Square Formats (VR Optimized)">
+                                        <option value="square-480">Square 480 (480×480 per eye - Quick Test)</option>
+                                        <option value="square-720">Square 720 (720×720 per eye - Fast Test)</option>
                                         <option value="square-1k">Square 1K (1080×1080 per eye)</option>
                                         <option value="square-2k">Square 2K (1536×1536 per eye)</option>
                                         <option value="square-3k">Square 3K (1920×1920 per eye)</option>
@@ -491,6 +493,14 @@
                                     <option value="cuda">Force GPU (CUDA)</option>
                                     <option value="cpu">Force CPU</option>
                                 </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Processing Mode <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Serial: frame-by-frame processing. Batch: task-by-task with parallelization for better performance."></i></label>
+                                <select class="form-select" id="processingMode">
+                                    <option value="serial" selected>Serial (Frame-by-Frame)</option>
+                                    <option value="batch">Batch (Task-by-Task + Parallel)</option>
+                                </select>
+                                <small class="form-text text-muted">Batch mode can be faster with parallelization but uses more memory</small>
                             </div>
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="preserveAudio" checked>
@@ -1044,6 +1054,7 @@
                 preserve_audio: document.getElementById('preserveAudio').checked,
                 keep_intermediates: document.getElementById('keepIntermediates').checked,
                 device: document.getElementById('device').value,
+                processing_mode: document.getElementById('processingMode').value,
                 super_sample: document.getElementById('superSample').value,
                 apply_distortion: document.getElementById('applyDistortion').checked,
                 fisheye_projection: document.getElementById('fisheyeProjection').value,
@@ -1577,6 +1588,7 @@
                 targetFps: document.getElementById('targetFps').value,
                 superSample: document.getElementById('superSample').value,
                 device: document.getElementById('device').value,
+                processingMode: document.getElementById('processingMode').value,
                 
                 // Audio and intermediates
                 preserveAudio: document.getElementById('preserveAudio').checked,
@@ -1635,6 +1647,7 @@
                 targetFps: 'original',
                 superSample: 'auto',
                 device: 'auto',
+                processingMode: 'serial',
                 preserveAudio: true,
                 keepIntermediates: true,
                 applyDistortion: true,
@@ -1669,7 +1682,7 @@
         function setupAutoSave() {
             const settingsElements = [
                 'startTime', 'endTime', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
-                'resolution', 'targetFps', 'superSample', 'device', 'preserveAudio', 'keepIntermediates',
+                'resolution', 'targetFps', 'superSample', 'device', 'processingMode', 'preserveAudio', 'keepIntermediates',
                 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor', 'fisheyeCropFactor', 'holeFillQuality'
             ];
             

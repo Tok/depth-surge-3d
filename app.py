@@ -126,15 +126,31 @@ def get_system_info():
     return info
 
 class ProgressCallback:
-    """Callback class to track processing progress"""
-    def __init__(self, session_id, total_frames):
+    """Enhanced callback class to track processing progress for both serial and batch modes"""
+    def __init__(self, session_id, total_frames, processing_mode='serial'):
         self.session_id = session_id
         self.total_frames = total_frames
+        self.processing_mode = processing_mode
         self.current_frame = 0
         self.last_update_time = 0
         self.current_phase = "extraction"  # extraction, processing, video
         
-    def update_progress(self, stage, frame_num=None, phase=None):
+        # Batch mode specific
+        if processing_mode == 'batch':
+            self.steps = [
+                "Frame Extraction",
+                "Super Sampling", 
+                "Depth Map Generation",
+                "Stereo Pair Creation",
+                "Fisheye Distortion",
+                "Final Processing",
+                "Video Creation"
+            ]
+            self.current_step_index = 0
+            self.step_progress = 0
+            self.step_total = 0
+        
+    def update_progress(self, stage, frame_num=None, phase=None, step_name=None, step_progress=None, step_total=None):
         global current_processing
         import time
         
@@ -158,22 +174,45 @@ class ProgressCallback:
             
         current_processing['stage'] = stage
         
-        # Calculate overall progress based on phase
-        if self.current_phase == "extraction":
-            # Extraction phase: 0-20%
-            progress = (self.current_frame / self.total_frames * 20) if self.total_frames > 0 else 0
-        elif self.current_phase == "processing":
-            # Processing phase: 20-85% 
-            frame_progress = (self.current_frame / self.total_frames * 65) if self.total_frames > 0 else 0
-            progress = 20 + frame_progress
-        elif self.current_phase == "video":
-            # Video creation phase: 85-100%
-            progress = 85 + 15  # Set to 100% for video phase
+        # Calculate progress based on processing mode
+        if self.processing_mode == 'batch':
+            # Batch mode: step-based progress
+            if step_name and step_name in self.steps:
+                self.current_step_index = self.steps.index(step_name)
+            if step_progress is not None:
+                self.step_progress = step_progress
+            if step_total is not None:
+                self.step_total = step_total
+            
+            # Overall progress based on steps
+            step_progress_ratio = (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
+            overall_progress = ((self.current_step_index + step_progress_ratio) / len(self.steps)) * 100
+            progress = round(overall_progress, 1)
+            
+            # Update current processing for batch mode
+            current_processing['step_name'] = step_name or self.steps[self.current_step_index] if self.current_step_index < len(self.steps) else "Processing"
+            current_processing['step_progress'] = self.step_progress
+            current_processing['step_total'] = self.step_total
+            current_processing['step_index'] = self.current_step_index
+            
         else:
-            progress = 0
+            # Serial mode: frame-based progress (original behavior)
+            if self.current_phase == "extraction":
+                # Extraction phase: 0-20%
+                progress = (self.current_frame / self.total_frames * 20) if self.total_frames > 0 else 0
+            elif self.current_phase == "processing":
+                # Processing phase: 20-85% 
+                frame_progress = (self.current_frame / self.total_frames * 65) if self.total_frames > 0 else 0
+                progress = 20 + frame_progress
+            elif self.current_phase == "video":
+                # Video creation phase: 85-100%
+                progress = 85 + 15  # Set to 100% for video phase
+            else:
+                progress = 0
             
         current_processing['progress'] = round(progress, 1)
         current_processing['phase'] = self.current_phase
+        current_processing['processing_mode'] = self.processing_mode
         
         # Emit progress update
         progress_data = {
@@ -181,10 +220,27 @@ class ProgressCallback:
             'stage': stage,
             'current_frame': self.current_frame,
             'total_frames': self.total_frames,
-            'phase': self.current_phase
+            'phase': self.current_phase,
+            'processing_mode': self.processing_mode
         }
-        # Always print progress to console for web UI
-        print(f"Progress: {progress_data['progress']:.1f}% - {stage} - Frame {self.current_frame}/{self.total_frames} - Phase: {self.current_phase}")
+        
+        # Add batch-specific data
+        if self.processing_mode == 'batch':
+            progress_data.update({
+                'step_name': current_processing.get('step_name', ''),
+                'step_progress': self.step_progress,
+                'step_total': self.step_total,
+                'step_index': self.current_step_index,
+                'total_steps': len(self.steps)
+            })
+        
+        # Console output
+        if self.processing_mode == 'batch':
+            step_name = current_processing.get('step_name', 'Processing')
+            step_percent = (self.step_progress / max(self.step_total, 1)) * 100 if self.step_total > 0 else 0
+            print(f"[BATCH] Progress: {progress_data['progress']:.1f}% - Step {self.current_step_index + 1}/{len(self.steps)}: {step_name} ({step_percent:.1f}%)")
+        else:
+            print(f"[SERIAL] Progress: {progress_data['progress']:.1f}% - {stage} - Frame {self.current_frame}/{self.total_frames} - Phase: {self.current_phase}")
         
         try:
             socketio.emit('progress_update', progress_data, room=self.session_id)
@@ -229,7 +285,8 @@ def process_video_async(session_id, video_path, settings, output_dir):
             
         expected_frames = int(duration * original_fps)
         
-        callback = ProgressCallback(session_id, expected_frames)
+        processing_mode = settings.get('processing_mode', 'serial')
+        callback = ProgressCallback(session_id, expected_frames, processing_mode)
         
         # Create custom projector with progress callbacks
         projector_with_progress = StereoProjectorWithProgress(projector, callback)
@@ -254,7 +311,8 @@ def process_video_async(session_id, video_path, settings, output_dir):
             crop_factor=settings.get('crop_factor', 1.0),
             vr_resolution=settings.get('vr_resolution', 'auto'),
             fisheye_crop_factor=settings.get('fisheye_crop_factor', 1.0),
-            hole_fill_quality=settings.get('hole_fill_quality', 'fast')
+            hole_fill_quality=settings.get('hole_fill_quality', 'fast'),
+            processing_mode=settings.get('processing_mode', 'serial')
         )
         
         # Processing complete
@@ -299,6 +357,7 @@ class StereoProjectorWithProgress:
     def __init__(self, projector, callback):
         self.projector = projector
         self.callback = callback
+        self.processing_mode = getattr(callback, 'processing_mode', 'serial')
         
     def process_video(self, **kwargs):
         """Process video with progress tracking"""
