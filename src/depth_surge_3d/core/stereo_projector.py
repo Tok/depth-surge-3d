@@ -409,6 +409,71 @@ class StereoProjector:
         frame_files = sorted(frames_dir.glob('frame_*.png'))
         return frame_files
     
+    def determine_super_sample_resolution(
+        self,
+        original_width: int,
+        original_height: int,
+        super_sample: str = 'auto'
+    ) -> Tuple[int, int]:
+        """
+        Determine super sampling resolution for better quality.
+        
+        Args:
+            original_width: Original video width
+            original_height: Original video height
+            super_sample: Super sampling mode ('auto', 'none', '1080p', '4k')
+            
+        Returns:
+            Tuple of (width, height) for super sampling
+        """
+        if super_sample == 'none':
+            return original_width, original_height
+        elif super_sample == '1080p':
+            return 1920, 1080
+        elif super_sample == '4k':
+            return 3840, 2160
+        elif super_sample == 'auto':
+            # Auto: 720p->1080p, 1080p->4K, others keep original
+            if original_height <= 720:
+                return 1920, 1080
+            elif original_height <= 1080:
+                return 3840, 2160
+            else:
+                return original_width, original_height
+        else:
+            return original_width, original_height
+    
+    def determine_vr_output_resolution(
+        self,
+        original_width: int,
+        original_height: int,
+        vr_resolution: str = 'auto',
+        vr_format: str = 'side_by_side'
+    ) -> Tuple[int, int]:
+        """
+        Determine VR output resolution.
+        
+        Args:
+            original_width: Original video width
+            original_height: Original video height
+            vr_resolution: VR resolution setting
+            vr_format: VR format ('side_by_side', 'over_under')
+            
+        Returns:
+            Tuple of (width, height) for VR output
+        """
+        from ..utils.resolution import get_resolution_dimensions, calculate_vr_output_dimensions
+        
+        if vr_resolution == 'auto':
+            # Use original resolution as per-eye resolution
+            per_eye_width, per_eye_height = original_width, original_height
+        else:
+            # Get dimensions from resolution string
+            per_eye_width, per_eye_height = get_resolution_dimensions(vr_resolution)
+        
+        # Calculate final VR dimensions based on format
+        return calculate_vr_output_dimensions(per_eye_width, per_eye_height, vr_format)
+    
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""
         return self.depth_estimator.get_model_info()
