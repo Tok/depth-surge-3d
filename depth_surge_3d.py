@@ -14,6 +14,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 import time
+import urllib.request
 
 class ProgressTracker:
     """Enhanced progress tracking for both serial and batch processing modes"""
@@ -126,8 +127,19 @@ class StereoProjector:
     def _load_model(self):
         """Load Depth Anything V2 model"""
         try:
-            # Import depth_anything_v2 from the model directory
-            sys.path.append(str(Path(self.model_path).parent))
+            # Check if model file exists, try to download if missing
+            if not os.path.exists(self.model_path):
+                print(f"Model not found at {self.model_path}")
+                self._auto_download_model()
+            
+            # Check if depth_anything_v2_repo exists, try to download if missing
+            repo_path = Path("depth_anything_v2_repo")
+            if not repo_path.exists():
+                print("Depth-Anything-V2 repository not found")
+                self._auto_download_repo()
+            
+            # Import depth_anything_v2 from the repo directory
+            sys.path.insert(0, str(repo_path))
             from depth_anything_v2.dpt import DepthAnythingV2
             
             self.model = DepthAnythingV2(encoder='vitl', features=256, out_channels=[256, 512, 1024, 1024])
@@ -137,6 +149,48 @@ class StereoProjector:
             print(f"Loaded Depth Anything V2 model on {self.device}")
         except Exception as e:
             print(f"Error loading model: {e}")
+            print("Try running: ./download_models.sh large")
+            sys.exit(1)
+    
+    def _auto_download_model(self):
+        """Auto-download the model if missing"""
+        print("Attempting to download model automatically...")
+        
+        # Create model directory
+        model_dir = Path(self.model_path).parent
+        model_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Download URL for Large model (most common)
+        download_url = "https://huggingface.co/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl.pth"
+        
+        try:
+            import urllib.request
+            print(f"Downloading model to {self.model_path}...")
+            urllib.request.urlretrieve(download_url, self.model_path)
+            print("✅ Model downloaded successfully")
+        except Exception as e:
+            print(f"❌ Auto-download failed: {e}")
+            print("Please run: ./download_models.sh large")
+            print("Or download manually from:")
+            print(download_url)
+            sys.exit(1)
+    
+    def _auto_download_repo(self):
+        """Auto-download the Depth-Anything-V2 repository if missing"""
+        print("Attempting to download Depth-Anything-V2 repository...")
+        
+        try:
+            result = subprocess.run([
+                "git", "clone", "https://github.com/DepthAnything/Depth-Anything-V2.git", "depth_anything_v2_repo"
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                print("✅ Repository downloaded successfully")
+            else:
+                raise Exception(f"Git clone failed: {result.stderr}")
+        except Exception as e:
+            print(f"❌ Auto-download failed: {e}")
+            print("Please run: git clone https://github.com/DepthAnything/Depth-Anything-V2.git depth_anything_v2_repo")
             sys.exit(1)
     
     def extract_frames(self, video_path, output_dir, start_time=None, end_time=None, target_fps=60, min_resolution="1080p"):
@@ -835,10 +889,18 @@ class StereoProjector:
             "square-3k": (1920, 1920),    # 1920x1920 per eye
             "square-4k": (2048, 2048),    # 2048x2048 per eye - industry standard
             "square-5k": (2560, 2560),    # 2560x2560 per eye - premium
-            # Wide formats (preserve more of original content, good for over-under)
-            "ultrawide": (3840, 2160),    # 3840x2160 per eye - ultra-wide 16:9
-            "wide-2k": (2560, 1440),     # 2560x1440 per eye - 16:9 2K
-            "wide-4k": (3840, 2160),     # 3840x2160 per eye - 16:9 4K  
+            # 16:9 formats (standard aspect ratio, good for wide content)
+            "16x9-480p": (854, 480),     # 854x480 per eye - 16:9 480p
+            "16x9-720p": (1280, 720),    # 1280x720 per eye - 16:9 720p (HD)
+            "16x9-1080p": (1920, 1080),  # 1920x1080 per eye - 16:9 1080p (FHD)
+            "16x9-1440p": (2560, 1440),  # 2560x1440 per eye - 16:9 1440p (QHD)
+            "16x9-4k": (3840, 2160),     # 3840x2160 per eye - 16:9 4K (UHD)
+            "16x9-5k": (5120, 2880),     # 5120x2880 per eye - 16:9 5K
+            "16x9-8k": (7680, 4320),     # 7680x4320 per eye - 16:9 8K
+            # Legacy wide formats (now moved to 16:9)
+            "ultrawide": (3840, 2160),    # 3840x2160 per eye - ultra-wide 16:9 (same as 16x9-4k)
+            "wide-2k": (2560, 1440),     # 2560x1440 per eye - 16:9 2K (same as 16x9-1440p)
+            "wide-4k": (3840, 2160),     # 3840x2160 per eye - 16:9 4K (same as 16x9-4k)
             # Cinema formats (ultra-wide aspect ratios, recommend over-under)
             "cinema-2k": (2048, 858),    # 2048x858 per eye - 2.39:1 cinema
             "cinema-4k": (4096, 1716),   # 4096x1716 per eye - 2.39:1 4K cinema
@@ -846,6 +908,16 @@ class StereoProjector:
         
         if vr_resolution_setting in per_eye_resolutions:
             per_eye_width, per_eye_height = per_eye_resolutions[vr_resolution_setting]
+        elif vr_resolution_setting.startswith('custom:'):
+            # Custom resolution format: "custom:1920x1080"
+            try:
+                custom_res = vr_resolution_setting.replace('custom:', '')
+                width_str, height_str = custom_res.split('x')
+                per_eye_width, per_eye_height = int(width_str), int(height_str)
+                print(f"Using custom resolution: {per_eye_width}x{per_eye_height} per eye")
+            except (ValueError, IndexError):
+                print(f"Invalid custom resolution format: {vr_resolution_setting}. Using fallback.")
+                per_eye_width, per_eye_height = per_eye_resolutions["square-4k"]
         elif vr_resolution_setting == "auto":
             # Auto resolution logic based on source material quality and aspect ratio
             source_pixels = original_width * original_height
@@ -1536,8 +1608,8 @@ def main():
                        help='Path to Depth Anything V2 model file')
     parser.add_argument('-f', '--format', choices=['side_by_side', 'over_under'], 
                        default='side_by_side', help='VR output format (default: side_by_side)')
-    parser.add_argument('--vr-resolution', choices=['square-480', 'square-720', 'square-1k', 'square-2k', 'square-3k', 'square-4k', 'square-5k', 'ultrawide', 'wide-2k', 'wide-4k', 'cinema-2k', 'cinema-4k', 'auto'], 
-                       default='auto', help='VR output resolution format: square-480 (480x480 per eye - quick test), square-720 (720x720 per eye - fast test), square-1k (1080x1080 per eye), square-2k (1536x1536 per eye), square-3k (1920x1920 per eye), square-4k (2048x2048 per eye), square-5k (2560x2560 per eye), ultrawide (3840x2160 per eye), wide-2k (2560x1440 per eye), wide-4k (3840x2160 per eye), cinema-2k (2048x858 per eye), cinema-4k (4096x1716 per eye), auto (matches source) (default: auto)')
+    parser.add_argument('--vr-resolution', 
+                       default='auto', help='VR output resolution format. Preset options: square-480, square-720, square-1k, square-2k, square-3k, square-4k, square-5k, 16x9-480p, 16x9-720p, 16x9-1080p, 16x9-1440p, 16x9-4k, 16x9-5k, 16x9-8k, ultrawide, wide-2k, wide-4k, cinema-2k, cinema-4k, auto. Custom format: custom:WIDTHxHEIGHT (e.g., custom:1920x1080). Default: auto')
     parser.add_argument('-b', '--baseline', type=float, default=0.065, 
                        help='Stereo baseline distance in meters (default: 0.065 - average human IPD)')
     parser.add_argument('-fl', '--focal-length', type=float, default=1000,

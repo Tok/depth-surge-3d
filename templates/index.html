@@ -431,7 +431,16 @@
                                         <option value="square-4k">Square 4K (2048×2048 per eye)</option>
                                         <option value="square-5k">Square 5K (2560×2560 per eye)</option>
                                     </optgroup>
-                                    <optgroup label="Wide Formats (Content Preservation)">
+                                    <optgroup label="16:9 Formats (Standard Wide)">
+                                        <option value="16x9-480p">16:9 480p (854×480 per eye)</option>
+                                        <option value="16x9-720p">16:9 720p (1280×720 per eye)</option>
+                                        <option value="16x9-1080p">16:9 1080p (1920×1080 per eye)</option>
+                                        <option value="16x9-1440p">16:9 1440p (2560×1440 per eye)</option>
+                                        <option value="16x9-4k">16:9 4K (3840×2160 per eye)</option>
+                                        <option value="16x9-5k">16:9 5K (5120×2880 per eye)</option>
+                                        <option value="16x9-8k">16:9 8K (7680×4320 per eye)</option>
+                                    </optgroup>
+                                    <optgroup label="Legacy Wide Formats">
                                         <option value="wide-2k">Wide 2K (2560×1440 per eye)</option>
                                         <option value="wide-4k">Wide 4K (3840×2160 per eye)</option>
                                         <option value="ultrawide">Ultra-wide (3840×2160 per eye)</option>
@@ -440,8 +449,23 @@
                                         <option value="cinema-2k">Cinema 2K (2048×858 per eye)</option>
                                         <option value="cinema-4k">Cinema 4K (4096×1716 per eye)</option>
                                     </optgroup>
+                                    <optgroup label="Custom Resolution">
+                                        <option value="custom">Custom (specify below)</option>
+                                    </optgroup>
                                 </select>
-                                <small class="form-text text-muted">Wide/cinema formats preserve more content but may appear distorted in side-by-side</small>
+                                <small class="form-text text-muted">16:9 formats preserve wide content naturally. Cinema formats work best with over-under.</small>
+                            </div>
+                            <div class="mb-3" id="customResolutionDiv" style="display: none;">
+                                <label class="form-label">Custom Resolution (per eye)</label>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <input type="number" class="form-control" id="customWidth" placeholder="Width" min="480" max="7680" step="1">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="number" class="form-control" id="customHeight" placeholder="Height" min="270" max="4320" step="1">
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">Specify custom width × height per eye (e.g., 1920 × 1080)</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Stereo Baseline</label>
@@ -1042,13 +1066,26 @@
                 return;
             }
             
+            // Handle custom resolution
+            let vrResolution = document.getElementById('vrResolution').value;
+            if (vrResolution === 'custom') {
+                const customWidth = document.getElementById('customWidth').value;
+                const customHeight = document.getElementById('customHeight').value;
+                if (customWidth && customHeight) {
+                    vrResolution = `custom:${customWidth}x${customHeight}`;
+                } else {
+                    alert('Please specify both width and height for custom resolution');
+                    return;
+                }
+            }
+
             const settings = {
                 start_time: document.getElementById('startTime').value || null,
                 end_time: document.getElementById('endTime').value || null,
                 resolution: document.getElementById('resolution').value,
                 target_fps: document.getElementById('targetFps').value === 'original' ? null : parseInt(document.getElementById('targetFps').value),
                 vr_format: document.getElementById('vrFormat').value,
-                vr_resolution: document.getElementById('vrResolution').value,
+                vr_resolution: vrResolution,
                 baseline: parseFloat(document.getElementById('baseline').value),
                 focal_length: parseInt(document.getElementById('focalLength').value),
                 preserve_audio: document.getElementById('preserveAudio').checked,
@@ -1699,6 +1736,16 @@
         document.getElementById('resetSettingsBtn').addEventListener('click', function() {
             if (confirm('This will reset all settings to their default values. Are you sure?')) {
                 resetToDefaults();
+            }
+        });
+
+        // Show/hide custom resolution fields
+        document.getElementById('vrResolution').addEventListener('change', function() {
+            const customDiv = document.getElementById('customResolutionDiv');
+            if (this.value === 'custom') {
+                customDiv.style.display = 'block';
+            } else {
+                customDiv.style.display = 'none';
             }
         });
 
