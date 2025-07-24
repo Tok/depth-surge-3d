@@ -206,6 +206,9 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 
+# External repositories (cloned dependencies)
+depth_anything_v2_repo/
+
 # Depth Surge 3D specific
 simple_test_data/
 test_data/
