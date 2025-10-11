@@ -33,9 +33,10 @@ Examples:
   %(prog)s video.mp4                                    # Basic conversion
   %(prog)s video.mp4 --vr-resolution 16x9-4k          # High quality 4K
   %(prog)s video.mp4 --vr-resolution custom:2560x1080 # Custom resolution
-  %(prog)s video.mp4 --processing-mode batch          # Faster batch processing
   %(prog)s --resume ./output/my_video_output/          # Resume previous job
   %(prog)s --list-resolutions                          # Show available resolutions
+
+Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         """
     )
     
@@ -75,14 +76,6 @@ Examples:
         help='VR output format (default: %(default)s)'
     )
     
-    # Processing settings
-    parser.add_argument(
-        '--processing-mode',
-        choices=['serial', 'batch'],
-        default=DEFAULT_SETTINGS['processing_mode'],
-        help='Processing mode (default: %(default)s)'
-    )
-    
     # Time range
     parser.add_argument(
         '--start',
@@ -119,9 +112,11 @@ Examples:
                        help=f'Hole filling quality (default: {DEFAULT_SETTINGS["hole_fill_quality"]})')
     
     # Model and device
-    parser.add_argument('--model', help='Path to Depth-Anything-V2 model file (auto-downloads if missing)')
+    parser.add_argument('--model', help='Path to Video-Depth-Anything model file (auto-downloads if missing)')
     parser.add_argument('--device', choices=['auto', 'cuda', 'cpu'], default='auto',
                        help='Processing device (default: auto)')
+    parser.add_argument('--metric', action='store_true',
+                       help='Use metric depth model (outputs real depth values in meters)')
     
     # Output options
     parser.add_argument('--no-audio', action='store_true',
@@ -280,8 +275,8 @@ def main():
     
     # Create stereo projector
     try:
-        projector = create_stereo_projector(args.model, args.device)
-        
+        projector = create_stereo_projector(args.model, args.device, args.metric if hasattr(args, 'metric') else False)
+
         if args.model_info:
             info = projector.get_model_info()
             print("Model Information:")
@@ -294,7 +289,7 @@ def main():
         print(f"Starting Depth Surge 3D processing...")
         print(f"Input: {args.input_video}")
         print(f"Output: {args.output_dir} (batch subdirectory will be created)")
-        print(f"Mode: {args.processing_mode}")
+        print(f"Model: Video-Depth-Anything (temporal consistency)")
         print(f"Format: {args.format}")
         print(f"Resolution: {args.vr_resolution}")
         
@@ -323,7 +318,6 @@ def main():
             output_dir=str(batch_output_dir),
             vr_format=args.format,
             vr_resolution=args.vr_resolution,
-            processing_mode=args.processing_mode,
             baseline=args.baseline,
             focal_length=args.focal_length,
             start_time=args.start,

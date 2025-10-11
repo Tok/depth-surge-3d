@@ -11,43 +11,36 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 
-from ..models.depth_estimator import DepthEstimator, create_depth_estimator
+from ..models.video_depth_estimator import VideoDepthEstimator, create_video_depth_estimator
 from ..utils.resolution import (
     get_resolution_dimensions, calculate_vr_output_dimensions,
     validate_resolution_settings, auto_detect_resolution
-)
-from ..utils.image_processing import (
-    resize_image, normalize_depth_map, depth_to_disparity,
-    create_shifted_image, apply_center_crop, apply_fisheye_distortion,
-    apply_fisheye_square_crop, create_vr_frame, hole_fill_image
 )
 from ..utils.file_operations import (
     validate_video_file, get_video_properties, create_output_directories,
     get_frame_files, generate_output_filename
 )
-from ..utils.progress import ProgressTracker, create_progress_tracker
 from ..processing.video_processor import VideoProcessor
-from ..processing.batch_processor import BatchProcessor
 from ..core.constants import DEFAULT_SETTINGS, VR_RESOLUTIONS
 
 
 class StereoProjector:
     """
     Main class for converting 2D videos to 3D VR format.
-    
-    This class orchestrates the entire conversion process using modular
-    utility functions and maintains minimal state.
+
+    Uses Video-Depth-Anything for temporal consistency across video frames.
     """
-    
-    def __init__(self, model_path: Optional[str] = None, device: str = 'auto'):
+
+    def __init__(self, model_path: Optional[str] = None, device: str = 'auto', metric: bool = False):
         """
         Initialize StereoProjector.
-        
+
         Args:
-            model_path: Path to depth estimation model
+            model_path: Path to video depth estimation model
             device: Processing device ('auto', 'cuda', 'cpu')
+            metric: Use metric depth model (true depth values)
         """
-        self.depth_estimator = create_depth_estimator(model_path, device)
+        self.depth_estimator = create_video_depth_estimator(model_path, device, metric)
         self._model_loaded = False
     
     def process_video(
@@ -105,13 +98,10 @@ class StereoProjector:
             
             # Validate and resolve settings
             resolved_settings = self._resolve_settings(settings, video_props)
-            
-            # Create processor based on mode
-            if resolved_settings['processing_mode'] == 'batch':
-                processor = BatchProcessor(self.depth_estimator)
-            else:
-                processor = VideoProcessor(self.depth_estimator)
-            
+
+            # Create video processor (always uses temporal consistency)
+            processor = VideoProcessor(self.depth_estimator, verbose=resolved_settings.get('verbose', False))
+
             # Process the video
             return processor.process(
                 video_path=video_path,
@@ -132,50 +122,106 @@ class StereoProjector:
     ) -> bool:
         """
         Process single image to create 3D stereo pair.
-        
+
+        NOTE: Video-Depth-Anything is optimized for videos. For best results,
+        convert your image to a short video clip first.
+
         Args:
             image_path: Path to input image
             output_dir: Output directory path
             **kwargs: Processing parameters
-            
+
         Returns:
             True if processing completed successfully
         """
+        print("WARNING: Single image processing is not optimized with Video-Depth-Anything.")
+        print("For best results, convert your image to a video first.")
+        print("This feature will process the image as a single-frame video.")
+
         settings = self._apply_default_settings(kwargs)
-        
+
         try:
             # Ensure model is loaded
             if not self._ensure_model_loaded():
                 return False
-            
-            # Load and process image
+
+            # Load image
             image = cv2.imread(image_path)
             if image is None:
                 print(f"Error: Cannot load image from {image_path}")
                 return False
-            
+
             # Create output directory
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
-            
-            # Process image
-            result = self._process_single_image(image, settings)
-            if not result:
+
+            # Process as single-frame video
+            frames = np.array([image])  # Shape: [1, H, W, 3]
+
+            # Get depth map using video model
+            depth_maps = self.depth_estimator.estimate_depth_batch(
+                frames,
+                target_fps=30,
+                input_size=518,
+                fp32=False
+            )
+
+            if depth_maps is None or len(depth_maps) == 0:
+                print("Error: Failed to generate depth map")
                 return False
-            
-            left_img, right_img, vr_frame = result
-            
+
+            depth_map = depth_maps[0]
+
+            # Process using simplified pipeline
+            from ..utils.image_processing import (
+                resize_image, depth_to_disparity,
+                create_shifted_image, apply_center_crop,
+                create_vr_frame, hole_fill_image
+            )
+
+            per_eye_width = settings.get('per_eye_width', 1920)
+            per_eye_height = settings.get('per_eye_height', 1080)
+
+            # Create stereo pair
+            disparity_map = depth_to_disparity(
+                depth_map,
+                settings['baseline'],
+                settings['focal_length']
+            )
+
+            left_img = create_shifted_image(image, disparity_map, "left")
+            right_img = create_shifted_image(image, disparity_map, "right")
+
+            # Apply hole filling
+            if settings['hole_fill_quality'] in ['fast', 'advanced']:
+                left_img = hole_fill_image(left_img, method=settings['hole_fill_quality'])
+                right_img = hole_fill_image(right_img, method=settings['hole_fill_quality'])
+
+            # Apply center cropping
+            left_cropped = apply_center_crop(left_img, settings['crop_factor'])
+            right_cropped = apply_center_crop(right_img, settings['crop_factor'])
+
+            # Resize to target dimensions
+            left_final = resize_image(left_cropped, per_eye_width, per_eye_height)
+            right_final = resize_image(right_cropped, per_eye_width, per_eye_height)
+
+            # Create VR frame
+            vr_frame = create_vr_frame(left_final, right_final, settings['vr_format'])
+
             # Save results
             base_name = Path(image_path).stem
-            cv2.imwrite(str(output_path / f"{base_name}_left.png"), left_img)
-            cv2.imwrite(str(output_path / f"{base_name}_right.png"), right_img)
+            cv2.imwrite(str(output_path / f"{base_name}_left.png"), left_final)
+            cv2.imwrite(str(output_path / f"{base_name}_right.png"), right_final)
             cv2.imwrite(str(output_path / f"{base_name}_vr.png"), vr_frame)
-            
+            cv2.imwrite(str(output_path / f"{base_name}_depth.png"), (depth_map * 255).astype('uint8'))
+
             print(f"Image processing complete. Output saved to: {output_path}")
             return True
-            
+
         except Exception as e:
             print(f"Error during image processing: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _apply_default_settings(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -267,90 +313,6 @@ class StereoProjector:
         
         return resolved
     
-    def _process_single_image(
-        self, 
-        image: np.ndarray, 
-        settings: Dict[str, Any]
-    ) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
-        """
-        Process a single image to create stereo pair and VR frame.
-        
-        Args:
-            image: Input image array
-            settings: Processing settings
-            
-        Returns:
-            Tuple of (left_image, right_image, vr_frame) or None if failed
-        """
-        try:
-            # Get target dimensions
-            per_eye_width = settings['per_eye_width']
-            per_eye_height = settings['per_eye_height']
-            
-            # Resize image if needed
-            current_height, current_width = image.shape[:2]
-            if settings['super_sample'] != 'none':
-                # Apply super sampling for better quality
-                target_width = max(current_width, per_eye_width * 2)
-                target_height = max(current_height, per_eye_height * 2)
-                image = resize_image(image, target_width, target_height)
-            
-            # Generate depth map
-            depth_map = self.depth_estimator.estimate_depth(image)
-            depth_map = normalize_depth_map(depth_map)
-            
-            # Create stereo pair
-            disparity_map = depth_to_disparity(
-                depth_map, 
-                settings['baseline'], 
-                settings['focal_length']
-            )
-            
-            left_img = create_shifted_image(image, disparity_map, "left")
-            right_img = create_shifted_image(image, disparity_map, "right")
-            
-            # Apply hole filling
-            if settings['hole_fill_quality'] in ['fast', 'advanced']:
-                left_img = hole_fill_image(left_img, method=settings['hole_fill_quality'])
-                right_img = hole_fill_image(right_img, method=settings['hole_fill_quality'])
-            
-            # Apply distortion if enabled
-            if settings['apply_distortion']:
-                left_img = apply_fisheye_distortion(
-                    left_img, 
-                    settings['fisheye_fov'], 
-                    settings['fisheye_projection']
-                )
-                right_img = apply_fisheye_distortion(
-                    right_img, 
-                    settings['fisheye_fov'], 
-                    settings['fisheye_projection']
-                )
-                
-                # Apply fisheye-aware cropping
-                left_final = apply_fisheye_square_crop(
-                    left_img, per_eye_width, per_eye_height, settings['fisheye_crop_factor']
-                )
-                right_final = apply_fisheye_square_crop(
-                    right_img, per_eye_width, per_eye_height, settings['fisheye_crop_factor']
-                )
-            else:
-                # Apply center cropping
-                left_cropped = apply_center_crop(left_img, settings['crop_factor'])
-                right_cropped = apply_center_crop(right_img, settings['crop_factor'])
-                
-                # Resize to target dimensions
-                left_final = resize_image(left_cropped, per_eye_width, per_eye_height)
-                right_final = resize_image(right_cropped, per_eye_width, per_eye_height)
-            
-            # Create VR frame
-            vr_frame = create_vr_frame(left_final, right_final, settings['vr_format'])
-            
-            return left_final, right_final, vr_frame
-            
-        except Exception as e:
-            print(f"Error processing image: {e}")
-            return None
     
     def extract_frames(
         self,
@@ -557,16 +519,18 @@ class StereoProjector:
 
 def create_stereo_projector(
     model_path: Optional[str] = None,
-    device: str = 'auto'
+    device: str = 'auto',
+    metric: bool = False
 ) -> StereoProjector:
     """
     Factory function to create a StereoProjector instance.
-    
+
     Args:
-        model_path: Path to depth estimation model
+        model_path: Path to video depth estimation model
         device: Processing device
-        
+        metric: Use metric depth model (true depth values)
+
     Returns:
         Configured StereoProjector instance
     """
-    return StereoProjector(model_path, device) 
+    return StereoProjector(model_path, device, metric) 
