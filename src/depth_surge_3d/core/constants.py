@@ -14,13 +14,22 @@ DEFAULT_OUTPUT_DIR = "./output"
 
 # Model configuration
 DEFAULT_MODEL_PATH = "models/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth"
+DEFAULT_VIDEO_MODEL_PATH = "models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth"
 DEPTH_ANYTHING_REPO_DIR = "depth_anything_v2_repo"
+VIDEO_DEPTH_ANYTHING_REPO_DIR = "video_depth_anything_repo"
 
 MODEL_CONFIGS = {
     'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
     'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
     'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
     'vitg': {'encoder': 'vitg', 'features': 384, 'out_channels': [1536, 1536, 1536, 1536]}
+}
+
+# Video model configurations (Video-Depth-Anything)
+VIDEO_MODEL_CONFIGS = {
+    'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384], 'num_frames': 32},
+    'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768], 'num_frames': 32},
+    'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024], 'num_frames': 32},
 }
 
 # Default processing settings
@@ -147,6 +156,19 @@ MODEL_PATHS = {
     "small": "models/Depth-Anything-V2-Small/depth_anything_v2_vits.pth",
     "base": "models/Depth-Anything-V2-Base/depth_anything_v2_vitb.pth",
     "large": "models/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth",
+}
+
+# Video model download URLs (Video-Depth-Anything)
+VIDEO_MODEL_DOWNLOAD_URLS = {
+    "small": "https://huggingface.co/depth-anything/Video-Depth-Anything-Small/resolve/main/video_depth_anything_vits.pth",
+    "base": "https://huggingface.co/depth-anything/Video-Depth-Anything-Base/resolve/main/video_depth_anything_vitb.pth",
+    "large": "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth",
+}
+
+VIDEO_MODEL_PATHS = {
+    "small": "models/Video-Depth-Anything-Small/video_depth_anything_vits.pth",
+    "base": "models/Video-Depth-Anything-Base/video_depth_anything_vitb.pth",
+    "large": "models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth",
 }
 
 # Error messages

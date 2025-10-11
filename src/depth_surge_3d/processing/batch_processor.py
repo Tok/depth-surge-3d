@@ -1,22 +1,45 @@
 """
-Batch processor for parallel processing mode.
+Batch processor for video-optimized processing mode.
 
-This module handles batch processing where operations are grouped by type
-and can utilize parallel processing for better performance.
+This module implements true batch processing using Video-Depth-Anything
+for temporal consistency across video frames.
 """
 
-from typing import Dict, Any
+import cv2
+import subprocess
+import numpy as np
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Union
+import time
 
 from ..models.depth_estimator import DepthEstimator
-from .video_processor import VideoProcessor
+from ..models.video_depth_estimator import VideoDepthEstimator
+from ..utils.progress import create_progress_tracker
+from ..utils.file_operations import (
+    create_output_directories, get_frame_files, calculate_frame_range,
+    generate_output_filename, verify_ffmpeg_installation,
+    save_processing_settings, update_processing_status
+)
+from ..utils.image_processing import (
+    resize_image, normalize_depth_map, depth_to_disparity,
+    create_shifted_image, apply_center_crop, apply_fisheye_distortion,
+    apply_fisheye_square_crop, create_vr_frame, hole_fill_image
+)
+from ..core.constants import INTERMEDIATE_DIRS
 
 
-class BatchProcessor(VideoProcessor):
+class BatchProcessor:
     """
-    Handles batch video processing with parallel operations.
+    Handles batch video processing with temporal consistency.
+
+    Uses Video-Depth-Anything model to process entire videos with
+    temporal consistency, providing better quality than frame-by-frame processing.
     """
-    def __init__(self, depth_estimator: DepthEstimator, verbose: bool = False):
-        super().__init__(depth_estimator, verbose=verbose)
+
+    def __init__(self, depth_estimator: Union[DepthEstimator, VideoDepthEstimator], verbose: bool = False):
+        self.depth_estimator = depth_estimator
+        self.verbose = verbose
+        self.use_video_model = isinstance(depth_estimator, VideoDepthEstimator)
 
     def process(
         self,
@@ -27,12 +50,423 @@ class BatchProcessor(VideoProcessor):
         progress_callback=None
     ) -> bool:
         """
-        Process video in batch mode.
-        Currently delegates to serial processing.
+        Process video in batch mode with temporal consistency.
+
+        Args:
+            video_path: Path to input video
+            output_dir: Output directory path
+            video_properties: Video metadata
+            settings: Processing settings
+            progress_callback: Optional progress callback for web UI
+
+        Returns:
+            True if processing completed successfully
         """
-        print("\n=== Depth Surge 3D Batch Processing Pipeline ===")
-        print(f"Input: {video_path}")
-        print(f"Output: {output_dir}")
-        print(f"Mode: batch\n")
-        # Temporarily delegate to serial processing (stepwise CLI output)
-        return super().process(video_path, output_dir, video_properties, settings, progress_callback=progress_callback) 
+        settings_file = None
+
+        try:
+            output_path = Path(output_dir)
+
+            # Create output directories
+            directories = create_output_directories(output_path, settings['keep_intermediates'])
+
+            # Generate batch name
+            batch_name = f"{Path(video_path).stem}_{int(time.time())}"
+
+            # Save processing settings
+            settings_file = save_processing_settings(
+                output_path, batch_name, settings, video_properties, video_path
+            )
+
+            print(f"\n=== Depth Surge 3D Batch Processing Pipeline ===")
+            print(f"Input: {video_path}")
+            print(f"Output: {output_path}")
+            print(f"Mode: batch (temporal consistency)")
+            if self.use_video_model:
+                print(f"Using Video-Depth-Anything model for improved quality\n")
+            else:
+                print(f"Warning: Using frame-by-frame model in batch mode\n")
+
+            # Step 1: Extract frames
+            print("Step 1/7: Extracting frames from video...")
+            frame_files = self._extract_frames(video_path, directories, video_properties, settings)
+            if not frame_files:
+                print("Error: No frames extracted from video")
+                if settings_file:
+                    update_processing_status(settings_file, "failed", {
+                        "error": "No frames extracted from video"
+                    })
+                return False
+
+            print(f"  -> Extracted {len(frame_files)} frames")
+            print(f"  -> Saved to: {directories.get('frames', 'N/A')}\n")
+
+            # Initialize progress tracker
+            if progress_callback:
+                progress_tracker = progress_callback
+            else:
+                progress_tracker = create_progress_tracker(len(frame_files), 'batch')
+
+            # Step 2: Load all frames into memory
+            print("Step 2/7: Loading frames into memory...")
+            progress_tracker.update_progress(
+                "Loading frames",
+                step_name="Frame Extraction",
+                step_progress=0,
+                step_total=len(frame_files)
+            )
+
+            frames = self._load_frames(frame_files, settings, progress_tracker)
+            if frames is None or len(frames) == 0:
+                print("Error: Failed to load frames")
+                if settings_file:
+                    update_processing_status(settings_file, "failed", {"error": "Failed to load frames"})
+                return False
+
+            print(f"  -> Loaded {len(frames)} frames (shape: {frames[0].shape})\n")
+
+            # Step 3: Batch depth estimation
+            print("Step 3/7: Generating depth maps (batch mode with temporal consistency)...")
+            progress_tracker.update_progress(
+                "Generating depth maps",
+                step_name="Depth Map Generation",
+                step_progress=0,
+                step_total=len(frames)
+            )
+
+            depth_maps = self._generate_depth_maps_batch(frames, settings, progress_tracker)
+            if depth_maps is None:
+                print("Error: Failed to generate depth maps")
+                if settings_file:
+                    update_processing_status(settings_file, "failed", {"error": "Depth map generation failed"})
+                return False
+
+            print(f"  -> Generated {len(depth_maps)} depth maps\n")
+
+            # Save depth maps if keeping intermediates
+            if settings['keep_intermediates'] and 'depth_maps' in directories:
+                self._save_depth_maps(depth_maps, frame_files, directories['depth_maps'])
+
+            # Step 4-7: Process stereo pairs and create VR frames
+            print("Steps 4-7: Creating stereo pairs and VR frames...")
+            success = self._process_stereo_and_vr(
+                frames, depth_maps, frame_files, directories, settings, progress_tracker
+            )
+
+            if not success:
+                if settings_file:
+                    update_processing_status(settings_file, "failed", {"error": "Stereo/VR processing failed"})
+                return False
+
+            # Create final video
+            print("\nCreating final video with audio...")
+            success = self._create_output_video(
+                directories['vr_frames'], output_path, video_path, settings
+            )
+
+            progress_tracker.finish("Batch processing complete")
+
+            if success:
+                print(f"Processing complete. Output saved to: {output_path}")
+                if settings_file:
+                    update_processing_status(settings_file, "completed", {
+                        "final_output": str(output_path / generate_output_filename(
+                            Path(video_path).name,
+                            settings['vr_format'],
+                            settings['vr_resolution'],
+                            settings['processing_mode']
+                        )),
+                        "frames_processed": len(frames)
+                    })
+            else:
+                if settings_file:
+                    update_processing_status(settings_file, "failed", {"error": "Video creation failed"})
+
+            return success
+
+        except Exception as e:
+            print(f"Error in batch video processing: {e}")
+            if settings_file:
+                update_processing_status(settings_file, "failed", {"error": str(e)})
+            return False
+
+    def _extract_frames(
+        self,
+        video_path: str,
+        directories: Dict[str, Path],
+        video_properties: Dict[str, Any],
+        settings: Dict[str, Any]
+    ) -> List[Path]:
+        """Extract frames from video."""
+        frames_dir = directories.get('frames')
+        if not frames_dir:
+            frames_dir = directories['base'] / INTERMEDIATE_DIRS['frames']
+            frames_dir.mkdir(exist_ok=True)
+
+        # Calculate frame range
+        total_frames = video_properties['frame_count']
+        fps = video_properties['fps']
+        start_frame, end_frame = calculate_frame_range(
+            total_frames, fps, settings.get('start_time'), settings.get('end_time')
+        )
+
+        # Build FFmpeg command
+        cmd = [
+            'ffmpeg', '-y', '-i', video_path,
+            '-vf', f'select=between(n\\,{start_frame}\\,{end_frame-1})',
+            '-vsync', '0',
+            str(frames_dir / 'frame_%06d.png')
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"FFmpeg error: {result.stderr}")
+                return []
+        except Exception as e:
+            print(f"Error extracting frames: {e}")
+            return []
+
+        return get_frame_files(frames_dir)
+
+    def _load_frames(
+        self,
+        frame_files: List[Path],
+        settings: Dict[str, Any],
+        progress_tracker
+    ) -> Optional[np.ndarray]:
+        """Load all frames into memory as numpy array."""
+        frames_list = []
+
+        for i, frame_file in enumerate(frame_files):
+            try:
+                image = cv2.imread(str(frame_file))
+                if image is None:
+                    print(f"Warning: Could not load frame {frame_file}")
+                    continue
+
+                # Apply super sampling if needed
+                if settings['super_sample'] != 'none':
+                    target_width = max(image.shape[1], settings['per_eye_width'] * 2)
+                    target_height = max(image.shape[0], settings['per_eye_height'] * 2)
+                    image = resize_image(image, target_width, target_height)
+
+                frames_list.append(image)
+
+                # Update progress
+                if i % 10 == 0 or i == len(frame_files) - 1:
+                    progress_tracker.update_progress(
+                        "Loading frames",
+                        step_name="Frame Extraction",
+                        step_progress=i + 1,
+                        step_total=len(frame_files)
+                    )
+
+            except Exception as e:
+                print(f"Error loading frame {frame_file}: {e}")
+                return None
+
+        if not frames_list:
+            return None
+
+        return np.array(frames_list)
+
+    def _generate_depth_maps_batch(
+        self,
+        frames: np.ndarray,
+        settings: Dict[str, Any],
+        progress_tracker
+    ) -> Optional[np.ndarray]:
+        """Generate depth maps for all frames with temporal consistency."""
+        try:
+            if self.use_video_model:
+                # Use Video-Depth-Anything for temporal consistency
+                target_fps = settings.get('target_fps', 30)
+                if target_fps is None or str(target_fps) == 'None' or target_fps == 'original':
+                    target_fps = 30
+
+                depth_maps = self.depth_estimator.estimate_depth_batch(
+                    frames,
+                    target_fps=target_fps,
+                    input_size=518,
+                    fp32=False
+                )
+            else:
+                # Fallback to frame-by-frame processing
+                depth_maps = []
+                for i, frame in enumerate(frames):
+                    depth = self.depth_estimator.estimate_depth(frame)
+                    depth = normalize_depth_map(depth)
+                    depth_maps.append(depth)
+
+                    # Update progress
+                    if i % 5 == 0 or i == len(frames) - 1:
+                        progress_tracker.update_progress(
+                            "Generating depth maps",
+                            step_name="Depth Map Generation",
+                            step_progress=i + 1,
+                            step_total=len(frames)
+                        )
+
+                depth_maps = np.array(depth_maps)
+
+            return depth_maps
+
+        except Exception as e:
+            print(f"Error generating depth maps: {e}")
+            return None
+
+    def _save_depth_maps(
+        self,
+        depth_maps: np.ndarray,
+        frame_files: List[Path],
+        depth_dir: Path
+    ):
+        """Save depth maps to disk."""
+        for i, (depth_map, frame_file) in enumerate(zip(depth_maps, frame_files)):
+            depth_vis = (depth_map * 255).astype('uint8')
+            frame_name = frame_file.stem
+            cv2.imwrite(str(depth_dir / f"{frame_name}.png"), depth_vis)
+
+    def _process_stereo_and_vr(
+        self,
+        frames: np.ndarray,
+        depth_maps: np.ndarray,
+        frame_files: List[Path],
+        directories: Dict[str, Path],
+        settings: Dict[str, Any],
+        progress_tracker
+    ) -> bool:
+        """Process stereo pairs and create VR frames for all frames."""
+        try:
+            for i, (frame, depth_map, frame_file) in enumerate(zip(frames, depth_maps, frame_files)):
+                frame_name = frame_file.stem
+
+                # Create stereo pair
+                disparity_map = depth_to_disparity(
+                    depth_map, settings['baseline'], settings['focal_length']
+                )
+
+                left_img = create_shifted_image(frame, disparity_map, "left")
+                right_img = create_shifted_image(frame, disparity_map, "right")
+
+                # Apply hole filling
+                if settings['hole_fill_quality'] in ['fast', 'advanced']:
+                    left_img = hole_fill_image(left_img, method=settings['hole_fill_quality'])
+                    right_img = hole_fill_image(right_img, method=settings['hole_fill_quality'])
+
+                # Save stereo pair if keeping intermediates
+                if settings['keep_intermediates']:
+                    if 'left_frames' in directories:
+                        cv2.imwrite(str(directories['left_frames'] / f"{frame_name}.png"), left_img)
+                    if 'right_frames' in directories:
+                        cv2.imwrite(str(directories['right_frames'] / f"{frame_name}.png"), right_img)
+
+                # Apply distortion and cropping
+                if settings['apply_distortion']:
+                    left_distorted = apply_fisheye_distortion(
+                        left_img, settings['fisheye_fov'], settings['fisheye_projection']
+                    )
+                    right_distorted = apply_fisheye_distortion(
+                        right_img, settings['fisheye_fov'], settings['fisheye_projection']
+                    )
+
+                    fisheye_crop_factor = float(settings.get('fisheye_crop_factor', 1.0))
+                    fisheye_crop_factor = max(0.7, min(1.5, fisheye_crop_factor))
+
+                    left_cropped = apply_fisheye_square_crop(
+                        left_distorted, settings['per_eye_width'], settings['per_eye_height'], fisheye_crop_factor
+                    )
+                    right_cropped = apply_fisheye_square_crop(
+                        right_distorted, settings['per_eye_width'], settings['per_eye_height'], fisheye_crop_factor
+                    )
+
+                    left_final = resize_image(left_cropped, settings['per_eye_width'], settings['per_eye_height'])
+                    right_final = resize_image(right_cropped, settings['per_eye_width'], settings['per_eye_height'])
+                else:
+                    crop_factor = float(settings.get('crop_factor', 1.0))
+                    crop_factor = max(0.5, min(1.0, crop_factor))
+
+                    left_cropped = apply_center_crop(left_img, crop_factor)
+                    right_cropped = apply_center_crop(right_img, crop_factor)
+
+                    left_final = resize_image(left_cropped, settings['per_eye_width'], settings['per_eye_height'])
+                    right_final = resize_image(right_cropped, settings['per_eye_width'], settings['per_eye_height'])
+
+                # Create final VR frame
+                vr_frame = create_vr_frame(left_final, right_final, settings['vr_format'])
+
+                # Save VR frame
+                if 'vr_frames' in directories:
+                    cv2.imwrite(str(directories['vr_frames'] / f"{frame_name}.png"), vr_frame)
+
+                # Update progress
+                if i % 5 == 0 or i == len(frames) - 1:
+                    progress_tracker.update_progress(
+                        "Creating VR frames",
+                        step_name="Final Processing",
+                        step_progress=i + 1,
+                        step_total=len(frames)
+                    )
+
+            return True
+
+        except Exception as e:
+            print(f"Error processing stereo and VR frames: {e}")
+            return False
+
+    def _create_output_video(
+        self,
+        vr_frames_dir: Path,
+        output_dir: Path,
+        original_video: str,
+        settings: Dict[str, Any]
+    ) -> bool:
+        """Create final output video with audio."""
+
+        if not verify_ffmpeg_installation():
+            print("Error: FFmpeg not found. Cannot create output video.")
+            return False
+
+        # Generate output filename
+        output_filename = generate_output_filename(
+            Path(original_video).name,
+            settings['vr_format'],
+            settings['vr_resolution'],
+            settings['processing_mode']
+        )
+
+        output_path = output_dir / output_filename
+
+        # Build FFmpeg command
+        base_fps = settings.get('target_fps', 30)
+        if base_fps is None or str(base_fps) == 'None' or base_fps == 'original':
+            base_fps = 30
+
+        cmd = [
+            'ffmpeg', '-y',
+            '-framerate', str(base_fps),
+            '-i', str(vr_frames_dir / 'frame_%06d.png'),
+        ]
+
+        # Add audio if preserving
+        if settings.get('preserve_audio', True):
+            cmd.extend(['-i', original_video, '-c:a', 'aac', '-shortest'])
+
+        # Video encoding settings
+        cmd.extend([
+            '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p',
+            '-crf', '18',  # High quality
+            str(output_path)
+        ])
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"FFmpeg error: {result.stderr}")
+                return False
+            return True
+        except Exception as e:
+            print(f"Error creating output video: {e}")
+            return False

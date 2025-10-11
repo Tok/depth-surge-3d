@@ -136,8 +136,8 @@ dmypy.json
 # Weights and Biases
 wandb/
 
-# Model files and checkpoints
-models/
+# Model files and checkpoints (root level only - weights directory)
+/models/
 checkpoints/
 *.ckpt
 *.h5
@@ -210,6 +210,8 @@ Thumbs.db
 depth_anything_v2_repo/
 depth_anything_v2/
 Depth-Anything-V2/
+video_depth_anything_repo/
+Video-Depth-Anything/
 
 # Legacy files
 depth_surge_3d_legacy.py
