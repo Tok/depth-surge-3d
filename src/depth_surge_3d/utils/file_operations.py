@@ -256,31 +256,30 @@ def generate_output_filename(
     base_name: str,
     vr_format: str,
     vr_resolution: str,
-    processing_mode: str
+    processing_mode: Optional[str] = None  # Deprecated, kept for backwards compatibility
 ) -> str:
     """
     Generate output filename with metadata.
-    
+
     Args:
         base_name: Base name from input file
         vr_format: VR format used
         vr_resolution: VR resolution used
-        processing_mode: Processing mode used
-        
+        processing_mode: (Deprecated) Processing mode - no longer used
+
     Returns:
         Generated filename
     """
     # Clean base name
     clean_base = Path(base_name).stem
-    
-    # Add metadata
+
+    # Add metadata (no longer include processing_mode)
     metadata_parts = [
         clean_base,
         vr_format.replace('_', '-'),
-        vr_resolution,
-        processing_mode
+        vr_resolution
     ]
-    
+
     filename = '_'.join(metadata_parts) + OUTPUT_VIDEO_FORMAT
     
     # Sanitize filename
@@ -536,8 +535,7 @@ def save_processing_settings(
             "expected_output_filename": generate_output_filename(
                 Path(source_video_path).name,
                 settings['vr_format'],
-                settings['vr_resolution'],
-                settings['processing_mode']
+                settings['vr_resolution']
             )
         }
     }

@@ -136,16 +136,17 @@ INTERMEDIATE_DIRS = {
 }
 
 # Model download URLs (Video-Depth-Anything)
+# Keys match encoder types in MODEL_CONFIGS (vits, vitb, vitl)
 MODEL_DOWNLOAD_URLS = {
-    "small": "https://huggingface.co/depth-anything/Video-Depth-Anything-Small/resolve/main/video_depth_anything_vits.pth",
-    "base": "https://huggingface.co/depth-anything/Video-Depth-Anything-Base/resolve/main/video_depth_anything_vitb.pth",
-    "large": "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth",
+    "vits": "https://huggingface.co/depth-anything/Video-Depth-Anything-Small/resolve/main/video_depth_anything_vits.pth",
+    "vitb": "https://huggingface.co/depth-anything/Video-Depth-Anything-Base/resolve/main/video_depth_anything_vitb.pth",
+    "vitl": "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth",
 }
 
 MODEL_PATHS = {
-    "small": "models/Video-Depth-Anything-Small/video_depth_anything_vits.pth",
-    "base": "models/Video-Depth-Anything-Base/video_depth_anything_vitb.pth",
-    "large": "models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth",
+    "vits": "models/Video-Depth-Anything-Small/video_depth_anything_vits.pth",
+    "vitb": "models/Video-Depth-Anything-Base/video_depth_anything_vitb.pth",
+    "vitl": "models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth",
 }
 
 # Error messages

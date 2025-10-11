@@ -167,8 +167,7 @@ class VideoProcessor:
                         "final_output": str(output_path / generate_output_filename(
                             Path(video_path).name,
                             settings['vr_format'],
-                            settings['vr_resolution'],
-                            settings['processing_mode']
+                            settings['vr_resolution']
                         )),
                         "frames_processed": len(frames)
                     })
@@ -407,8 +406,7 @@ class VideoProcessor:
         output_filename = generate_output_filename(
             Path(original_video).name,
             settings['vr_format'],
-            settings['vr_resolution'],
-            settings['processing_mode']
+            settings['vr_resolution']
         )
 
         output_path = output_dir / output_filename
