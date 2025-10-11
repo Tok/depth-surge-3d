@@ -2,26 +2,24 @@
 
 ## High Priority
 
-### 🎥 Video-Optimized Depth Model
+### 🎥 Video Model Setup
 - [x] Integrate Video-Depth-Anything model ✓ (2025-10-12)
   - Repository: https://github.com/DepthAnything/Video-Depth-Anything
   - Created VideoDepthEstimator class for temporal consistency
-  - Batch processor now uses video-aware depth estimation
   - Processes frames in 32-frame sliding windows with 10-frame overlap
+- [x] Remove Depth Anything V2 completely ✓ (2025-10-12)
+  - Simplified to single video-only architecture
+  - Removed serial/batch mode distinction
+  - Deleted ~850 lines of redundant code
+  - Cleaner mental model: one model, one processor, one way
 - [ ] Download and configure video model weights
   - Need to download: video_depth_anything_vitl.pth (or smaller variants)
-  - Update CLI to support --model-type flag (v2 vs video)
-  - Add automatic model selection based on processing mode
-
-### 🔄 Processing Mode Refactor
-- [x] Clarify processing modes ✓ (2025-10-12)
-  - Confirmed: "serial" = frame-by-frame with Depth Anything V2
-  - Confirmed: "batch" = now implements true batch with video model support
-  - Batch mode loads all frames, processes with temporal consistency
-  - Clear architectural separation achieved
-- [ ] Make batch mode the default (pending model download/testing)
-- [ ] Update CLI help text to clarify mode differences
-- [ ] Consider deprecating serial mode in future (after batch mode proven)
+  - Run: wget https://huggingface.co/depth-anything/Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth
+  - Place in: models/Video-Depth-Anything-Large/
+- [ ] Update main CLI to work with new architecture
+  - Remove --processing-mode flag (no longer needed)
+  - Update imports to use VideoProcessor
+  - Test end-to-end with downloaded model
 
 ## Medium Priority
 
@@ -83,17 +81,15 @@
   - Depth map visualization tools
 
 ## Documentation
-- [ ] Update CLAUDE.md with current architecture
-  - Document Video-Depth-Anything integration
-  - Explain batch vs serial processing differences
+- [ ] Update CLAUDE.md with simplified architecture
+  - Document Video-Depth-Anything as sole depth model
+  - Remove serial/batch mode confusion
   - Update model loading information
-- [ ] Add processing mode comparison guide
-  - Serial: frame-by-frame, lower memory, V2 model
-  - Batch: temporal consistency, higher memory, video model
+  - Clarify memory requirements (loads all frames)
 - [ ] Create VR headset compatibility matrix
 - [ ] Document performance benchmarks by GPU
-  - Compare V2 vs Video-Depth-Anything performance
-  - Memory usage comparison
+  - Video-Depth-Anything performance metrics
+  - Memory usage for different video lengths
 
 ## Technical Debt
 - [ ] Clean up commented debug code
@@ -108,13 +104,19 @@
 
 ## Completed ✓
 
-### 2025-10-12 Session
+### 2025-10-12 Session - Video-Only Architecture
 - [x] Integrated Video-Depth-Anything model for temporal consistency
-- [x] Created VideoDepthEstimator class with batch processing support
-- [x] Completely refactored BatchProcessor from delegation to true batch mode
-- [x] Updated constants.py with video model configurations
+- [x] Created VideoDepthEstimator class with temporal processing support
+- [x] Completely refactored BatchProcessor into VideoProcessor
+- [x] **Removed Depth Anything V2 completely** (~850 lines deleted)
+  - Deleted depth_estimator.py (V2 wrapper)
+  - Deleted serial mode processing
+  - Removed batch/serial mode distinction
+  - Removed depth_anything_v2_repo/
+  - Simplified constants.py (single model config)
+- [x] Updated constants.py with simplified video-only configurations
 - [x] Fixed .gitignore to properly handle model code vs model weights
-- [x] Analyzed and clarified serial vs batch processing modes
+- [x] Simplified progress tracking (removed serial mode support)
 
 ### Previous Sessions
 - [x] Fix Depth Anything V2 import issue
