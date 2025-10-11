@@ -85,7 +85,7 @@ class VideoProcessor:
             print(f"Output: {output_path}")
             print(f"Total frames: {len(frame_files)}\n")
             print(f"Step 1/7: Extracting frames...")
-            print(f"  -> Saved to: {directories['frames']}")
+            print(f"  -> Saved to: {directories.get('frames', 'N/A')}")
             
             # Initialize progress tracker
             if progress_callback:
