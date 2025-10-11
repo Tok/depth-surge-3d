@@ -161,20 +161,42 @@ class ProgressTracker:
     def _display_batch(self) -> None:
         """Display batch mode progress."""
         step_name = self.steps[self.current_step_index] if self.current_step_index < len(self.steps) else "Processing"
-        
+
         # Calculate overall progress
         step_progress_ratio = (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
         overall_progress = ((self.current_step_index + step_progress_ratio) / len(self.steps)) * 100
-        
+
         if self.step_total > 0:
             step_percentage = (self.step_progress / self.step_total) * 100
             message = f"[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: {step_name} ({step_percentage:.1f}%)"
         else:
             message = f"[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: {step_name}"
-        
+
         # Report as if total progress is 100 (for percentage calculation)
         self.reporter.report_progress(int(overall_progress), 100, message)
-    
+
+    def update_progress(
+        self,
+        stage: str,
+        frame_num: Optional[int] = None,
+        phase: Optional[str] = None,
+        step_name: Optional[str] = None,
+        step_progress: Optional[int] = None,
+        step_total: Optional[int] = None
+    ) -> None:
+        """
+        Compatibility method for VideoProcessor interface.
+        Routes to appropriate update method based on processing mode.
+        """
+        if self.processing_mode == 'batch':
+            if step_name:
+                self.update_batch_step(step_name, step_progress or 0, step_total or 0)
+            elif step_progress is not None:
+                self.update_batch_progress(step_progress, step_total)
+        else:  # serial mode
+            if frame_num is not None:
+                self.update_serial(frame_num, stage)
+
     def finish(self, message: str = "Processing complete") -> None:
         """Finish progress tracking."""
         self.reporter.report_completion(message)

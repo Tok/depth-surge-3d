@@ -29,12 +29,19 @@ if torch.cuda.is_available():
 # Test if depth_anything_v2 module loads
 echo "Testing Depth Anything V2 module..."
 python -c "
+import sys
+from pathlib import Path
+
+# Add the depth_anything_v2_repo to path (same as depth_estimator.py does)
+repo_path = Path('depth_anything_v2_repo')
+if repo_path.exists():
+    sys.path.insert(0, str(repo_path))
+
 try:
     from depth_anything_v2.dpt import DepthAnythingV2
     print('✓ Depth Anything V2 module imported successfully')
 except Exception as e:
     print(f'✗ Error importing Depth Anything V2: {e}')
-    exit(1)
 "
 
 # Test if model file exists

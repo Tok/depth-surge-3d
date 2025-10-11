@@ -6,11 +6,11 @@ A comprehensive 2D to 3D VR video converter using Depth Anything V2 for depth es
 ## Key Features Implemented
 - **Command-line Interface**: Full-featured CLI with time range selection, resolution control, and VR format options
 - **Web UI**: Modern dark-themed Flask interface with real-time progress tracking and live frame previews
-- **60fps Frame Interpolation**: Motion-compensated interpolation using FFmpeg's minterpolate
-- **Intelligent Upscaling**: Lanczos algorithm for quality enhancement to 1080p/4K
+- **Experimental Frame Interpolation**: Optional motion-compensated interpolation using FFmpeg's minterpolate (may produce artifacts)
 - **Audio Preservation**: Time-synchronized audio extraction and combination
 - **Symmetric Stereo Generation**: Proper half-disparity shifts for both left and right eyes
-- **Multiple VR Formats**: Side-by-side and over-under variants (LR/RL)
+- **Multiple VR Formats**: Side-by-side and over-under variants
+- **Serial & Batch Processing**: Frame-by-frame or task-batched processing modes
 
 ## Technical Architecture
 - **Backend**: Flask + SocketIO for real-time communication
@@ -36,11 +36,12 @@ git add -A && git commit -m "message"  # Commit changes
 ```
 
 ## Architecture Decisions
-1. **Default to Source FPS**: Avoid unnecessary interpolation that may degrade quality
+1. **Modular Design**: Separated concerns with dedicated modules for depth estimation, image processing, and video assembly
 2. **Symmetric Stereo Pairs**: Both eyes receive proper disparity shifts (not just one)
 3. **Dark Theme UI**: Desktop-optimized interface for professional use
-4. **Real-time Preview**: Optional live frame previews with performance toggle
+4. **Progress Tracking**: Unified interface supporting both CLI (tqdm) and WebSocket (Flask) progress reporting
 5. **Timestamped Output**: Organized output directories with video name and timestamp
+6. **Experimental Features**: Frame interpolation marked as experimental due to potential artifacts
 
 ## Performance Characteristics
 - **GPU Processing**: ~2-4 seconds per output frame on RTX 4070 Ti SUPER
