@@ -162,7 +162,11 @@ class VideoProcessor:
 
             # Get timing and output unified completion message
             duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
-            print(step_complete(f"Loaded {len(frames):04d} frames in {duration:.2f}s\n"))
+            print(step_complete(f"Loaded {len(frames):04d} frames in {duration:.2f}s"))
+            if 'frames' in directories:
+                print(saved_to(f"Loaded from: {directories['frames']}\n"))
+            else:
+                print()
 
             # Step 4: Create stereo pairs
             print("Step 4/7: Creating stereo pairs...")
@@ -215,11 +219,7 @@ class VideoProcessor:
             # Get timing and output unified completion message
             duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
             print(step_complete(f"Created {len(frames):04d} VR frames in {duration:.2f}s"))
-            if settings['keep_intermediates']:
-                if 'left_cropped' in directories:
-                    print(saved_to(f"Cropped: {directories['left_cropped']} & {directories['right_cropped']}"))
-                if 'left_final' in directories:
-                    print(saved_to(f"Resized: {directories['left_final']} & {directories['right_final']}"))
+            # Only show final VR frames directory (intermediate directories are visible in file system)
             if 'vr_frames' in directories:
                 print(saved_to(f"Saved to: {directories['vr_frames']}\n"))
             else:
