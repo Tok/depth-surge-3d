@@ -99,7 +99,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'depth-surge-3d-secret'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['OUTPUT_FOLDER'] = 'output'
-socketio = SocketIO(app, cors_allowed_origins="*", logger=False, engineio_logger=False)
+# Use threading async_mode and disable ping timeout for long-running tasks
+socketio = SocketIO(app, cors_allowed_origins="*", logger=False, engineio_logger=False,
+                    async_mode='threading', ping_timeout=120, ping_interval=25)
 
 @app.teardown_appcontext
 def cleanup_on_teardown(error):
@@ -285,7 +287,9 @@ class ProgressCallback:
             # Emit progress (socketio.start_background_task handles context automatically)
             print(f"[SOCKETIO DEBUG] Emitting progress_update to room: {self.session_id[:8]}...")
             socketio.emit('progress_update', progress_data, room=self.session_id)
-            print(f"[SOCKETIO DEBUG] Emit completed")
+            # Yield control to allow message to be sent immediately (fixes buffering issue)
+            socketio.sleep(0)
+            print(f"[SOCKETIO DEBUG] Emit completed and flushed")
         except Exception as e:
             # Always print emit errors (not just in verbose mode) for debugging
             print(f"⚠️  Error emitting progress: {e}")
@@ -368,7 +372,12 @@ def process_video_async(session_id, video_path, settings, output_dir):
         
         processing_mode = settings.get('processing_mode', 'serial')
         callback = ProgressCallback(session_id, expected_frames, processing_mode)
-        
+
+        # Give client time to join the session room before starting processing
+        print(f"[SOCKETIO DEBUG] Waiting for client to join session {session_id[:8]}...")
+        socketio.sleep(0.5)  # 500ms delay
+        print(f"[SOCKETIO DEBUG] Starting processing")
+
         # Use the appropriate processor based on processing mode
         if processing_mode == 'batch':
             from depth_surge_3d.processing.batch_processor import BatchProcessor
