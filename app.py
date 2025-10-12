@@ -16,7 +16,6 @@ import signal
 from datetime import datetime
 from pathlib import Path
 import cv2
-from threading import Thread
 import shutil
 
 # Set PyTorch memory allocator config BEFORE importing torch
@@ -283,12 +282,13 @@ class ProgressCallback:
         print(f"Overall: {progress:.1f}% | Step: {step_percent:.0f}% ({self.step_progress}/{self.step_total}) | {stage}")
 
         try:
-            # Emit with app context for background thread compatibility
-            with app.app_context():
-                socketio.emit('progress_update', progress_data, room=self.session_id)
+            # Emit progress (socketio.start_background_task handles context automatically)
+            socketio.emit('progress_update', progress_data, room=self.session_id)
         except Exception as e:
             # Always print emit errors (not just in verbose mode) for debugging
             print(f"⚠️  Error emitting progress: {e}")
+            import traceback
+            traceback.print_exc()
             # Don't let SocketIO errors stop processing - continue silently
     
     def get_step_duration(self):
@@ -302,11 +302,10 @@ class ProgressCallback:
         """Finish progress tracking (compatibility with ProgressTracker interface)."""
         print(f"{message}")
         try:
-            with app.app_context():
-                socketio.emit('processing_complete', {
-                    'success': True,
-                    'message': message
-                }, room=self.session_id)
+            socketio.emit('processing_complete', {
+                'success': True,
+                'message': message
+            }, room=self.session_id)
         except Exception as e:
             print(f"⚠️  Error emitting completion: {e}")
 
@@ -417,33 +416,30 @@ def process_video_async(session_id, video_path, settings, output_dir):
         
         # Processing complete
         try:
-            with app.app_context():
-                socketio.emit('processing_complete', {
-                    'success': True,
-                    'output_dir': str(output_dir),
-                    'message': 'Video processing completed successfully!'
-                }, room=session_id)
+            socketio.emit('processing_complete', {
+                'success': True,
+                'output_dir': str(output_dir),
+                'message': 'Video processing completed successfully!'
+            }, room=session_id)
         except Exception as e:
             print(f"⚠️  Error emitting completion: {e}")
-        
+
     except InterruptedError as e:
         # Handle user-requested stop
         try:
-            with app.app_context():
-                socketio.emit('processing_stopped', {
-                    'success': True,
-                    'message': str(e)
-                }, room=session_id)
+            socketio.emit('processing_stopped', {
+                'success': True,
+                'message': str(e)
+            }, room=session_id)
         except Exception as emit_error:
             print(f"⚠️  Error emitting stop: {emit_error}")
-        
+
     except Exception as e:
         try:
-            with app.app_context():
-                socketio.emit('processing_error', {
-                    'success': False,
-                    'error': str(e)
-                }, room=session_id)
+            socketio.emit('processing_error', {
+                'success': False,
+                'error': str(e)
+            }, room=session_id)
         except Exception as emit_error:
             print(f"⚠️  Error emitting error: {emit_error}")
         print(f"Processing error: {e}")  # Always print errors
@@ -511,12 +507,10 @@ def start_processing():
     
     # Generate session ID
     session_id = str(uuid.uuid4())
-    
-    # Start processing in background
-    thread = Thread(target=process_video_async, args=(session_id, video_path, settings, output_dir))
-    thread.daemon = True
+
+    # Start processing in background using socketio's method for proper context handling
+    thread = socketio.start_background_task(process_video_async, session_id, video_path, settings, output_dir)
     current_processing['thread'] = thread
-    thread.start()
     
     return jsonify({
         'success': True,
@@ -583,12 +577,10 @@ def resume_processing():
     
     # Generate session ID
     session_id = str(uuid.uuid4())
-    
-    # Start processing in background
-    thread = Thread(target=process_video_async, args=(session_id, original_video, settings, output_path))
-    thread.daemon = True
+
+    # Start processing in background using socketio's method for proper context handling
+    thread = socketio.start_background_task(process_video_async, session_id, original_video, settings, output_path)
     current_processing['thread'] = thread
-    thread.start()
     
     return jsonify({
         'success': True,
