@@ -944,5 +944,5 @@ if __name__ == '__main__':
     if not os.environ.get('DEPTH_SURGE_UI_SCRIPT'):
         print("Starting Depth Surge 3D Web UI...")
         print(f"Navigate to http://localhost:{args.port}")
-    
-    socketio.run(app, host=args.host, port=args.port, debug=args.verbose)
+
+    socketio.run(app, host=args.host, port=args.port, debug=args.verbose, allow_unsafe_werkzeug=True)
