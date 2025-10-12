@@ -283,7 +283,9 @@ class ProgressCallback:
 
         try:
             # Emit progress (socketio.start_background_task handles context automatically)
+            print(f"[SOCKETIO DEBUG] Emitting progress_update to room: {self.session_id[:8]}...")
             socketio.emit('progress_update', progress_data, room=self.session_id)
+            print(f"[SOCKETIO DEBUG] Emit completed")
         except Exception as e:
             # Always print emit errors (not just in verbose mode) for debugging
             print(f"⚠️  Error emitting progress: {e}")
@@ -877,19 +879,25 @@ def handle_join_session(data):
         # Join the session room for progress updates
         from flask_socketio import join_room
         join_room(session_id)
-        vprint(f"Client {request.sid} joined session {session_id}")
-        
+        print(f"[SOCKETIO DEBUG] Client {request.sid} joined session {session_id[:8]}...")
+
         # Send initial status to joined client
         try:
-            socketio.emit('progress_update', {
+            initial_data = {
                 'progress': current_processing.get('progress', 0),
                 'stage': current_processing.get('stage', 'Initializing...'),
                 'current_frame': current_processing.get('current_frame', 0),
                 'total_frames': current_processing.get('total_frames', 0),
-                'phase': current_processing.get('phase', 'extraction')
-            }, room=session_id)
+                'phase': current_processing.get('phase', 'extraction'),
+                'step_index': current_processing.get('step_index', 0),
+                'step_progress': current_processing.get('step_progress', 0),
+                'step_total': current_processing.get('step_total', 0)
+            }
+            print(f"[SOCKETIO DEBUG] Sending initial progress: {initial_data}")
+            socketio.emit('progress_update', initial_data, room=session_id)
+            print(f"[SOCKETIO DEBUG] Initial progress sent")
         except Exception as e:
-            vprint(f"Error emitting initial progress: {e}")
+            print(f"⚠️  Error emitting initial progress: {e}")
 
 if __name__ == '__main__':
     # Parse command line arguments

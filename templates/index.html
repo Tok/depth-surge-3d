@@ -1312,11 +1312,15 @@
             socket = io();
             
             socket.on('connect', function() {
-                console.log('Connected to server');
+                console.log('[SOCKET] Connected to server, socket.id:', socket.id);
             });
-            
+
+            socket.on('disconnect', function() {
+                console.log('[SOCKET] Disconnected from server');
+            });
+
             socket.on('progress_update', function(data) {
-                console.log('Progress update received:', data);
+                console.log('[SOCKET] Progress update received:', data);
                 updateProgress(data);
             });
             
@@ -1527,6 +1531,7 @@
             .then(data => {
                 if (data.success) {
                     currentSessionId = data.session_id;
+                    console.log('[SOCKET] Joining session:', currentSessionId);
                     socket.emit('join_session', {session_id: currentSessionId});
                     showProgressPanel();
                     showCurrentBatchDirectory(data.output_dir);
