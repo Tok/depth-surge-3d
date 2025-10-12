@@ -231,7 +231,27 @@
         .text-muted {
             color: #6c757d !important;
         }
-        
+
+        /* Code element styling - use white instead of rose */
+        code {
+            color: #e0e0e0 !important;
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Progress bar color overrides - Terminal Precision theme */
+        .progress-bar.bg-success {
+            background-color: var(--accent-lime) !important;
+            background-image: linear-gradient(45deg, var(--accent-lime) 0%, var(--accent-green) 100%);
+        }
+
+        .progress-bar.bg-info {
+            background-color: #00d9ff !important;
+            background-image: linear-gradient(45deg, #00d9ff 0%, #00aaff 100%);
+        }
+
         /* Progress animations */
         .progress-bar-animated {
             animation: progress-bar-stripes 1s linear infinite;

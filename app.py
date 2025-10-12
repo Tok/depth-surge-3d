@@ -58,8 +58,8 @@ def cleanup_processes():
     global ACTIVE_PROCESSES, SHUTDOWN_FLAG
     
     SHUTDOWN_FLAG = True
-    vprint("🛑 Cleaning up active processes...")
-    
+    vprint("Cleaning up active processes...")
+
     # Kill any ffmpeg processes related to this app
     try:
         subprocess.run(['pkill', '-f', 'ffmpeg.*depth-surge'], check=False, capture_output=True)
@@ -77,12 +77,12 @@ def cleanup_processes():
             pass
     
     ACTIVE_PROCESSES.clear()
-    vprint("✅ Process cleanup completed")
+    vprint("Process cleanup completed")
 
 def signal_handler(signum, frame):
     """Handle shutdown signals"""
     global current_processing
-    print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
+    print(f"\nReceived signal {signum}, shutting down gracefully...")
     
     # Stop any active processing
     if current_processing['active']:

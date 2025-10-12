@@ -219,14 +219,14 @@ def main():
     if args.resume:
         print(f"Checking resume capability for: {args.resume}")
         resume_info = can_resume_processing(Path(args.resume))
-        
+
         if not resume_info["can_resume"]:
-            print("❌ Cannot resume processing:")
+            print("Cannot resume processing:")
             for rec in resume_info["recommendations"]:
                 print(f"  - {rec}")
             return 1
-        
-        print(f"✅ Can resume processing:")
+
+        print(f"Can resume processing:")
         print(f"  - Batch: {resume_info['batch_name']}")
         print(f"  - Status: {resume_info['status']}")
         if resume_info["progress_info"]:
@@ -239,19 +239,19 @@ def main():
         # Load settings from the settings file
         settings_data = load_processing_settings(resume_info["settings_file"])
         if not settings_data:
-            print("❌ Could not load settings file")
+            print("Could not load settings file")
             return 1
-        
+
         # Extract video path and settings
         video_path = settings_data["metadata"]["source_video"]
         processing_settings = settings_data["processing_settings"]
-        
+
         # Create projector with original model settings
         projector = create_stereo_projector(
             device=processing_settings.get('device', 'auto')
         )
-        
-        print(f"🔄 Resuming processing...")
+
+        print(f"Resuming processing...")
         print(f"Input: {video_path}")
         print(f"Output: {args.resume}")
         
@@ -259,15 +259,15 @@ def main():
         success = projector.process_video(
             video_path=video_path,
             output_dir=args.resume,
-            **{k: v for k, v in processing_settings.items() 
+            **{k: v for k, v in processing_settings.items()
                if k not in ['output_dir', 'device']}
         )
-        
+
         if success:
-            print("🎉 Resume processing completed successfully!")
+            print("Resume processing completed successfully!")
             return 0
         else:
-            print("❌ Resume processing failed. Check error messages above.")
+            print("Resume processing failed. Check error messages above.")
             return 1
     
     # Validate arguments for normal processing
@@ -334,20 +334,20 @@ def main():
             target_fps=args.target_fps,
             experimental_frame_interpolation=args.experimental_frame_interpolation
         )
-        
+
         if success:
-            print("🎉 Processing completed successfully!")
-            print(f"📁 Output saved to: {batch_output_dir}")
+            print("Processing completed successfully!")
+            print(f"Output saved to: {batch_output_dir}")
             return 0
         else:
-            print("❌ Processing failed. Check error messages above.")
+            print("Processing failed. Check error messages above.")
             return 1
-            
+
     except KeyboardInterrupt:
-        print("\n⏹️  Processing interrupted by user")
+        print("\nProcessing interrupted by user")
         return 1
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"Unexpected error: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
