@@ -69,7 +69,20 @@ class VideoDepthEstimator:
             from video_depth_anything.video_depth import VideoDepthAnything
 
             self.model = VideoDepthAnything(**self.model_config, metric=self.metric)
-            self.model.load_state_dict(torch.load(self.model_path, map_location='cpu'), strict=True)
+
+            # Load state dict and fix key names if needed
+            state_dict = torch.load(self.model_path, map_location='cpu')
+
+            # Remap depth_head.* to head.* for compatibility
+            fixed_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('depth_head.'):
+                    new_key = key.replace('depth_head.', 'head.')
+                    fixed_state_dict[new_key] = value
+                else:
+                    fixed_state_dict[key] = value
+
+            self.model.load_state_dict(fixed_state_dict, strict=True)
             self.model = self.model.to(self.device).eval()
 
             model_variant = "Metric-" if self.metric else ""

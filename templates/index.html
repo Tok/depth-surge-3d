@@ -1690,6 +1690,10 @@
         // Directory operations
         document.getElementById('openCurrentBatchBtn').addEventListener('click', function() {
             const currentBatchPath = document.getElementById('currentBatchPath').textContent;
+            if (!currentBatchPath || currentBatchPath === '--' || currentBatchPath.trim() === '') {
+                alert('No processing directory available yet. Please start processing first.');
+                return;
+            }
             fetch('/open_directory', {
                 method: 'POST',
                 headers: {
@@ -1711,6 +1715,10 @@
         
         document.getElementById('openDirectoryBtn').addEventListener('click', function() {
             const outputPath = document.getElementById('outputPath').textContent;
+            if (!outputPath || outputPath === '--' || outputPath.trim() === '') {
+                alert('No output directory available yet. Please complete processing first.');
+                return;
+            }
             fetch('/open_directory', {
                 method: 'POST',
                 headers: {
@@ -1732,6 +1740,10 @@
 
         document.getElementById('copyPathBtn').addEventListener('click', function() {
             const outputPath = document.getElementById('outputPath').textContent;
+            if (!outputPath || outputPath === '--' || outputPath.trim() === '') {
+                alert('No output path available to copy yet. Please complete processing first.');
+                return;
+            }
             navigator.clipboard.writeText(outputPath).then(() => {
                 // Visual feedback
                 const btn = document.getElementById('copyPathBtn');

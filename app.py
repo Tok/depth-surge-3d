@@ -322,8 +322,8 @@ def process_video_async(session_id, video_path, settings, output_dir):
         current_processing['session_id'] = session_id
         current_processing['stop_requested'] = False
         
-        # Initialize projector
-        model_path = settings.get('model_path', './models/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth')
+        # Initialize projector with Video-Depth-Anything model
+        model_path = settings.get('model_path', 'models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth')
         device = settings.get('device', 'auto')
         if device == 'auto':
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
