@@ -284,16 +284,19 @@ class VideoProcessor:
 
         print(f"  Frame resolution: {frame_w}x{frame_h} ({megapixels:.1f}MP)")
 
-        # Very aggressive chunking for 4K with limited VRAM
-        # Model uses ~9GB, only ~6GB free
+        # Very aggressive chunking for limited VRAM
+        # Model uses ~9GB, only ~6GB free on typical 16GB GPU
         if megapixels > 8.0:  # >8MP (4K is ~8.3MP)
-            chunk_size = 8   # Tiny chunks for 4K
+            chunk_size = 4   # Ultra-tiny chunks for 4K
             input_size = 384  # Reduce depth model input resolution
-        elif megapixels > 2.0:  # >2MP
-            chunk_size = 16  # Small chunks for high-res
+        elif megapixels > 2.0:  # >2MP (1080p is 2.1MP)
+            chunk_size = 8  # Very small chunks for HD
+            input_size = 384  # Also reduce for HD
+        elif megapixels > 1.0:  # >1MP (720p is 0.9MP)
+            chunk_size = 16  # Small chunks for 720p
             input_size = 448
         else:
-            chunk_size = 32  # Standard chunks
+            chunk_size = 32  # Standard chunks for SD
             input_size = 518
 
         print(f"  Processing in chunks of {chunk_size} frames (input_size={input_size})...")

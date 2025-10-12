@@ -19,6 +19,10 @@ import cv2
 from threading import Thread
 import shutil
 
+# Set PyTorch memory allocator config BEFORE importing torch
+# This helps prevent memory fragmentation on GPU
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
 # Import our constants
 from src.depth_surge_3d.core.constants import INTERMEDIATE_DIRS
 
