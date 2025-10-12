@@ -7,26 +7,26 @@ APP_PID=""
 # Function to cleanup processes
 cleanup() {
     echo ""
-    echo "🛑 Stopping Depth Surge 3D Web UI..."
-    
+    echo "Stopping Depth Surge 3D Web UI..."
+
     # Kill the Flask app if it's running
     if [ ! -z "$APP_PID" ] && kill -0 "$APP_PID" 2>/dev/null; then
         echo "   Stopping web server (PID: $APP_PID)..."
         kill -TERM "$APP_PID" 2>/dev/null || kill -KILL "$APP_PID" 2>/dev/null
         wait "$APP_PID" 2>/dev/null
     fi
-    
+
     # Kill any other Python processes related to this app
     echo "   Cleaning up any remaining processes..."
     pkill -f "python.*app\.py" 2>/dev/null || true
     pkill -f "flask.*run" 2>/dev/null || true
-    
+
     # Kill any ongoing processing jobs
     echo "   Stopping any active video processing..."
     pkill -f "depth_surge_3d\.py" 2>/dev/null || true
     pkill -f "ffmpeg.*depth-surge" 2>/dev/null || true
-    
-    echo "✅ All processes stopped successfully"
+
+    echo "All processes stopped successfully"
     exit 0
 }
 
@@ -37,7 +37,7 @@ echo "Starting Depth Surge 3D Web UI..."
 
 # Check if virtual environment exists
 if [ ! -d ".venv" ]; then
-    echo "❌ Error: Virtual environment not found. Run ./setup.sh first."
+    echo "Error: Virtual environment not found. Run ./setup.sh first."
     exit 1
 fi
 
@@ -51,19 +51,19 @@ python -m pip install flask flask-socketio > /dev/null 2>&1
 mkdir -p uploads output
 
 # Start the Flask application
-echo "🌐 Starting web server at http://localhost:5000"
-echo "📱 Navigate to http://localhost:5000"
-echo "⚠️  Press Ctrl+C to stop the server and all background processes"
+echo "Starting web server at http://localhost:5000"
+echo "Navigate to http://localhost:5000"
+echo "Press Ctrl+C to stop the server and all background processes"
 
 # Open browser automatically (cross-platform)
 if command -v xdg-open > /dev/null; then
-    echo "🔗 Opening in existing browser session."
+    echo "Opening in existing browser session."
     (sleep 2; xdg-open http://localhost:5000) &
 elif command -v open > /dev/null; then
-    echo "🔗 Opening in default browser."
+    echo "Opening in default browser."
     (sleep 2; open http://localhost:5000) &
 elif command -v start > /dev/null; then
-    echo "🔗 Opening in default browser."
+    echo "Opening in default browser."
     (sleep 2; start http://localhost:5000) &
 fi
 

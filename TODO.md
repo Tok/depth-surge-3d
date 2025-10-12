@@ -104,6 +104,25 @@
 
 ## Completed ✓
 
+### 2025-10-13 Session - Fisheye Fixes & Console Polish
+- [x] Fixed fisheye distortion to properly fill rectangular VR frames (180° FOV)
+  - Updated defaults: FOV 105° → 180°, fisheye_crop_factor 1.0 → 0.7
+  - Fixed coordinate calculation to use clipping instead of circular masking
+  - Changed border mode to BORDER_REFLECT_101 to eliminate black borders
+  - Result: Clean rectangular frames [__][__] instead of circular crops [([])][([])]
+- [x] Added intermediate frame saving for 06 (cropped) and 07 (final) directories
+  - Fixed empty directories when keep_intermediates=true
+  - All processing steps now properly saved for debugging
+- [x] Implemented console color system matching UI theme
+  - Created console.py utility with ANSI colors
+  - Lime green (#39ff14) step completion arrows "  -> "
+  - Yellow warnings, red errors matching design system
+  - Removed all emojis from console output (✓, ✗, ⚠️)
+- [x] Added localStorage versioning (v2) for web UI settings
+  - Automatic reset of outdated cached settings
+  - Prevents old defaults from overriding new improvements
+- [x] Updated HTML template defaults to match Python constants
+
 ### 2025-10-12 Session - Video-Only Architecture
 - [x] Integrated Video-Depth-Anything model for temporal consistency
 - [x] Created VideoDepthEstimator class with temporal processing support
