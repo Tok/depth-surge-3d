@@ -295,17 +295,13 @@ class ProgressCallback:
 
         try:
             # Emit progress (socketio.start_background_task handles context automatically)
-            print(f"[SOCKETIO DEBUG] Emitting progress_update to room: {self.session_id[:8]}...")
             socketio.emit('progress_update', progress_data, room=self.session_id)
             # Yield control to allow message to be sent immediately (fixes buffering issue)
             socketio.sleep(0)
-            print(f"[SOCKETIO DEBUG] Emit completed and flushed")
         except Exception as e:
-            # Always print emit errors (not just in verbose mode) for debugging
             print(f"⚠️  Error emitting progress: {e}")
             import traceback
             traceback.print_exc()
-            # Don't let SocketIO errors stop processing - continue silently
     
     def get_step_duration(self):
         """Get duration of current step in seconds."""
@@ -384,9 +380,7 @@ def process_video_async(session_id, video_path, settings, output_dir):
         callback = ProgressCallback(session_id, expected_frames, processing_mode)
 
         # Give client time to join the session room before starting processing
-        print(f"[SOCKETIO DEBUG] Waiting for client to join session {session_id[:8]}...")
         socketio.sleep(0.5)  # 500ms delay
-        print(f"[SOCKETIO DEBUG] Starting processing")
 
         # Use the appropriate processor based on processing mode
         if processing_mode == 'batch':
@@ -898,7 +892,7 @@ def handle_join_session(data):
         # Join the session room for progress updates
         from flask_socketio import join_room
         join_room(session_id)
-        print(f"[SOCKETIO DEBUG] Client {request.sid} joined session {session_id[:8]}...")
+        vprint(f"Client {request.sid} joined session {session_id[:8]}...")
 
         # Send initial status to joined client
         try:
@@ -912,37 +906,44 @@ def handle_join_session(data):
                 'step_progress': current_processing.get('step_progress', 0),
                 'step_total': current_processing.get('step_total', 0)
             }
-            print(f"[SOCKETIO DEBUG] Sending initial progress: {initial_data}")
             socketio.emit('progress_update', initial_data, room=session_id)
-            print(f"[SOCKETIO DEBUG] Initial progress sent")
         except Exception as e:
             print(f"⚠️  Error emitting initial progress: {e}")
 
 if __name__ == '__main__':
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Depth Surge 3D Web UI')
-    parser.add_argument('-v', '--verbose', action='store_true', 
+    parser.add_argument('-v', '--verbose', action='store_true',
                        help='Enable verbose logging (shows GET/SET requests and client details)')
     parser.add_argument('--port', type=int, default=5000,
                        help='Port to run the server on (default: 5000)')
     parser.add_argument('--host', default='0.0.0.0',
                        help='Host to bind to (default: 0.0.0.0)')
     args = parser.parse_args()
-    
+
     # Set global verbose flag
     VERBOSE = args.verbose
-    
+
     ensure_directories()
-    
+
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     import torch  # Import here to avoid issues during startup
-    
+
     # Only print startup message if not already printed by run_ui.sh
     if not os.environ.get('DEPTH_SURGE_UI_SCRIPT'):
         print("Starting Depth Surge 3D Web UI...")
         print(f"Navigate to http://localhost:{args.port}")
+
+    # Suppress Flask/Werkzeug production warnings for desktop application
+    if not args.verbose:
+        import logging
+        log = logging.getLogger('werkzeug')
+        log.setLevel(logging.ERROR)
+        # Suppress the specific production deployment warning
+        import warnings
+        warnings.filterwarnings('ignore', message='.*Werkzeug.*production.*')
 
     socketio.run(app, host=args.host, port=args.port, debug=args.verbose, allow_unsafe_werkzeug=True)
