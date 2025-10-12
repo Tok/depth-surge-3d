@@ -119,20 +119,21 @@ MAX_FOV = 180  # degrees
 HOLE_FILL_METHODS = ["fast", "advanced"]
 
 # Directory names for intermediate files
-# Using spaced numbering to ensure consistent ordering regardless of which steps are performed
+# Numbered to match processing steps: 00=input, 01-07=processing, 99=output
+# Optional steps (01, 05, 06) are skipped if not enabled
 INTERMEDIATE_DIRS = {
-    "frames": "00_original_frames",
-    "supersampled": "10_supersampled_frames", 
-    "depth_maps": "20_depth_maps",
-    "left_frames": "30_left_frames",
-    "right_frames": "31_right_frames",
-    "left_distorted": "40_left_distorted",
-    "right_distorted": "41_right_distorted",
-    "left_cropped": "45_left_cropped",      # Center/fisheye cropped frames
-    "right_cropped": "46_right_cropped",    # Center/fisheye cropped frames
-    "left_final": "50_left_final",          # Final resized frames
-    "right_final": "51_right_final",        # Final resized frames
-    "vr_frames": "99_vr_frames",            # Final VR frames (used by FFmpeg)
+    "frames": "00_original_frames",          # Step 1: Extracted input frames
+    "supersampled": "01_supersampled_frames", # Optional: Super sampling (if enabled)
+    "depth_maps": "02_depth_maps",           # Step 2: AI-generated depth maps
+    "left_frames": "04_left_frames",         # Step 4: Stereo pair - left eye
+    "right_frames": "04_right_frames",       # Step 4: Stereo pair - right eye
+    "left_distorted": "05_left_distorted",   # Step 5: Fisheye distortion - left (optional)
+    "right_distorted": "05_right_distorted", # Step 5: Fisheye distortion - right (optional)
+    "left_cropped": "06_left_cropped",       # Optional: Center cropped - left
+    "right_cropped": "06_right_cropped",     # Optional: Center cropped - right
+    "left_final": "07_left_final",           # Step 6: Final resized - left
+    "right_final": "07_right_final",         # Step 6: Final resized - right
+    "vr_frames": "99_vr_frames",             # Step 6: Final VR assembled frames (for FFmpeg)
 }
 
 # Model download URLs (Video-Depth-Anything)
