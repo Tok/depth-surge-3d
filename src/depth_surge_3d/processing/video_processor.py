@@ -121,7 +121,11 @@ class VideoProcessor:
                     update_processing_status(settings_file, "failed", {"error": "Depth map generation failed"})
                 return False
 
-            print(f"  -> Generated {len(depth_maps)} depth maps\n")
+            print(f"  -> Generated {len(depth_maps)} depth maps")
+            if settings['keep_intermediates'] and 'depth_maps' in directories:
+                print(f"  -> Saved to: {directories['depth_maps']}\n")
+            else:
+                print()
 
             # Step 3: Load frames for stereo processing
             print("Step 3/7: Loading frames for stereo processing...")
@@ -143,27 +147,75 @@ class VideoProcessor:
 
             print(f"  -> Loaded {len(frames)} frames\n")
 
-            # Step 4-7: Process stereo pairs and create VR frames
-            print("Steps 4-7: Creating stereo pairs and VR frames...")
-            success = self._process_stereo_and_vr(
+            # Step 4: Create stereo pairs
+            print("Step 4/7: Creating stereo pairs...")
+            success = self._create_stereo_pairs(
                 frames, depth_maps, frame_files, directories, settings, progress_tracker
             )
-
             if not success:
                 if settings_file:
-                    update_processing_status(settings_file, "failed", {"error": "Stereo/VR processing failed"})
+                    update_processing_status(settings_file, "failed", {"error": "Stereo pair creation failed"})
                 return False
+            print(f"  -> Created stereo pairs for {len(frames)} frames")
+            if settings['keep_intermediates'] and 'left_frames' in directories:
+                print(f"  -> Saved to: {directories['left_frames']} & {directories['right_frames']}\n")
+            else:
+                print()
 
-            # Create final video
-            print("\nCreating final video with audio...")
+            # Step 5: Apply fisheye distortion (if enabled)
+            if settings['apply_distortion']:
+                print("Step 5/7: Applying fisheye distortion...")
+                left_files = sorted(directories['left_frames'].glob('*.png')) if 'left_frames' in directories else []
+                right_files = sorted(directories['right_frames'].glob('*.png')) if 'right_frames' in directories else []
+                success = self._apply_distortion(
+                    left_files, right_files, directories, settings, progress_tracker
+                )
+                if not success:
+                    if settings_file:
+                        update_processing_status(settings_file, "failed", {"error": "Distortion failed"})
+                    return False
+                print(f"  -> Applied fisheye distortion to {len(left_files)} frames")
+                if settings['keep_intermediates'] and 'left_distorted' in directories:
+                    print(f"  -> Saved to: {directories['left_distorted']} & {directories['right_distorted']}\n")
+                else:
+                    print()
+            else:
+                print("Step 5/7: Skipping fisheye distortion (disabled)\n")
+
+            # Step 6: Create final VR frames
+            print("Step 6/7: Creating final VR frames...")
+            success = self._create_vr_frames(
+                directories, settings, progress_tracker, len(frames)
+            )
+            if not success:
+                if settings_file:
+                    update_processing_status(settings_file, "failed", {"error": "VR frame creation failed"})
+                return False
+            print(f"  -> Created {len(frames)} VR frames")
+            if 'vr_frames' in directories:
+                print(f"  -> Saved to: {directories['vr_frames']}\n")
+            else:
+                print()
+
+            # Step 7: Create final video
+            print("Step 7/7: Creating final video with audio...")
             success = self._create_output_video(
                 directories['vr_frames'], output_path, video_path, settings
             )
 
+            if success:
+                output_filename = generate_output_filename(
+                    Path(video_path).name,
+                    settings['vr_format'],
+                    settings['vr_resolution']
+                )
+                print(f"  -> Created final video: {output_filename}")
+                print(f"  -> Saved to: {output_path / output_filename}\n")
+
             progress_tracker.finish("Video processing complete")
 
             if success:
-                print(f"Processing complete. Output saved to: {output_path}")
+                print(f"✓ Processing complete!")
                 if settings_file:
                     update_processing_status(settings_file, "completed", {
                         "final_output": str(output_path / generate_output_filename(
@@ -430,7 +482,7 @@ class VideoProcessor:
             frame_name = frame_file.stem
             cv2.imwrite(str(depth_dir / f"{frame_name}.png"), depth_vis)
 
-    def _process_stereo_and_vr(
+    def _create_stereo_pairs(
         self,
         frames: np.ndarray,
         depth_maps: np.ndarray,
@@ -439,7 +491,7 @@ class VideoProcessor:
         settings: Dict[str, Any],
         progress_tracker
     ) -> bool:
-        """Process stereo pairs and create VR frames for all frames."""
+        """Create stereo pairs from frames and depth maps."""
         try:
             for i, (frame, depth_map, frame_file) in enumerate(zip(frames, depth_maps, frame_files)):
                 frame_name = frame_file.stem
@@ -464,23 +516,121 @@ class VideoProcessor:
                     if 'right_frames' in directories:
                         cv2.imwrite(str(directories['right_frames'] / f"{frame_name}.png"), right_img)
 
-                # Apply distortion and cropping
-                if settings['apply_distortion']:
-                    left_distorted = apply_fisheye_distortion(
-                        left_img, settings['fisheye_fov'], settings['fisheye_projection']
-                    )
-                    right_distorted = apply_fisheye_distortion(
-                        right_img, settings['fisheye_fov'], settings['fisheye_projection']
+                # Update progress
+                if i % 5 == 0 or i == len(frames) - 1:
+                    progress_tracker.update_progress(
+                        "Creating stereo pairs",
+                        phase="stereo_generation",
+                        frame_num=i + 1,
+                        step_name="Stereo Pair Creation",
+                        step_progress=i + 1,
+                        step_total=len(frames)
                     )
 
+            return True
+
+        except Exception as e:
+            print(f"Error creating stereo pairs: {e}")
+            return False
+
+    def _apply_distortion(
+        self,
+        left_files: List[Path],
+        right_files: List[Path],
+        directories: Dict[str, Path],
+        settings: Dict[str, Any],
+        progress_tracker
+    ) -> bool:
+        """Apply fisheye distortion to stereo pairs."""
+        try:
+            for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
+                # Load images
+                left_img = cv2.imread(str(left_file))
+                right_img = cv2.imread(str(right_file))
+
+                if left_img is None or right_img is None:
+                    print(f"Warning: Could not load {left_file} or {right_file}")
+                    continue
+
+                # Apply fisheye distortion
+                left_distorted = apply_fisheye_distortion(
+                    left_img, settings['fisheye_fov'], settings['fisheye_projection']
+                )
+                right_distorted = apply_fisheye_distortion(
+                    right_img, settings['fisheye_fov'], settings['fisheye_projection']
+                )
+
+                # Save distorted frames if keeping intermediates
+                if settings['keep_intermediates']:
+                    frame_name = left_file.stem
+                    if 'left_distorted' in directories:
+                        cv2.imwrite(str(directories['left_distorted'] / f"{frame_name}.png"), left_distorted)
+                    if 'right_distorted' in directories:
+                        cv2.imwrite(str(directories['right_distorted'] / f"{frame_name}.png"), right_distorted)
+
+                # Update progress
+                if i % 5 == 0 or i == len(left_files) - 1:
+                    progress_tracker.update_progress(
+                        "Applying distortion",
+                        phase="distortion",
+                        frame_num=i + 1,
+                        step_name="Fisheye Distortion",
+                        step_progress=i + 1,
+                        step_total=len(left_files)
+                    )
+
+            return True
+
+        except Exception as e:
+            print(f"Error applying distortion: {e}")
+            return False
+
+    def _create_vr_frames(
+        self,
+        directories: Dict[str, Path],
+        settings: Dict[str, Any],
+        progress_tracker,
+        total_frames: int
+    ) -> bool:
+        """Create final VR frames from processed left/right frames."""
+        try:
+            # Determine source directory based on whether distortion was applied
+            if settings['apply_distortion'] and 'left_distorted' in directories:
+                left_dir = directories['left_distorted']
+                right_dir = directories['right_distorted']
+            elif 'left_frames' in directories:
+                left_dir = directories['left_frames']
+                right_dir = directories['right_frames']
+            else:
+                print("Error: No stereo frames found")
+                return False
+
+            # Get frame files
+            left_files = sorted(left_dir.glob('*.png'))
+            right_files = sorted(right_dir.glob('*.png'))
+
+            if len(left_files) != len(right_files):
+                print(f"Warning: Mismatched frame count: {len(left_files)} left, {len(right_files)} right")
+
+            for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
+                # Load images
+                left_img = cv2.imread(str(left_file))
+                right_img = cv2.imread(str(right_file))
+
+                if left_img is None or right_img is None:
+                    print(f"Warning: Could not load {left_file} or {right_file}")
+                    continue
+
+                # Apply cropping and resizing
+                if settings['apply_distortion']:
                     fisheye_crop_factor = float(settings.get('fisheye_crop_factor', 1.0))
                     fisheye_crop_factor = max(0.7, min(1.5, fisheye_crop_factor))
 
                     left_cropped = apply_fisheye_square_crop(
-                        left_distorted, settings['per_eye_width'], settings['per_eye_height'], fisheye_crop_factor
+                        left_img, settings['per_eye_width'], settings['per_eye_height'], fisheye_crop_factor
                     )
                     right_cropped = apply_fisheye_square_crop(
-                        right_distorted, settings['per_eye_width'], settings['per_eye_height'], fisheye_crop_factor
+                        right_img, settings['per_eye_width'], settings['per_eye_height'], fisheye_crop_factor
                     )
 
                     left_final = resize_image(left_cropped, settings['per_eye_width'], settings['per_eye_height'])
@@ -500,23 +650,24 @@ class VideoProcessor:
 
                 # Save VR frame
                 if 'vr_frames' in directories:
+                    frame_name = left_file.stem
                     cv2.imwrite(str(directories['vr_frames'] / f"{frame_name}.png"), vr_frame)
 
                 # Update progress
-                if i % 5 == 0 or i == len(frames) - 1:
+                if i % 5 == 0 or i == len(left_files) - 1:
                     progress_tracker.update_progress(
                         "Creating VR frames",
                         phase="vr_assembly",
                         frame_num=i + 1,
                         step_name="Final Processing",
                         step_progress=i + 1,
-                        step_total=len(frames)
+                        step_total=len(left_files)
                     )
 
             return True
 
         except Exception as e:
-            print(f"Error processing stereo and VR frames: {e}")
+            print(f"Error creating VR frames: {e}")
             return False
 
     def _create_output_video(
