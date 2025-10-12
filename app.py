@@ -298,7 +298,7 @@ class ProgressCallback:
             step_percent = (self.step_progress / max(self.step_total, 1)) * 100 if self.step_total > 0 else 0
             print(f"[BATCH] Progress: {progress_data['progress']:.1f}% - Step {self.current_step_index + 1}/{len(self.steps)}: {step_name} ({step_percent:.1f}%)")
         else:
-            print(f"[SERIAL] Progress: {progress_data['progress']:.1f}% - {stage} - Frame {self.current_frame}/{self.total_frames} - Phase: {self.current_phase}")
+            print(f"Progress: {progress_data['progress']:.1f}% - {stage} - Frame {self.current_frame}/{self.total_frames} - Phase: {self.current_phase}")
         
         try:
             socketio.emit('progress_update', progress_data, room=self.session_id)
@@ -308,7 +308,7 @@ class ProgressCallback:
     
     def finish(self, message: str = "Processing complete"):
         """Finish progress tracking (compatibility with ProgressTracker interface)."""
-        print(f"[{self.processing_mode.upper()}] {message}")
+        print(f"{message}")
         try:
             socketio.emit('processing_complete', {
                 'success': True,

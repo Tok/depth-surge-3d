@@ -107,6 +107,8 @@ class VideoProcessor:
             print("  Using memory-efficient chunked processing...")
             progress_tracker.update_progress(
                 "Generating depth maps",
+                phase="depth_estimation",
+                frame_num=0,
                 step_name="Depth Map Generation",
                 step_progress=0,
                 step_total=len(frame_files)
@@ -125,6 +127,8 @@ class VideoProcessor:
             print("Step 3/7: Loading frames for stereo processing...")
             progress_tracker.update_progress(
                 "Loading frames",
+                phase="depth_estimation",
+                frame_num=0,
                 step_name="Frame Extraction",
                 step_progress=0,
                 step_total=len(frame_files)
@@ -248,6 +252,8 @@ class VideoProcessor:
                 if i % 10 == 0 or i == len(frame_files) - 1:
                     progress_tracker.update_progress(
                         "Loading frames",
+                        phase="depth_estimation",
+                        frame_num=i + 1,
                         step_name="Frame Extraction",
                         step_progress=i + 1,
                         step_total=len(frame_files)
@@ -373,6 +379,8 @@ class VideoProcessor:
                 # Update progress
                 progress_tracker.update_progress(
                     f"Depth maps: {chunk_end}/{num_frames}",
+                    phase="depth_estimation",
+                    frame_num=chunk_end,
                     step_name="Depth Map Generation",
                     step_progress=chunk_end,
                     step_total=num_frames
@@ -498,6 +506,8 @@ class VideoProcessor:
                 if i % 5 == 0 or i == len(frames) - 1:
                     progress_tracker.update_progress(
                         "Creating VR frames",
+                        phase="vr_assembly",
+                        frame_num=i + 1,
                         step_name="Final Processing",
                         step_progress=i + 1,
                         step_total=len(frames)
