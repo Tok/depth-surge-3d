@@ -2,13 +2,13 @@
 
 **Convert 2D videos to 3D VR format using AI depth estimation.**
 
-Depth Surge 3D is a command-line tool and web application that converts flat videos into stereoscopic 3D format for VR headsets and 3D displays. Using the **Depth Anything V2** neural network, it analyzes each frame to predict depth information, then generates left and right eye views for stereoscopic viewing.
+Depth Surge 3D is a command-line tool and web application that converts flat videos into stereoscopic 3D format for VR headsets and 3D displays. Using the **Video-Depth-Anything** neural network, it analyzes video frames with temporal consistency to predict depth information, then generates left and right eye views for stereoscopic viewing.
 
 ## How It Works
 
 The conversion process combines computer vision with stereoscopic rendering:
 
-1. **AI Depth Analysis**: Depth Anything V2 processes each video frame to create depth maps, estimating the 3D structure of the scene without requiring specialized camera equipment.
+1. **AI Depth Analysis**: Video-Depth-Anything processes video frames with temporal consistency to create smooth depth maps across time, estimating the 3D structure of the scene without requiring specialized camera equipment.
 
 2. **Stereo Pair Generation**: Using the predicted depth information, the system generates separate left and right eye images by shifting pixels based on their distance from the viewer - closer objects appear more separated, distant objects less so.
 
@@ -20,12 +20,12 @@ The result is 3D video that maintains the original content's motion and timing w
 
 ## Key Features
 
-- **AI Depth Estimation**: Uses Depth-Anything-V2 for monocular depth prediction
+- **Temporal Consistency**: Uses Video-Depth-Anything for smooth depth across frames with 32-frame sliding windows
+- **AI Depth Estimation**: Monocular depth prediction with video-aware processing
 - **Multiple VR Formats**: Supports side-by-side and over-under stereoscopic formats
 - **Flexible Resolutions**: Square (VR-optimized), 16:9 (standard), and custom resolutions
 - **Fisheye Distortion**: Multiple projection models for VR headset compatibility
 - **Auto-detection**: Optimal settings based on source content aspect ratio
-- **Batch & Serial Modes**: Choose between frame-by-frame or task-batched processing
 - **Resume Capability**: Save settings and resume interrupted processing
 - **Audio Preservation**: Maintains original audio synchronization
 - **Progress Tracking**: Real-time progress with ETA estimates
@@ -33,12 +33,19 @@ The result is 3D video that maintains the original content's motion and timing w
 - **GPU Acceleration**: CUDA support for faster processing
 - **Web Interface**: Browser-based interface alongside command-line tools
 - **Intermediate Files**: Optional saving of depth maps and processing stages
+- **Memory-efficient**: Chunked processing for long videos and high resolutions
 
 ## Requirements
 
 - Python 3.9+
 - FFmpeg
 - CUDA-compatible GPU (optional, for faster processing)
+
+## Based on Video-Depth-Anything
+
+This project uses [Video-Depth-Anything](https://github.com/DepthAnything/Video-Depth-Anything) for temporal-consistent depth estimation across video frames. The model processes frames in 32-frame chunks with overlap to ensure smooth depth transitions.
+
+The setup script automatically clones the repository and downloads the model weights.
 
 ## Installation
 
@@ -65,8 +72,8 @@ The setup script will automatically:
 - Install uv package manager (if not present, falls back to pip)
 - Create a virtual environment
 - Install all Python dependencies
-- Download Depth-Anything-V2 repository
-- Download Depth-Anything-V2-Large model (~1.3GB)
+- Download Video-Depth-Anything repository
+- Download Video-Depth-Anything-Large model (~1.3GB)
 - Verify system requirements
 
 ### Model Management
@@ -138,7 +145,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-#### Step 3: Download Depth-Anything-V2
+#### Step 3: Download Video-Depth-Anything
 
 **Option A: Automatic download (recommended)**
 ```bash
@@ -148,25 +155,25 @@ pip install -r requirements.txt
 **Option B: Manual download**
 ```bash
 # Clone the repository
-git clone https://github.com/DepthAnything/Depth-Anything-V2.git depth_anything_v2_repo
+git clone https://github.com/DepthAnything/Video-Depth-Anything.git video_depth_anything_repo
 
 # Create models directory
-mkdir -p models/Depth-Anything-V2-Large
+mkdir -p models/Video-Depth-Anything-Large
 
 # Download the model (choose one):
 # Large model (1.3GB) - best quality
-wget https://huggingface.co/depth-anything/Depth-Anything-V2-Large/resolve/main/depth_anything_v2_vitl.pth \
-     -O models/Depth-Anything-V2-Large/depth_anything_v2_vitl.pth
+wget https://huggingface.co/depth-anything/Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth \
+     -O models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth
 
 # OR Base model (390MB) - balanced
-mkdir -p models/Depth-Anything-V2-Base
-wget https://huggingface.co/depth-anything/Depth-Anything-V2-Base/resolve/main/depth_anything_v2_vitb.pth \
-     -O models/Depth-Anything-V2-Base/depth_anything_v2_vitb.pth
+mkdir -p models/Video-Depth-Anything-Base
+wget https://huggingface.co/depth-anything/Video-Depth-Anything-Base/resolve/main/video_depth_anything_vitb.pth \
+     -O models/Video-Depth-Anything-Base/video_depth_anything_vitb.pth
 
 # OR Small model (98MB) - fastest
-mkdir -p models/Depth-Anything-V2-Small  
-wget https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth \
-     -O models/Depth-Anything-V2-Small/depth_anything_v2_vits.pth
+mkdir -p models/Video-Depth-Anything-Small
+wget https://huggingface.co/depth-anything/Video-Depth-Anything-Small/resolve/main/video_depth_anything_vits.pth \
+     -O models/Video-Depth-Anything-Small/video_depth_anything_vits.pth
 ```
 
 #### Step 4: Verify Installation
@@ -285,9 +292,8 @@ python depth_surge_3d.py input_video.mp4 -s 01:30 -e 02:00 -f over_under --resol
 
 - `input_video`: Path to input video file
 - `-o, --output`: Output directory (default: ./output)
-- `-m, --model`: Path to Depth Anything V2 model file
+- `-m, --model`: Path to Video-Depth-Anything model file (auto-downloads if missing)
 - `-f, --format`: VR format - 'side_by_side' or 'over_under' (default: side_by_side)
-- `--processing-mode`: Processing mode - 'serial' or 'batch' (default: serial)
 - `--vr-resolution`: Resolution format including all aspect ratios (default: auto)
   - Square: square-480, square-720, square-1k, square-2k, square-3k, square-4k, square-5k
   - 16:9: 16x9-480p, 16x9-720p, 16x9-1080p, 16x9-1440p, 16x9-4k, 16x9-5k, 16x9-8k
@@ -359,27 +365,6 @@ python depth_surge_3d.py --vr-resolution custom:2560x1600 input.mp4  # Custom as
 - `16x9-4k` → 3840×2160 per eye (Ultra HD)
 - `16x9-5k` → 5120×2880 per eye (5K)
 - `16x9-8k` → 7680×4320 per eye (8K)
-
-## Processing Modes
-
-Depth Surge 3D offers two processing modes optimized for different scenarios:
-
-### Serial Mode (Default)
-- **Frame-by-frame processing**: Each frame goes through the complete pipeline before starting the next
-- **Lower memory usage**: Only one frame in memory at a time
-- **Predictable progress**: Clear frame-by-frame progress tracking
-- **Best for**: Limited memory systems, debugging, or when consistent memory usage is important
-
-### Batch Mode (Recommended for Performance)
-- **Task-by-task processing**: Complete each processing step for all frames before moving to the next step
-- **Parallelization**: Uses multiple CPU cores for significant speed improvements
-- **Higher memory usage**: Multiple frames processed simultaneously
-- **Step-based progress**: Tracks progress by processing steps rather than individual frames
-- **Best for**: Systems with ample RAM and multi-core CPUs
-
-### Performance Comparison
-- **Serial**: Predictable, lower memory, good for limited resources
-- **Batch**: 2-4x faster on multi-core systems, but requires more RAM
 
 ## VR Viewing
 
@@ -581,25 +566,24 @@ python depth_surge_3d.py --resume ./output/my_video_1234567890/
   },
   "processing_settings": {
     "vr_format": "side_by_side",
-    "vr_resolution": "16x9-1080p", 
+    "vr_resolution": "16x9-1080p",
     "baseline": 0.065,
-    "fisheye_fov": 105,
-    "processing_mode": "serial"
+    "fisheye_fov": 180
   },
   "output_info": {
-    "expected_output_filename": "sample_video_side-by-side_16x9-1080p_serial.mp4"
+    "expected_output_filename": "sample_video_side-by-side_16x9-1080p.mp4"
   }
 }
 ```
 
 ## Attribution
 
-This project builds upon the excellent **Depth-Anything-V2** model:
+This project builds upon the excellent **Video-Depth-Anything** model:
 
-- **Research Paper**: [Depth Anything V2](https://arxiv.org/abs/2406.09414) by Lihe Yang, Bingyi Kang, Zilong Huang, et al.
-- **Original Repository**: [DepthAnything/Depth-Anything-V2](https://github.com/DepthAnything/Depth-Anything-V2)
+- **Original Repository**: [DepthAnything/Video-Depth-Anything](https://github.com/DepthAnything/Video-Depth-Anything)
+- **Research Paper**: Based on Depth Anything V2 architecture with temporal consistency
 
-> Yang, L., Kang, B., Huang, Z., Zhao, Z., Xu, X., Feng, J., & Zhao, H. (2024). *Depth Anything V2*. arXiv preprint arXiv:2406.09414.
+Video-Depth-Anything provides temporally-consistent depth estimation across video frames, essential for smooth 3D VR experiences.
 
 ## Technical Details
 
@@ -608,7 +592,7 @@ This project builds upon the excellent **Depth-Anything-V2** model:
 The conversion process follows a multi-stage pipeline:
 
 1. **Video Preprocessing**: FFmpeg extracts frames and optionally enhances resolution and frame rate
-2. **AI Depth Analysis**: Depth Anything V2 neural network analyzes each frame to generate depth maps showing distance of every pixel
+2. **AI Depth Analysis**: Video-Depth-Anything neural network analyzes video frames in 32-frame chunks with temporal consistency to generate smooth depth maps showing distance of every pixel
 3. **Disparity Conversion**: Depth information is converted to horizontal disparity values using stereo camera parameters
 4. **Stereo Image Generation**: Both left and right eye images are created by shifting pixels based on their depth - closer objects appear more separated, distant objects less so
 5. **VR Lens Simulation**: Optional fisheye distortion and projection models simulate different VR headset optics
@@ -635,9 +619,10 @@ The conversion process follows a multi-stage pipeline:
 ## Performance
 
 - GPU processing is ~10x faster than CPU for depth estimation
-- Frame interpolation adds ~30% processing time but significantly improves VR smoothness
-- Upscaling from 720p to 1080p adds ~20% processing time
-- Typical processing: ~2-4 seconds per output frame on modern GPU (including enhancement)
+- Video model processes in 32-frame chunks for temporal consistency
+- Automatic memory management for 4K/HD videos with chunked processing
+- Better temporal consistency than frame-by-frame approaches
+- Typical processing: ~2-4 seconds per output frame on modern GPU
 
 ## Quality Expectations & Limitations
 
@@ -668,20 +653,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Third-Party Components and Attribution
 
-This project builds upon the **Depth-Anything-V2** model:
+This project builds upon the **Video-Depth-Anything** model:
 
-- **Original Repository**: [DepthAnything/Depth-Anything-V2](https://github.com/DepthAnything/Depth-Anything-V2)
-- **Research Paper**: [Depth Anything V2](https://arxiv.org/abs/2406.09414) (arXiv:2406.09414)
-- **Model License**: CC-BY-NC-4.0 (non-commercial use)
+- **Original Repository**: [DepthAnything/Video-Depth-Anything](https://github.com/DepthAnything/Video-Depth-Anything)
+- **Based on**: Depth Anything V2 architecture with temporal consistency
+- **Model License**: Check the Video-Depth-Anything repository for current license terms
 
-**Citation**:
-```bibtex
-@article{depth_anything_v2,
-  title={Depth Anything V2},
-  author={Yang, Lihe and Kang, Bingyi and Huang, Zilong and Zhao, Zhen and Xu, Xiaogang and Feng, Jiashi and Zhao, Hengshuang},
-  journal={arXiv:2406.09414},
-  year={2024}
-}
-```
-
-**Important**: The Depth-Anything-V2 models are licensed under CC-BY-NC-4.0, which permits academic and research use but restricts commercial use. Please review the [original license](https://github.com/DepthAnything/Depth-Anything-V2/blob/main/LICENSE) for complete terms.
+**Important**: Please review the [Video-Depth-Anything license](https://github.com/DepthAnything/Video-Depth-Anything) for complete terms before commercial use.
