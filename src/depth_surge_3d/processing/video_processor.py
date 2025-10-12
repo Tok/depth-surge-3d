@@ -103,18 +103,10 @@ class VideoProcessor:
                     })
                 return False
 
-            print(f"  -> Extracted {len(frame_files)} frames")
+            # Get timing and output unified completion message
+            duration = progress_callback.get_step_duration() if progress_callback else 0
+            print(f"  -> Extracted {len(frame_files)} frames in {duration:.2f}s")
             print(f"  -> Saved to: {directories.get('frames', 'N/A')}\n")
-
-            if progress_callback:
-                progress_callback.update_progress(
-                    "Frame extraction complete",
-                    phase="extraction",
-                    frame_num=len(frame_files),
-                    step_name="Frame Extraction",
-                    step_progress=1,
-                    step_total=1
-                )
 
             # Initialize progress tracker
             if progress_callback:
@@ -141,7 +133,9 @@ class VideoProcessor:
                     update_processing_status(settings_file, "failed", {"error": "Depth map generation failed"})
                 return False
 
-            print(f"  -> Generated {len(depth_maps)} depth maps")
+            # Get timing and output unified completion message
+            duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
+            print(f"  -> Generated {len(depth_maps)} depth maps in {duration:.2f}s")
             if settings['keep_intermediates'] and 'depth_maps' in directories:
                 print(f"  -> Saved to: {directories['depth_maps']}\n")
             else:
@@ -165,7 +159,9 @@ class VideoProcessor:
                     update_processing_status(settings_file, "failed", {"error": "Failed to load frames"})
                 return False
 
-            print(f"  -> Loaded {len(frames)} frames\n")
+            # Get timing and output unified completion message
+            duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
+            print(f"  -> Loaded {len(frames)} frames in {duration:.2f}s\n")
 
             # Step 4: Create stereo pairs
             print("Step 4/7: Creating stereo pairs...")
@@ -176,7 +172,9 @@ class VideoProcessor:
                 if settings_file:
                     update_processing_status(settings_file, "failed", {"error": "Stereo pair creation failed"})
                 return False
-            print(f"  -> Created stereo pairs for {len(frames)} frames")
+            # Get timing and output unified completion message
+            duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
+            print(f"  -> Created stereo pairs for {len(frames)} frames in {duration:.2f}s")
             if settings['keep_intermediates'] and 'left_frames' in directories:
                 print(f"  -> Saved to: {directories['left_frames']} & {directories['right_frames']}\n")
             else:
@@ -194,7 +192,9 @@ class VideoProcessor:
                     if settings_file:
                         update_processing_status(settings_file, "failed", {"error": "Distortion failed"})
                     return False
-                print(f"  -> Applied fisheye distortion to {len(left_files)} frames")
+                # Get timing and output unified completion message
+                duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
+                print(f"  -> Applied fisheye distortion to {len(left_files)} frames in {duration:.2f}s")
                 if settings['keep_intermediates'] and 'left_distorted' in directories:
                     print(f"  -> Saved to: {directories['left_distorted']} & {directories['right_distorted']}\n")
                 else:
@@ -211,7 +211,9 @@ class VideoProcessor:
                 if settings_file:
                     update_processing_status(settings_file, "failed", {"error": "VR frame creation failed"})
                 return False
-            print(f"  -> Created {len(frames)} VR frames")
+            # Get timing and output unified completion message
+            duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
+            print(f"  -> Created {len(frames)} VR frames in {duration:.2f}s")
             if 'vr_frames' in directories:
                 print(f"  -> Saved to: {directories['vr_frames']}\n")
             else:
@@ -239,18 +241,10 @@ class VideoProcessor:
                     settings['vr_format'],
                     settings['vr_resolution']
                 )
-                print(f"  -> Created final video: {output_filename}")
+                # Get timing and output unified completion message
+                duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
+                print(f"  -> Created final video in {duration:.2f}s")
                 print(f"  -> Saved to: {output_path / output_filename}\n")
-
-                if progress_callback:
-                    progress_callback.update_progress(
-                        "Video creation complete",
-                        phase="video_creation",
-                        frame_num=len(frames),
-                        step_name="Video Creation",
-                        step_progress=1,
-                        step_total=1
-                    )
 
             progress_tracker.finish("Video processing complete")
 

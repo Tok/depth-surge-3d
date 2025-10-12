@@ -231,11 +231,6 @@ class ProgressCallback:
         # Track step changes and timing
         if step_name and step_name != self.current_step_name:
             # New step started
-            if self.current_step_name and self.current_step_name in self.step_start_times:
-                # Previous step finished - calculate duration
-                duration = current_time - self.step_start_times[self.current_step_name]
-                print(f"  -> Completed in {duration:.2f}s\n")
-
             self.current_step_name = step_name
             self.step_start_times[step_name] = current_time
 
@@ -293,6 +288,13 @@ class ProgressCallback:
             vprint(f"Error emitting progress: {e}")
             # Don't let SocketIO errors stop processing - continue silently
     
+    def get_step_duration(self):
+        """Get duration of current step in seconds."""
+        import time
+        if self.current_step_name and self.current_step_name in self.step_start_times:
+            return time.time() - self.step_start_times[self.current_step_name]
+        return 0
+
     def finish(self, message: str = "Processing complete"):
         """Finish progress tracking (compatibility with ProgressTracker interface)."""
         print(f"{message}")

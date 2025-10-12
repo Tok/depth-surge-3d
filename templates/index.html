@@ -789,6 +789,29 @@
                         <div class="col-md-4">
                             <h6><i class="fas fa-video"></i> Video Enhancement & Processing</h6>
                             <div class="mb-3">
+                                <label class="form-label">Depth Model Size <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Smaller models use less VRAM but may be slightly less accurate. Use Small if you have OOM errors."></i></label>
+                                <select class="form-select" id="modelSize">
+                                    <option value="vitb" selected>Base (Balanced, ~8GB VRAM) - Recommended</option>
+                                    <option value="vits">Small (Fast, ~4GB VRAM)</option>
+                                    <option value="vitl">Large (Best Quality, ~12GB VRAM)</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-memory"></i> Base model recommended for 16GB GPUs<br>
+                                    <i class="fas fa-info-circle"></i> Use Small for 8GB GPUs or high-res videos
+                                </small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Depth Model Type <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Metric models provide actual depth in meters (better for VR). Relative models only provide depth ordering."></i></label>
+                                <select class="form-select" id="depthModelType">
+                                    <option value="metric" selected>Metric Depth (Accurate meters, best for VR)</option>
+                                    <option value="relative">Relative Depth (Ordering only, faster)</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-ruler"></i> Metric depth recommended for better 3D quality<br>
+                                    <i class="fas fa-brain"></i> Trained on Virtual KITTI and IRS datasets
+                                </small>
+                            </div>
+                            <div class="mb-3">
                                 <label class="form-label">Target Resolution</label>
                                 <select class="form-select" id="resolution">
                                     <option value="original">Keep Original</option>
@@ -831,29 +854,6 @@
                                     <option value="cuda">Force GPU (CUDA)</option>
                                     <option value="cpu">Force CPU</option>
                                 </select>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Depth Model Size <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Smaller models use less VRAM but may be slightly less accurate. Use Small if you have OOM errors."></i></label>
-                                <select class="form-select" id="modelSize">
-                                    <option value="vitb" selected>Base (Balanced, ~8GB VRAM) - Recommended</option>
-                                    <option value="vits">Small (Fast, ~4GB VRAM)</option>
-                                    <option value="vitl">Large (Best Quality, ~12GB VRAM)</option>
-                                </select>
-                                <small class="form-text text-muted">
-                                    <i class="fas fa-memory"></i> Base model recommended for 16GB GPUs<br>
-                                    <i class="fas fa-info-circle"></i> Use Small for 8GB GPUs or high-res videos
-                                </small>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Depth Model Type <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Metric models provide actual depth in meters (better for VR). Relative models only provide depth ordering."></i></label>
-                                <select class="form-select" id="depthModelType">
-                                    <option value="metric" selected>Metric Depth (Accurate meters, best for VR)</option>
-                                    <option value="relative">Relative Depth (Ordering only, faster)</option>
-                                </select>
-                                <small class="form-text text-muted">
-                                    <i class="fas fa-ruler"></i> Metric depth recommended for better 3D quality<br>
-                                    <i class="fas fa-brain"></i> Trained on Virtual KITTI and IRS datasets
-                                </small>
                             </div>
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="preserveAudio" checked>
