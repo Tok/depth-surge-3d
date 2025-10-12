@@ -163,6 +163,8 @@ class VideoDepthEstimator:
         """
         Estimate depth for a batch of video frames with temporal consistency.
 
+        Automatically chunks large videos to avoid OOM errors.
+
         Args:
             frames: Input frames array (shape: [N, H, W, 3], BGR format)
             target_fps: Target frame rate for processing
@@ -175,8 +177,36 @@ class VideoDepthEstimator:
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
+        # Check available memory and determine if we need to chunk
+        num_frames = len(frames)
+        frame_h, frame_w = frames[0].shape[:2]
+
+        # Estimate memory usage per frame (rough heuristic)
+        # High-res videos (>2K) need chunking on GPUs with <16GB VRAM
+        needs_chunking = (
+            self.device == 'cuda' and
+            torch.cuda.is_available() and
+            (frame_h * frame_w > 2000 * 2000 or num_frames > 60)
+        )
+
+        if needs_chunking and num_frames > 32:
+            # Process in overlapping chunks to maintain temporal consistency
+            print(f"Using memory-efficient chunked processing for {num_frames} frames")
+            return self._estimate_depth_chunked(frames, target_fps, input_size, fp32)
+        else:
+            # Process all at once (original behavior)
+            return self._estimate_depth_single_batch(frames, target_fps, input_size, fp32)
+
+    def _estimate_depth_single_batch(
+        self,
+        frames: np.ndarray,
+        target_fps: int,
+        input_size: int,
+        fp32: bool
+    ) -> np.ndarray:
+        """Process all frames in a single batch."""
         try:
-            # Convert BGR to RGB (OpenCV uses BGR, model expects RGB)
+            # Convert BGR to RGB
             frames_rgb = frames[..., ::-1].copy()
 
             # Call the video depth inference method
@@ -188,19 +218,105 @@ class VideoDepthEstimator:
                 fp32=fp32
             )
 
-            # Normalize depth maps to 0-1 range
-            normalized_depths = []
-            for depth in depths:
-                if depth.max() == depth.min():
-                    normalized = np.zeros_like(depth)
-                else:
-                    normalized = (depth - depth.min()) / (depth.max() - depth.min())
-                normalized_depths.append(np.clip(normalized, 0.0, 1.0))
-
-            return np.array(normalized_depths)
+            # Normalize depth maps
+            return self._normalize_depths(depths)
 
         except Exception as e:
             raise RuntimeError(f"Video depth estimation failed: {e}")
+
+    def _estimate_depth_chunked(
+        self,
+        frames: np.ndarray,
+        target_fps: int,
+        input_size: int,
+        fp32: bool
+    ) -> np.ndarray:
+        """Process frames in overlapping chunks to save memory."""
+        chunk_size = 32  # Process 32 frames at a time
+        overlap = 4      # Overlap frames for smooth transitions
+
+        all_depths = []
+        num_frames = len(frames)
+
+        for chunk_start in range(0, num_frames, chunk_size - overlap):
+            chunk_end = min(chunk_start + chunk_size, num_frames)
+
+            # Get chunk of frames
+            chunk_frames = frames[chunk_start:chunk_end]
+
+            print(f"  Processing frames {chunk_start+1}-{chunk_end}/{num_frames}")
+
+            # Convert BGR to RGB
+            frames_rgb = chunk_frames[..., ::-1].copy()
+
+            try:
+                # Process chunk
+                depths, _ = self.model.infer_video_depth(
+                    frames_rgb,
+                    target_fps,
+                    input_size=input_size,
+                    device=self.device,
+                    fp32=fp32
+                )
+
+                # Determine which frames to keep (handle overlap)
+                if chunk_start == 0:
+                    # First chunk: keep all
+                    keep_depths = depths
+                elif chunk_end == num_frames:
+                    # Last chunk: skip overlap frames
+                    keep_depths = depths[overlap:]
+                else:
+                    # Middle chunks: skip overlap frames
+                    keep_depths = depths[overlap:]
+
+                all_depths.extend(keep_depths)
+
+                # Clear CUDA cache between chunks
+                if self.device == 'cuda' and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    # If still OOM, try with smaller input size
+                    print(f"  OOM error, retrying with reduced resolution...")
+                    torch.cuda.empty_cache()
+
+                    # Retry with smaller input size
+                    depths, _ = self.model.infer_video_depth(
+                        frames_rgb,
+                        target_fps,
+                        input_size=max(384, input_size // 2),  # Reduce resolution
+                        device=self.device,
+                        fp32=fp32
+                    )
+
+                    # Same keep logic
+                    if chunk_start == 0:
+                        keep_depths = depths
+                    elif chunk_end == num_frames:
+                        keep_depths = depths[overlap:]
+                    else:
+                        keep_depths = depths[overlap:]
+
+                    all_depths.extend(keep_depths)
+                    torch.cuda.empty_cache()
+                else:
+                    raise
+
+        # Normalize all depth maps
+        return self._normalize_depths(np.array(all_depths))
+
+    def _normalize_depths(self, depths: np.ndarray) -> np.ndarray:
+        """Normalize depth maps to 0-1 range."""
+        normalized_depths = []
+        for depth in depths:
+            if depth.max() == depth.min():
+                normalized = np.zeros_like(depth)
+            else:
+                normalized = (depth - depth.min()) / (depth.max() - depth.min())
+            normalized_depths.append(np.clip(normalized, 0.0, 1.0))
+        return np.array(normalized_depths)
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""
