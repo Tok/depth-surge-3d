@@ -26,6 +26,7 @@ from ..utils.image_processing import (
     apply_fisheye_square_crop, create_vr_frame, hole_fill_image
 )
 from ..core.constants import INTERMEDIATE_DIRS
+from ..utils.console import step_complete, success as console_success, warning as console_warning
 
 
 class VideoProcessor:
@@ -105,8 +106,8 @@ class VideoProcessor:
 
             # Get timing and output unified completion message
             duration = progress_callback.get_step_duration() if progress_callback else 0
-            print(f"  -> Extracted {len(frame_files)} frames in {duration:.2f}s")
-            print(f"  -> Saved to: {directories.get('frames', 'N/A')}\n")
+            print(step_complete(f"Extracted {len(frame_files)} frames in {duration:.2f}s"))
+            print(step_complete(f"Saved to: {directories.get('frames', 'N/A')}\n"))
 
             # Initialize progress tracker
             if progress_callback:
@@ -135,9 +136,9 @@ class VideoProcessor:
 
             # Get timing and output unified completion message
             duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
-            print(f"  -> Generated {len(depth_maps)} depth maps in {duration:.2f}s")
+            print(step_complete(f"Generated {len(depth_maps)} depth maps in {duration:.2f}s"))
             if settings['keep_intermediates'] and 'depth_maps' in directories:
-                print(f"  -> Saved to: {directories['depth_maps']}\n")
+                print(step_complete(f"Saved to: {directories['depth_maps']}\n"))
             else:
                 print()
 
@@ -161,7 +162,7 @@ class VideoProcessor:
 
             # Get timing and output unified completion message
             duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
-            print(f"  -> Loaded {len(frames)} frames in {duration:.2f}s\n")
+            print(step_complete(f"Loaded {len(frames)} frames in {duration:.2f}s\n"))
 
             # Step 4: Create stereo pairs
             print("Step 4/7: Creating stereo pairs...")
@@ -174,9 +175,9 @@ class VideoProcessor:
                 return False
             # Get timing and output unified completion message
             duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
-            print(f"  -> Created stereo pairs for {len(frames)} frames in {duration:.2f}s")
+            print(step_complete(f"Created stereo pairs for {len(frames)} frames in {duration:.2f}s"))
             if settings['keep_intermediates'] and 'left_frames' in directories:
-                print(f"  -> Saved to: {directories['left_frames']} & {directories['right_frames']}\n")
+                print(step_complete(f"Saved to: {directories['left_frames']} & {directories['right_frames']}\n"))
             else:
                 print()
 
@@ -194,9 +195,9 @@ class VideoProcessor:
                     return False
                 # Get timing and output unified completion message
                 duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
-                print(f"  -> Applied fisheye distortion to {len(left_files)} frames in {duration:.2f}s")
+                print(step_complete(f"Applied fisheye distortion to {len(left_files)} frames in {duration:.2f}s"))
                 if settings['keep_intermediates'] and 'left_distorted' in directories:
-                    print(f"  -> Saved to: {directories['left_distorted']} & {directories['right_distorted']}\n")
+                    print(step_complete(f"Saved to: {directories['left_distorted']} & {directories['right_distorted']}\n"))
                 else:
                     print()
             else:
@@ -213,17 +214,17 @@ class VideoProcessor:
                 return False
             # Get timing and output unified completion message
             duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
-            print(f"  -> Created {len(frames)} VR frames in {duration:.2f}s")
+            print(step_complete(f"Created {len(frames)} VR frames in {duration:.2f}s"))
             if settings['keep_intermediates']:
                 if 'left_cropped' in directories:
-                    print(f"  -> Cropped: {directories['left_cropped']} & {directories['right_cropped']}")
+                    print(step_complete(f"Cropped: {directories['left_cropped']} & {directories['right_cropped']}"))
                 if 'left_final' in directories:
-                    print(f"  -> Resized: {directories['left_final']} & {directories['right_final']}")
+                    print(step_complete(f"Resized: {directories['left_final']} & {directories['right_final']}"))
                 if 'vr_frames' in directories:
-                    print(f"  -> VR frames: {directories['vr_frames']}\n")
+                    print(step_complete(f"VR frames: {directories['vr_frames']}\n"))
             else:
                 if 'vr_frames' in directories:
-                    print(f"  -> Saved to: {directories['vr_frames']}\n")
+                    print(step_complete(f"Saved to: {directories['vr_frames']}\n"))
                 else:
                     print()
 
@@ -251,13 +252,13 @@ class VideoProcessor:
                 )
                 # Get timing and output unified completion message
                 duration = progress_tracker.get_step_duration() if hasattr(progress_tracker, 'get_step_duration') else 0
-                print(f"  -> Created final video in {duration:.2f}s")
-                print(f"  -> Saved to: {output_path / output_filename}\n")
+                print(step_complete(f"Created final video in {duration:.2f}s"))
+                print(step_complete(f"Saved to: {output_path / output_filename}\n"))
 
             progress_tracker.finish("Video processing complete")
 
             if success:
-                print(f"✓ Processing complete!")
+                print(console_success("Processing complete!"))
                 if settings_file:
                     update_processing_status(settings_file, "completed", {
                         "final_output": str(output_path / generate_output_filename(

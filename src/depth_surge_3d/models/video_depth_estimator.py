@@ -14,6 +14,7 @@ from typing import Optional, Dict, Any, List
 import torch
 import numpy as np
 
+from ..utils.console import success as console_success, error as console_error
 from ..core.constants import (
     DEFAULT_MODEL_PATH, VIDEO_DEPTH_ANYTHING_REPO_DIR, MODEL_CONFIGS,
     MODEL_DOWNLOAD_URLS, MODEL_PATHS, ERROR_MESSAGES
@@ -132,10 +133,10 @@ class VideoDepthEstimator:
         try:
             print(f"Downloading video model to {self.model_path}...")
             urllib.request.urlretrieve(download_url, self.model_path)
-            print("✓ Video model downloaded successfully")
+            print(console_success("Video model downloaded successfully"))
             return True
         except Exception as e:
-            print(f"✗ Auto-download failed: {e}")
+            print(console_error(f"Auto-download failed: {e}"))
             print(f"Please download manually from: {download_url}")
             return False
 

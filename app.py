@@ -22,8 +22,9 @@ import shutil
 # This helps prevent memory fragmentation on GPU
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
-# Import our constants
+# Import our constants and utilities
 from src.depth_surge_3d.core.constants import INTERMEDIATE_DIRS, MODEL_PATHS, MODEL_PATHS_METRIC
+from src.depth_surge_3d.utils.console import warning as console_warning
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -299,7 +300,7 @@ class ProgressCallback:
             # Yield control to allow message to be sent immediately (fixes buffering issue)
             socketio.sleep(0)
         except Exception as e:
-            print(f"⚠️  Error emitting progress: {e}")
+            print(console_warning(f"Error emitting progress: {e}"))
             import traceback
             traceback.print_exc()
     
@@ -319,7 +320,7 @@ class ProgressCallback:
                 'message': message
             }, room=self.session_id)
         except Exception as e:
-            print(f"⚠️  Error emitting completion: {e}")
+            print(console_warning(f"Error emitting completion: {e}"))
 
 def process_video_async(session_id, video_path, settings, output_dir):
     """Process video in background thread"""
@@ -437,7 +438,7 @@ def process_video_async(session_id, video_path, settings, output_dir):
                 'message': 'Video processing completed successfully!'
             }, room=session_id)
         except Exception as e:
-            print(f"⚠️  Error emitting completion: {e}")
+            print(console_warning(f"Error emitting completion: {e}"))
 
     except InterruptedError as e:
         # Handle user-requested stop
@@ -447,7 +448,7 @@ def process_video_async(session_id, video_path, settings, output_dir):
                 'message': str(e)
             }, room=session_id)
         except Exception as emit_error:
-            print(f"⚠️  Error emitting stop: {emit_error}")
+            print(console_warning(f"Error emitting stop: {emit_error}"))
 
     except Exception as e:
         try:
@@ -456,7 +457,7 @@ def process_video_async(session_id, video_path, settings, output_dir):
                 'error': str(e)
             }, room=session_id)
         except Exception as emit_error:
-            print(f"⚠️  Error emitting error: {emit_error}")
+            print(console_warning(f"Error emitting error: {emit_error}"))
         print(f"Processing error: {e}")  # Always print errors
         
     finally:
@@ -908,7 +909,7 @@ def handle_join_session(data):
             }
             socketio.emit('progress_update', initial_data, room=session_id)
         except Exception as e:
-            print(f"⚠️  Error emitting initial progress: {e}")
+            print(console_warning(f"Error emitting initial progress: {e}"))
 
 if __name__ == '__main__':
     # Parse command line arguments

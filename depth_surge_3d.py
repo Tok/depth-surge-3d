@@ -21,6 +21,7 @@ from depth_surge_3d.utils.resolution import get_available_resolutions
 from depth_surge_3d.utils.file_operations import (
     validate_video_file, can_resume_processing, load_processing_settings
 )
+from depth_surge_3d.utils.console import warning as console_warning
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -295,7 +296,7 @@ def main():
         
         # Show warning for experimental features
         if args.experimental_frame_interpolation:
-            print("⚠️  WARNING: Experimental frame interpolation enabled!")
+            print(console_warning("WARNING: Experimental frame interpolation enabled!"))
             print("   This feature may produce artifacts, wobbling, or poor quality.")
             print("   Recommended for artistic experimentation only.")
             print()
