@@ -24,7 +24,7 @@ import shutil
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 # Import our constants
-from src.depth_surge_3d.core.constants import INTERMEDIATE_DIRS
+from src.depth_surge_3d.core.constants import INTERMEDIATE_DIRS, MODEL_PATHS
 
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -327,11 +327,15 @@ def process_video_async(session_id, video_path, settings, output_dir):
         current_processing['stop_requested'] = False
         
         # Initialize projector with Video-Depth-Anything model
-        model_path = settings.get('model_path', 'models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth')
+        # Use model_size setting to select the appropriate model
+        model_size = settings.get('model_size', 'vitl')  # Default to Large if not specified
+        model_path = settings.get('model_path', MODEL_PATHS.get(model_size, MODEL_PATHS['vitl']))
+
         device = settings.get('device', 'auto')
         if device == 'auto':
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            
+
+        print(f"Loading {model_size.upper()} model from: {model_path}")
         projector = create_stereo_projector(model_path, device)
         
         # Ensure the model is loaded before processing

@@ -836,6 +836,18 @@
                                     <option value="cpu">Force CPU</option>
                                 </select>
                             </div>
+                            <div class="mb-3">
+                                <label class="form-label">Depth Model Size <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Smaller models use less VRAM but may be slightly less accurate. Use Small if you have OOM errors."></i></label>
+                                <select class="form-select" id="modelSize">
+                                    <option value="vitl" selected>Large (Best Quality, ~12GB VRAM)</option>
+                                    <option value="vitb">Base (Good Quality, ~8GB VRAM)</option>
+                                    <option value="vits">Small (Fast, ~4GB VRAM)</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-memory"></i> Reduce model size if you get out-of-memory errors<br>
+                                    <i class="fas fa-info-circle"></i> Small model is recommended for 8GB GPUs or 1080p+ videos
+                                </small>
+                            </div>
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="preserveAudio" checked>
                                 <label class="form-check-label" for="preserveAudio">
@@ -1370,6 +1382,7 @@
                 preserve_audio: document.getElementById('preserveAudio').checked,
                 keep_intermediates: document.getElementById('keepIntermediates').checked,
                 device: document.getElementById('device').value,
+                model_size: document.getElementById('modelSize').value,
                 processing_mode: document.getElementById('processingMode').value,
                 super_sample: document.getElementById('superSample').value,
                 apply_distortion: document.getElementById('applyDistortion').checked,
@@ -1943,6 +1956,7 @@
                 targetFps: document.getElementById('targetFps').value,
                 superSample: document.getElementById('superSample').value,
                 device: document.getElementById('device').value,
+                modelSize: document.getElementById('modelSize').value,
                 processingMode: document.getElementById('processingMode').value,
                 
                 // Audio and intermediates
