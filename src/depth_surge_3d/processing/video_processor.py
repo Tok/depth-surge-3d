@@ -408,12 +408,12 @@ class VideoProcessor:
 
         all_depth_maps = []
         num_frames = len(frame_files)
+        total_chunks = (num_frames + chunk_size - 1) // chunk_size
 
         for chunk_start in range(0, num_frames, chunk_size):
             chunk_end = min(chunk_start + chunk_size, num_frames)
             chunk_files = frame_files[chunk_start:chunk_end]
-
-            print(f"  Chunk {chunk_start//chunk_size + 1}: frames {chunk_start+1}-{chunk_end}/{num_frames}")
+            chunk_num = chunk_start//chunk_size + 1
 
             # Load chunk of frames
             chunk_frames = []
@@ -468,9 +468,9 @@ class VideoProcessor:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
-                # Update progress
+                # Update progress with chunk info
                 progress_tracker.update_progress(
-                    f"Depth maps: {chunk_end}/{num_frames}",
+                    f"Chunk {chunk_num}/{total_chunks}: Depth maps {chunk_end}/{num_frames}",
                     phase="depth_estimation",
                     frame_num=chunk_end,
                     step_name="Depth Map Generation",
