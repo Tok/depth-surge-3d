@@ -16,15 +16,22 @@ import numpy as np
 
 from ..utils.console import success as console_success, error as console_error
 from ..core.constants import (
-    DEFAULT_MODEL_PATH, VIDEO_DEPTH_ANYTHING_REPO_DIR, MODEL_CONFIGS,
-    MODEL_DOWNLOAD_URLS, MODEL_PATHS, ERROR_MESSAGES
+    DEFAULT_MODEL_PATH,
+    VIDEO_DEPTH_ANYTHING_REPO_DIR,
+    MODEL_CONFIGS,
+    MODEL_DOWNLOAD_URLS,
+    MODEL_PATHS,
+    ERROR_MESSAGES,
+    DEPTH_MODEL_INPUT_SIZE,
+    DEPTH_MODEL_CHUNK_SIZE,
+    DEPTH_MODEL_DEFAULT_FPS,
 )
 
 
 class VideoDepthEstimator:
     """Handles video depth estimation using Video-Depth-Anything models."""
 
-    def __init__(self, model_path: str, device: str = 'auto', metric: bool = False):
+    def __init__(self, model_path: str, device: str = "auto", metric: bool = False):
         self.model_path = model_path
         self.device = self._determine_device(device)
         self.metric = metric
@@ -33,13 +40,13 @@ class VideoDepthEstimator:
 
     def _determine_device(self, device: str) -> str:
         """Determine the best device to use for inference."""
-        if device == 'auto':
+        if device == "auto":
             if torch.cuda.is_available():
-                return 'cuda'
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                return 'mps'
+                return "cuda"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                return "mps"
             else:
-                return 'cpu'
+                return "cpu"
         return device
 
     def load_model(self) -> bool:
@@ -72,13 +79,13 @@ class VideoDepthEstimator:
             self.model = VideoDepthAnything(**self.model_config, metric=self.metric)
 
             # Load state dict and fix key names if needed
-            state_dict = torch.load(self.model_path, map_location='cpu')
+            state_dict = torch.load(self.model_path, map_location="cpu")
 
             # Remap depth_head.* to head.* for compatibility
             fixed_state_dict = {}
             for key, value in state_dict.items():
-                if key.startswith('depth_head.'):
-                    new_key = key.replace('depth_head.', 'head.')
+                if key.startswith("depth_head."):
+                    new_key = key.replace("depth_head.", "head.")
                     fixed_state_dict[new_key] = value
                 else:
                     fixed_state_dict[key] = value
@@ -109,7 +116,9 @@ class VideoDepthEstimator:
         if not repo_path.exists():
             print("Video-Depth-Anything repository not found")
             print("Please ensure the repository is cloned:")
-            print(f"  git clone https://github.com/DepthAnything/Video-Depth-Anything.git {VIDEO_DEPTH_ANYTHING_REPO_DIR}")
+            print(
+                f"  git clone https://github.com/DepthAnything/Video-Depth-Anything.git {VIDEO_DEPTH_ANYTHING_REPO_DIR}"
+            )
             return False
 
         return True
@@ -144,22 +153,22 @@ class VideoDepthEstimator:
         """Determine model type from file path."""
         path_str = str(model_path).lower()
 
-        if 'vits' in path_str:
-            return 'vits'
-        elif 'vitb' in path_str:
-            return 'vitb'
-        elif 'vitl' in path_str:
-            return 'vitl'
+        if "vits" in path_str:
+            return "vits"
+        elif "vitb" in path_str:
+            return "vitb"
+        elif "vitl" in path_str:
+            return "vitl"
 
         # Fallback to large model
-        return 'vitl'
+        return "vitl"
 
     def estimate_depth_batch(
         self,
         frames: np.ndarray,
-        target_fps: int = 30,
-        input_size: int = 518,
-        fp32: bool = False
+        target_fps: int = DEPTH_MODEL_DEFAULT_FPS,
+        input_size: int = DEPTH_MODEL_INPUT_SIZE,
+        fp32: bool = False,
     ) -> np.ndarray:
         """
         Estimate depth for a batch of video frames with temporal consistency.
@@ -169,7 +178,7 @@ class VideoDepthEstimator:
         Args:
             frames: Input frames array (shape: [N, H, W, 3], BGR format)
             target_fps: Target frame rate for processing
-            input_size: Input size for the model (default: 518)
+            input_size: Input size for the model (default: DEPTH_MODEL_INPUT_SIZE)
             fp32: Use FP32 instead of FP16 (slower but more accurate)
 
         Returns:
@@ -185,12 +194,10 @@ class VideoDepthEstimator:
         # Estimate memory usage per frame (rough heuristic)
         # High-res videos (>2K) need chunking on GPUs with <16GB VRAM
         needs_chunking = (
-            self.device == 'cuda' and
-            torch.cuda.is_available() and
-            (frame_h * frame_w > 2000 * 2000 or num_frames > 60)
+            self.device == "cuda" and torch.cuda.is_available() and (frame_h * frame_w > 2000 * 2000 or num_frames > 60)
         )
 
-        if needs_chunking and num_frames > 32:
+        if needs_chunking and num_frames > DEPTH_MODEL_CHUNK_SIZE:
             # Process in overlapping chunks to maintain temporal consistency
             print(f"Using memory-efficient chunked processing for {num_frames} frames")
             return self._estimate_depth_chunked(frames, target_fps, input_size, fp32)
@@ -199,11 +206,7 @@ class VideoDepthEstimator:
             return self._estimate_depth_single_batch(frames, target_fps, input_size, fp32)
 
     def _estimate_depth_single_batch(
-        self,
-        frames: np.ndarray,
-        target_fps: int,
-        input_size: int,
-        fp32: bool
+        self, frames: np.ndarray, target_fps: int, input_size: int, fp32: bool
     ) -> np.ndarray:
         """Process all frames in a single batch."""
         try:
@@ -213,19 +216,16 @@ class VideoDepthEstimator:
             # Suppress tqdm output from Video-Depth-Anything
             import sys
             import os
+
             old_stdout = sys.stdout
             old_stderr = sys.stderr
             try:
-                sys.stdout = open(os.devnull, 'w')
-                sys.stderr = open(os.devnull, 'w')
+                sys.stdout = open(os.devnull, "w")
+                sys.stderr = open(os.devnull, "w")
 
                 # Call the video depth inference method
                 depths, _ = self.model.infer_video_depth(
-                    frames_rgb,
-                    target_fps,
-                    input_size=input_size,
-                    device=self.device,
-                    fp32=fp32
+                    frames_rgb, target_fps, input_size=input_size, device=self.device, fp32=fp32
                 )
             finally:
                 sys.stdout.close()
@@ -239,16 +239,10 @@ class VideoDepthEstimator:
         except Exception as e:
             raise RuntimeError(f"Video depth estimation failed: {e}")
 
-    def _estimate_depth_chunked(
-        self,
-        frames: np.ndarray,
-        target_fps: int,
-        input_size: int,
-        fp32: bool
-    ) -> np.ndarray:
+    def _estimate_depth_chunked(self, frames: np.ndarray, target_fps: int, input_size: int, fp32: bool) -> np.ndarray:
         """Process frames in overlapping chunks to save memory."""
-        chunk_size = 32  # Process 32 frames at a time
-        overlap = 4      # Overlap frames for smooth transitions
+        chunk_size = DEPTH_MODEL_CHUNK_SIZE
+        overlap = 4  # Overlap frames for smooth transitions
 
         all_depths = []
         num_frames = len(frames)
@@ -268,19 +262,16 @@ class VideoDepthEstimator:
                 # Suppress tqdm output from Video-Depth-Anything
                 import sys
                 import os
+
                 old_stdout = sys.stdout
                 old_stderr = sys.stderr
                 try:
-                    sys.stdout = open(os.devnull, 'w')
-                    sys.stderr = open(os.devnull, 'w')
+                    sys.stdout = open(os.devnull, "w")
+                    sys.stderr = open(os.devnull, "w")
 
                     # Process chunk
                     depths, _ = self.model.infer_video_depth(
-                        frames_rgb,
-                        target_fps,
-                        input_size=input_size,
-                        device=self.device,
-                        fp32=fp32
+                        frames_rgb, target_fps, input_size=input_size, device=self.device, fp32=fp32
                     )
                 finally:
                     sys.stdout.close()
@@ -302,7 +293,7 @@ class VideoDepthEstimator:
                 all_depths.extend(keep_depths)
 
                 # Clear CUDA cache between chunks
-                if self.device == 'cuda' and torch.cuda.is_available():
+                if self.device == "cuda" and torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
             except RuntimeError as e:
@@ -314,18 +305,19 @@ class VideoDepthEstimator:
                     # Retry with smaller input size (also suppress output)
                     import sys
                     import os
+
                     old_stdout = sys.stdout
                     old_stderr = sys.stderr
                     try:
-                        sys.stdout = open(os.devnull, 'w')
-                        sys.stderr = open(os.devnull, 'w')
+                        sys.stdout = open(os.devnull, "w")
+                        sys.stderr = open(os.devnull, "w")
 
                         depths, _ = self.model.infer_video_depth(
                             frames_rgb,
                             target_fps,
                             input_size=max(384, input_size // 2),  # Reduce resolution
                             device=self.device,
-                            fp32=fp32
+                            fp32=fp32,
                         )
                     finally:
                         sys.stdout.close()
@@ -374,7 +366,7 @@ class VideoDepthEstimator:
             "metric": self.metric,
             "model_path": self.model_path,
             "loaded": self.model is not None,
-            "temporal_consistency": True  # Key feature of video model
+            "temporal_consistency": True,  # Key feature of video model
         }
 
     def unload_model(self) -> None:
@@ -384,14 +376,12 @@ class VideoDepthEstimator:
             self.model = None
 
             # Clear GPU cache if using CUDA
-            if self.device == 'cuda' and torch.cuda.is_available():
+            if self.device == "cuda" and torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
 
 def create_video_depth_estimator(
-    model_path: Optional[str] = None,
-    device: str = 'auto',
-    metric: bool = False
+    model_path: Optional[str] = None, device: str = "auto", metric: bool = False
 ) -> VideoDepthEstimator:
     """
     Factory function to create a video depth estimator.

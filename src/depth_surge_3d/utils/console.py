@@ -4,38 +4,40 @@ Console output utilities for colored and formatted terminal text.
 Provides ANSI color codes for terminal output matching the UI theme.
 """
 
+
 # ANSI color codes
 class Colors:
     """ANSI color codes matching the UI theme."""
+
     # UI theme colors
-    LIME_GREEN = '\033[38;2;57;255;20m'  # --accent-lime: #39ff14
-    GREEN = '\033[38;2;0;255;65m'        # --accent-green: #00ff41
-    ELECTRIC_BLUE = '\033[38;2;0;217;255m'  # --accent-blue: #00d9ff (progress bar blue)
+    LIME_GREEN = "\033[38;2;57;255;20m"  # --accent-lime: #39ff14
+    GREEN = "\033[38;2;0;255;65m"  # --accent-green: #00ff41
+    ELECTRIC_BLUE = "\033[38;2;0;217;255m"  # --accent-blue: #00d9ff (progress bar blue)
 
     # Standard colors
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    GRAY = '\033[90m'
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    GRAY = "\033[90m"
 
     # Formatting
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-    RESET = '\033[0m'
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    RESET = "\033[0m"
 
     @staticmethod
     def disable():
         """Disable all colors (for piped output or when colors not supported)."""
-        Colors.LIME_GREEN = ''
-        Colors.GREEN = ''
-        Colors.ELECTRIC_BLUE = ''
-        Colors.RED = ''
-        Colors.YELLOW = ''
-        Colors.BLUE = ''
-        Colors.GRAY = ''
-        Colors.BOLD = ''
-        Colors.DIM = ''
-        Colors.RESET = ''
+        Colors.LIME_GREEN = ""
+        Colors.GREEN = ""
+        Colors.ELECTRIC_BLUE = ""
+        Colors.RED = ""
+        Colors.YELLOW = ""
+        Colors.BLUE = ""
+        Colors.GRAY = ""
+        Colors.BOLD = ""
+        Colors.DIM = ""
+        Colors.RESET = ""
 
 
 def success(text: str) -> str:
