@@ -7,10 +7,9 @@ which provides temporal consistency for video depth estimation.
 
 import os
 import sys
-import subprocess
 import urllib.request
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 import torch
 import numpy as np
 
@@ -20,8 +19,6 @@ from ..core.constants import (
     VIDEO_DEPTH_ANYTHING_REPO_DIR,
     MODEL_CONFIGS,
     MODEL_DOWNLOAD_URLS,
-    MODEL_PATHS,
-    ERROR_MESSAGES,
     DEPTH_MODEL_INPUT_SIZE,
     DEPTH_MODEL_CHUNK_SIZE,
     DEPTH_MODEL_DEFAULT_FPS,
@@ -94,14 +91,12 @@ class VideoDepthEstimator:
             self.model = self.model.to(self.device).eval()
 
             model_variant = "Metric-" if self.metric else ""
-            print(
-                f"Loaded {model_variant}Video-Depth-Anything ({model_type}) on {self.device}"
-            )
+            print(f"Loaded {model_variant}Video-Depth-Anything ({model_type}) on {self.device}")
             return True
 
         except Exception as e:
             print(f"Error loading video model: {e}")
-            print(f"Try downloading the model manually from:")
+            print("Try downloading the model manually from:")
             print(f"  {MODEL_DOWNLOAD_URLS.get(model_type, 'Unknown')}")
             return False
 
@@ -196,9 +191,7 @@ class VideoDepthEstimator:
         # Estimate memory usage per frame (rough heuristic)
         # High-res videos (>2K) need chunking on GPUs with <16GB VRAM
         needs_chunking = (
-            self.device == "cuda"
-            and torch.cuda.is_available()
-            and (frame_h * frame_w > 2000 * 2000 or num_frames > 60)
+            self.device == "cuda" and torch.cuda.is_available() and (frame_h * frame_w > 2000 * 2000 or num_frames > 60)
         )
 
         if needs_chunking and num_frames > DEPTH_MODEL_CHUNK_SIZE:
@@ -207,9 +200,7 @@ class VideoDepthEstimator:
             return self._estimate_depth_chunked(frames, target_fps, input_size, fp32)
         else:
             # Process all at once (original behavior)
-            return self._estimate_depth_single_batch(
-                frames, target_fps, input_size, fp32
-            )
+            return self._estimate_depth_single_batch(frames, target_fps, input_size, fp32)
 
     def _estimate_depth_single_batch(
         self, frames: np.ndarray, target_fps: int, input_size: int, fp32: bool
@@ -249,9 +240,7 @@ class VideoDepthEstimator:
         except Exception as e:
             raise RuntimeError(f"Video depth estimation failed: {e}")
 
-    def _estimate_depth_chunked(
-        self, frames: np.ndarray, target_fps: int, input_size: int, fp32: bool
-    ) -> np.ndarray:
+    def _estimate_depth_chunked(self, frames: np.ndarray, target_fps: int, input_size: int, fp32: bool) -> np.ndarray:
         """Process frames in overlapping chunks to save memory."""
         chunk_size = DEPTH_MODEL_CHUNK_SIZE
         overlap = 4  # Overlap frames for smooth transitions
@@ -263,30 +252,24 @@ class VideoDepthEstimator:
             chunk_end = min(chunk_start + chunk_size, num_frames)
             chunk_frames = frames[chunk_start:chunk_end]
 
-            print(f"  Processing frames {chunk_start+1}-{chunk_end}/{num_frames}")
+            print(f"  Processing frames {chunk_start + 1}-{chunk_end}/{num_frames}")
 
             # Convert BGR to RGB
             frames_rgb = chunk_frames[..., ::-1].copy()
 
             try:
                 # Process chunk with output suppression
-                depths = self._process_depth_chunk(
-                    frames_rgb, target_fps, input_size, fp32
-                )
+                depths = self._process_depth_chunk(frames_rgb, target_fps, input_size, fp32)
 
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
                     # Retry with reduced resolution
-                    depths = self._retry_chunk_with_reduced_resolution(
-                        frames_rgb, target_fps, input_size, fp32
-                    )
+                    depths = self._retry_chunk_with_reduced_resolution(frames_rgb, target_fps, input_size, fp32)
                 else:
                     raise
 
             # Determine which frames to keep (handle overlap)
-            keep_depths = self._determine_chunk_overlap(
-                chunk_start, chunk_end, num_frames, overlap, depths
-            )
+            keep_depths = self._determine_chunk_overlap(chunk_start, chunk_end, num_frames, overlap, depths)
             all_depths.extend(keep_depths)
 
             # Clear CUDA cache between chunks
@@ -329,9 +312,7 @@ class VideoDepthEstimator:
         else:
             return depths[overlap:]  # Middle chunks: skip overlap frames
 
-    def _process_depth_chunk(
-        self, frames_rgb: np.ndarray, target_fps: int, input_size: int, fp32: bool
-    ) -> np.ndarray:
+    def _process_depth_chunk(self, frames_rgb: np.ndarray, target_fps: int, input_size: int, fp32: bool) -> np.ndarray:
         """Process a single chunk for depth estimation with output suppression."""
         with self._suppress_model_output():
             depths, _ = self.model.infer_video_depth(
@@ -347,7 +328,7 @@ class VideoDepthEstimator:
         self, frames_rgb: np.ndarray, target_fps: int, input_size: int, fp32: bool
     ) -> np.ndarray:
         """Retry depth processing with reduced input size on OOM error."""
-        print(f"  OOM error, retrying with reduced resolution...")
+        print("  OOM error, retrying with reduced resolution...")
         torch.cuda.empty_cache()
 
         with self._suppress_model_output():

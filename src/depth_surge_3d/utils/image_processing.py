@@ -7,10 +7,10 @@ and geometric transformations without side effects.
 
 import cv2
 import numpy as np
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional
 import math
 
-from ..core.constants import DEPTH_MAP_SCALE, MIN_DEPTH_VALUE, MAX_DEPTH_VALUE, FISHEYE_PROJECTIONS, MIN_FOV, MAX_FOV
+from ..core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE
 
 
 def resize_image(

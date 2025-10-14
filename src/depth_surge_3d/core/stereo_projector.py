@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 
-from ..models.video_depth_estimator import VideoDepthEstimator, create_video_depth_estimator
+from ..models.video_depth_estimator import create_video_depth_estimator
 from ..utils.resolution import (
     get_resolution_dimensions,
     calculate_vr_output_dimensions,
@@ -21,12 +21,9 @@ from ..utils.resolution import (
 from ..utils.file_operations import (
     validate_video_file,
     get_video_properties,
-    create_output_directories,
-    get_frame_files,
-    generate_output_filename,
 )
 from ..processing.video_processor import VideoProcessor
-from ..core.constants import DEFAULT_SETTINGS, VR_RESOLUTIONS
+from ..core.constants import DEFAULT_SETTINGS
 
 
 class StereoProjector:
@@ -352,7 +349,7 @@ class StereoProjector:
 
         # Run FFmpeg
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"FFmpeg frame extraction failed: {e.stderr}")
 
@@ -487,7 +484,7 @@ class StereoProjector:
         # Run FFmpeg
         try:
             print(f"Running FFmpeg command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
             return True
         except subprocess.CalledProcessError as e:
             print(f"FFmpeg video creation failed: {e.stderr}")

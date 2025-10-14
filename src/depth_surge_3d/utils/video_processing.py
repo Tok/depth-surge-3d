@@ -6,7 +6,7 @@ Extracted from app.py to keep it under 500 LOC
 
 import numpy as np
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any, List
+from typing import Callable, Dict, List
 from ..core.constants import INTERMEDIATE_DIRS
 
 
@@ -109,7 +109,7 @@ def process_video_batch(projector, callback: Callable, frame_files: List[Path], 
     total_frames = len(frame_files)
 
     # Get cv2 for this function
-    cv2 = _get_cv2()
+    _get_cv2()
 
     # Phase 1: Super sampling (if needed)
     if super_sample_width != 1920 or super_sample_height != 1080:  # Only if different from defaults

@@ -6,7 +6,7 @@ side effects and clear separation of concerns.
 """
 
 import time
-from typing import Optional, List, Callable, Any
+from typing import Optional, Callable
 from abc import ABC, abstractmethod
 
 try:

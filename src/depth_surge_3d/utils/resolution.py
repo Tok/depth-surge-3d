@@ -6,9 +6,8 @@ and auto-detection based on source content.
 """
 
 from typing import Tuple, Optional, Dict, Any
-import re
 
-from ..core.constants import VR_RESOLUTIONS, RESOLUTION_CATEGORIES
+from ..core.constants import VR_RESOLUTIONS
 
 
 def parse_custom_resolution(resolution_string: str) -> Optional[Tuple[int, int]]:

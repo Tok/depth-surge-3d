@@ -5,8 +5,7 @@ This module contains all default settings, magic numbers, and configuration
 values used throughout the application.
 """
 
-from typing import Dict, Tuple, Any
-from pathlib import Path
+from typing import Dict, Tuple
 
 # Version and project info
 PROJECT_NAME = "Depth Surge 3D"
