@@ -80,7 +80,8 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
                 "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
                 "fps": float(cap.get(cv2.CAP_PROP_FPS)),
                 "frame_count": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-                "duration": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) / float(cap.get(cv2.CAP_PROP_FPS)),
+                "duration": int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                / float(cap.get(cv2.CAP_PROP_FPS)),
                 "codec": int(cap.get(cv2.CAP_PROP_FOURCC)),
             }
         )
@@ -105,7 +106,16 @@ def get_video_info_ffprobe(video_path: str) -> Dict[str, Any]:
         Dictionary with video information
     """
     try:
-        cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", video_path]
+        cmd = [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            video_path,
+        ]
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
@@ -121,7 +131,10 @@ def get_video_info_ffprobe(video_path: str) -> Dict[str, Any]:
 
 
 def calculate_frame_range(
-    total_frames: int, fps: float, start_time: Optional[str] = None, end_time: Optional[str] = None
+    total_frames: int,
+    fps: float,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
 ) -> Tuple[int, int]:
     """
     Calculate frame range from time specifications.
@@ -181,7 +194,9 @@ def parse_time_string(time_str: str) -> Optional[float]:
     return None
 
 
-def create_output_directories(base_path: Path, keep_intermediates: bool = True) -> Dict[str, Path]:
+def create_output_directories(
+    base_path: Path, keep_intermediates: bool = True
+) -> Dict[str, Path]:
     """
     Create output directory structure.
 
@@ -256,7 +271,9 @@ def generate_output_filename(
     base_name: str,
     vr_format: str,
     vr_resolution: str,
-    processing_mode: Optional[str] = None,  # Deprecated, kept for backwards compatibility
+    processing_mode: Optional[
+        str
+    ] = None,  # Deprecated, kept for backwards compatibility
 ) -> str:
     """
     Generate output filename with metadata.
@@ -363,7 +380,65 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size:.1f} {units[unit_index]}"
 
 
-def cleanup_intermediate_files(base_path: Path, keep_patterns: Optional[List[str]] = None) -> int:
+def _should_keep_file(file_path: Path, keep_patterns: List[str]) -> bool:
+    """
+    Check if file should be kept based on pattern matching.
+
+    Args:
+        file_path: Path to file to check
+        keep_patterns: List of patterns to keep
+
+    Returns:
+        True if file should be kept
+    """
+    for pattern in keep_patterns:
+        if file_path.match(pattern):
+            return True
+    return False
+
+
+def _remove_file_safe(file_path: Path) -> bool:
+    """
+    Safely remove a file, handling errors.
+
+    Args:
+        file_path: Path to file to remove
+
+    Returns:
+        True if file was removed successfully
+    """
+    try:
+        file_path.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def _cleanup_directory(directory: Path, keep_patterns: List[str]) -> int:
+    """
+    Clean up files in a single directory.
+
+    Args:
+        directory: Directory to clean
+        keep_patterns: Patterns to keep
+
+    Returns:
+        Number of files removed
+    """
+    removed_count = 0
+
+    for file_path in directory.rglob("*"):
+        if file_path.is_file():
+            if not _should_keep_file(file_path, keep_patterns):
+                if _remove_file_safe(file_path):
+                    removed_count += 1
+
+    return removed_count
+
+
+def cleanup_intermediate_files(
+    base_path: Path, keep_patterns: Optional[List[str]] = None
+) -> int:
     """
     Clean up intermediate files, optionally keeping certain patterns.
 
@@ -380,24 +455,8 @@ def cleanup_intermediate_files(base_path: Path, keep_patterns: Optional[List[str
     try:
         for intermediate_dir in INTERMEDIATE_DIRS.values():
             full_dir = base_path / intermediate_dir
-            if not full_dir.exists():
-                continue
-
-            for file_path in full_dir.rglob("*"):
-                if file_path.is_file():
-                    # Check if file matches any keep pattern
-                    should_keep = False
-                    for pattern in keep_patterns:
-                        if file_path.match(pattern):
-                            should_keep = True
-                            break
-
-                    if not should_keep:
-                        try:
-                            file_path.unlink()
-                            removed_count += 1
-                        except OSError:
-                            pass
+            if full_dir.exists():
+                removed_count += _cleanup_directory(full_dir, keep_patterns)
 
     except (OSError, PermissionError):
         pass
@@ -413,7 +472,9 @@ def verify_ffmpeg_installation() -> bool:
         True if FFmpeg is available
     """
     try:
-        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=10
+        )
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
@@ -522,7 +583,9 @@ def save_processing_settings(
         "output_info": {
             "output_directory": str(output_dir),
             "expected_output_filename": generate_output_filename(
-                Path(source_video_path).name, settings["vr_format"], settings["vr_resolution"]
+                Path(source_video_path).name,
+                settings["vr_format"],
+                settings["vr_resolution"],
             ),
         },
     }
@@ -541,7 +604,10 @@ def save_processing_settings(
         print(f"Warning: Could not save settings file: {e}")
         # Create a minimal fallback file
         fallback_data = {
-            "metadata": {"batch_name": batch_name, "error": f"Failed to save full settings: {e}"},
+            "metadata": {
+                "batch_name": batch_name,
+                "error": f"Failed to save full settings: {e}",
+            },
             "processing_settings": settings,
         }
         try:
@@ -604,14 +670,18 @@ def update_processing_status(
         settings_data["metadata"]["last_updated_timestamp"] = time.time()
 
         if status == "completed":
-            settings_data["metadata"]["completed_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            settings_data["metadata"]["completed_at"] = time.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             settings_data["metadata"]["completed_timestamp"] = time.time()
 
             # Calculate processing duration
             if "created_timestamp" in settings_data["metadata"]:
                 duration = time.time() - settings_data["metadata"]["created_timestamp"]
                 settings_data["metadata"]["processing_duration_seconds"] = duration
-                settings_data["metadata"]["processing_duration_formatted"] = format_time_duration(duration)
+                settings_data["metadata"]["processing_duration_formatted"] = (
+                    format_time_duration(duration)
+                )
 
         # Add any additional info
         if additional_info:
@@ -630,7 +700,9 @@ def update_processing_status(
         return False
 
 
-def find_settings_file(output_dir: Path, batch_name: Optional[str] = None) -> Optional[Path]:
+def find_settings_file(
+    output_dir: Path, batch_name: Optional[str] = None
+) -> Optional[Path]:
     """
     Find a settings file in the output directory.
 
@@ -710,7 +782,9 @@ def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
                     f"Found {progress_info['frames_processed']} processed frames - can resume from where left off"
                 )
             else:
-                result["recommendations"].append("No processed frames found - will restart from beginning")
+                result["recommendations"].append(
+                    "No processed frames found - will restart from beginning"
+                )
 
         return result
 
@@ -719,7 +793,9 @@ def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
         return result
 
 
-def analyze_processing_progress(output_dir: Path, settings_data: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_processing_progress(
+    output_dir: Path, settings_data: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Analyze how much processing has been completed.
 
@@ -743,7 +819,10 @@ def analyze_processing_progress(output_dir: Path, settings_data: Dict[str, Any])
             stage_dir = output_dir / dir_name
             if stage_dir.exists():
                 frame_count = len(list(stage_dir.glob("*.png")))
-                progress["intermediate_stages"][stage_name] = {"directory": str(stage_dir), "frames_found": frame_count}
+                progress["intermediate_stages"][stage_name] = {
+                    "directory": str(stage_dir),
+                    "frames_found": frame_count,
+                }
 
                 if stage_name == "vr_frames":
                     progress["vr_frames_created"] = frame_count

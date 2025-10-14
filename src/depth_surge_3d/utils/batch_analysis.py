@@ -21,7 +21,9 @@ def _get_cv2():
 
         return cv2
     except ImportError:
-        raise ImportError("opencv-python is required for image processing. Install with: pip install opencv-python")
+        raise ImportError(
+            "opencv-python is required for image processing. Install with: pip install opencv-python"
+        )
 
 
 def analyze_batch_directory(batch_path: Path) -> Dict[str, Any]:
@@ -36,16 +38,7 @@ def analyze_batch_directory(batch_path: Path) -> Dict[str, Any]:
     """
     batch_path = Path(batch_path)
 
-    analysis = {
-        "frame_count": 0,
-        "vr_format": "unknown",
-        "resolution": "unknown",
-        "highest_stage": "none",
-        "has_audio": False,
-        "settings_summary": "unknown",
-    }
-
-    # Check for different processing stages using constants
+    # Define processing stages
     stages = {
         INTERMEDIATE_DIRS["vr_frames"]: "Final VR frames",
         INTERMEDIATE_DIRS["left_final"]: "Final left frames",
@@ -61,67 +54,35 @@ def analyze_batch_directory(batch_path: Path) -> Dict[str, Any]:
         INTERMEDIATE_DIRS["frames"]: "Original frames",
     }
 
-    highest_stage_num = 0
-    for stage_dir, stage_name in stages.items():
-        stage_path = batch_path / stage_dir
-        if stage_path.exists():
-            png_files = list(stage_path.glob("*.png"))
-            if png_files:
-                analysis["frame_count"] = max(analysis["frame_count"], len(png_files))
-                current_stage_num = _get_stage_number(stage_dir)
-                if current_stage_num > highest_stage_num:
-                    highest_stage_num = current_stage_num
-                    analysis["highest_stage"] = stage_name
+    # Detect highest processing stage and frame count
+    highest_stage_num, highest_stage_name, frame_count = _detect_highest_stage(
+        batch_path, stages
+    )
 
-    # Detect VR format and resolution from highest stage
-    if highest_stage_num >= 50:  # Final frames available
-        sample_frame_dirs = [
-            d
-            for d in [INTERMEDIATE_DIRS["left_final"], INTERMEDIATE_DIRS["right_final"], INTERMEDIATE_DIRS["vr_frames"]]
-            if (batch_path / d).exists()
-        ]
-        for frame_dir in sample_frame_dirs:
-            frame_path = batch_path / frame_dir
-            sample_frames = list(frame_path.glob("*.png"))
-            if sample_frames:
-                try:
-                    cv2 = _get_cv2()
-                    sample_img = cv2.imread(str(sample_frames[0]))
-                    if sample_img is not None:
-                        h, w = sample_img.shape[:2]
-                        analysis["resolution"] = f"{w}x{h}"
+    # Detect VR format and resolution
+    vr_format, resolution = _detect_vr_format_and_resolution(
+        batch_path, highest_stage_num
+    )
 
-                        # Detect format based on aspect ratio
-                        if frame_dir == INTERMEDIATE_DIRS["vr_frames"]:
-                            if w > h * 1.5:
-                                analysis["vr_format"] = "side_by_side"
-                            else:
-                                analysis["vr_format"] = "over_under"
-                        break
-                except Exception:
-                    continue
+    # Load settings summary
+    settings_summary = _load_settings_summary(batch_path)
 
-    # Try to load settings
-    settings_files = list(batch_path.glob("*-settings.json"))
-    if settings_files:
-        try:
-            with open(settings_files[0], "r") as f:
-                settings = json.load(f)
-                analysis["settings_summary"] = _summarize_settings(settings)
-        except Exception:
-            pass
+    # Check audio availability
+    has_audio = _detect_audio_availability(batch_path)
 
-    # Check for audio
-    video_extensions = ["*.mp4", "*.avi", "*.mov", "*.mkv"]
-    for ext in video_extensions:
-        if list(batch_path.parent.parent.glob(f"uploads/{ext}")):  # Check uploads dir
-            analysis["has_audio"] = True
-            break
-
-    return analysis
+    return {
+        "frame_count": frame_count,
+        "vr_format": vr_format,
+        "resolution": resolution,
+        "highest_stage": highest_stage_name,
+        "has_audio": has_audio,
+        "settings_summary": settings_summary,
+    }
 
 
-def create_video_from_batch(batch_path: Path, settings: Dict[str, Any]) -> Optional[Path]:
+def create_video_from_batch(
+    batch_path: Path, settings: Dict[str, Any]
+) -> Optional[Path]:
     """
     Create video from batch frames using FFmpeg.
 
@@ -142,7 +103,11 @@ def create_video_from_batch(batch_path: Path, settings: Dict[str, Any]) -> Optio
     # Determine frame directory to use
     if frame_source == "auto":
         # Auto-detect highest available stage
-        stages = [INTERMEDIATE_DIRS["vr_frames"], INTERMEDIATE_DIRS["left_final"], INTERMEDIATE_DIRS["right_final"]]
+        stages = [
+            INTERMEDIATE_DIRS["vr_frames"],
+            INTERMEDIATE_DIRS["left_final"],
+            INTERMEDIATE_DIRS["right_final"],
+        ]
         frame_dir = None
         for stage in stages:
             stage_path = batch_path / stage
@@ -173,7 +138,14 @@ def create_video_from_batch(batch_path: Path, settings: Dict[str, Any]) -> Optio
     output_path = batch_path / output_filename
 
     # Build FFmpeg command
-    cmd = ["ffmpeg", "-y", "-framerate", str(fps), "-i", str(frame_dir / "frame_%06d.png")]
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-framerate",
+        str(fps),
+        "-i",
+        str(frame_dir / "frame_%06d.png"),
+    ]
 
     # Quality settings
     quality_settings = {
@@ -204,6 +176,105 @@ def _get_stage_number(stage_dir: str) -> int:
         return int(stage_dir.split("_")[0])
     except (ValueError, IndexError):
         return 0
+
+
+def _detect_highest_stage(
+    batch_path: Path, stages: Dict[str, str]
+) -> tuple[int, str, int]:
+    """
+    Detect the highest processing stage and frame count.
+
+    Returns:
+        Tuple of (highest_stage_num, highest_stage_name, frame_count)
+    """
+    highest_stage_num = 0
+    highest_stage_name = "none"
+    frame_count = 0
+
+    for stage_dir, stage_name in stages.items():
+        stage_path = batch_path / stage_dir
+        if stage_path.exists():
+            png_files = list(stage_path.glob("*.png"))
+            if png_files:
+                frame_count = max(frame_count, len(png_files))
+                current_stage_num = _get_stage_number(stage_dir)
+                if current_stage_num > highest_stage_num:
+                    highest_stage_num = current_stage_num
+                    highest_stage_name = stage_name
+
+    return highest_stage_num, highest_stage_name, frame_count
+
+
+def _detect_vr_format_and_resolution(
+    batch_path: Path, highest_stage_num: int
+) -> tuple[str, str]:
+    """
+    Detect VR format and resolution from sample frames.
+
+    Returns:
+        Tuple of (vr_format, resolution)
+    """
+    vr_format = "unknown"
+    resolution = "unknown"
+
+    if highest_stage_num < 50:  # Final frames not available
+        return vr_format, resolution
+
+    sample_frame_dirs = [
+        d
+        for d in [
+            INTERMEDIATE_DIRS["left_final"],
+            INTERMEDIATE_DIRS["right_final"],
+            INTERMEDIATE_DIRS["vr_frames"],
+        ]
+        if (batch_path / d).exists()
+    ]
+
+    for frame_dir in sample_frame_dirs:
+        frame_path = batch_path / frame_dir
+        sample_frames = list(frame_path.glob("*.png"))
+        if sample_frames:
+            try:
+                cv2 = _get_cv2()
+                sample_img = cv2.imread(str(sample_frames[0]))
+                if sample_img is not None:
+                    h, w = sample_img.shape[:2]
+                    resolution = f"{w}x{h}"
+
+                    # Detect format based on aspect ratio
+                    if frame_dir == INTERMEDIATE_DIRS["vr_frames"]:
+                        if w > h * 1.5:
+                            vr_format = "side_by_side"
+                        else:
+                            vr_format = "over_under"
+                    break
+            except Exception:
+                continue
+
+    return vr_format, resolution
+
+
+def _load_settings_summary(batch_path: Path) -> str:
+    """Load and summarize settings from settings file."""
+    settings_files = list(batch_path.glob("*-settings.json"))
+    if not settings_files:
+        return "unknown"
+
+    try:
+        with open(settings_files[0], "r") as f:
+            settings = json.load(f)
+            return _summarize_settings(settings)
+    except Exception:
+        return "unknown"
+
+
+def _detect_audio_availability(batch_path: Path) -> bool:
+    """Check if audio is available in uploads directory."""
+    video_extensions = ["*.mp4", "*.avi", "*.mov", "*.mkv"]
+    for ext in video_extensions:
+        if list(batch_path.parent.parent.glob(f"uploads/{ext}")):
+            return True
+    return False
 
 
 def _summarize_settings(settings: Dict[str, Any]) -> str:
