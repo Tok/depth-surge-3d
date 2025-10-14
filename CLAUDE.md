@@ -172,17 +172,4 @@ Each step has resume capability that checks for existing intermediate files:
 - **docs/ARCHITECTURE.md**: Technical pipeline, processing details, code structure
 
 ## Git Workflow
-The project uses conventional commits with detailed descriptions and co-authorship attribution to Claude Code.
-
-**Commit Message Format:**
-```
-type(scope): brief description
-
-Detailed explanation of changes and reasoning.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
-
-**Types**: feat, fix, refactor, docs, chore, test, perf
+The project uses conventional commits with detailed descriptions.
