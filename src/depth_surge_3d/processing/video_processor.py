@@ -143,6 +143,25 @@ class VideoProcessor:
         progress_callback,
     ) -> Optional[List[Path]]:
         """Execute Step 1: Extract frames from video."""
+        # Check if frames already exist (resume functionality)
+        frames_dir = directories.get("frames")
+        if frames_dir and frames_dir.exists():
+            existing_frames = get_frame_files(frames_dir)
+            if existing_frames:
+                print("Step 1/7: Skipping frame extraction (frames already exist)")
+                print(f"  Found {len(existing_frames):04d} existing frames")
+                print(saved_to(f"  Location: {frames_dir}\n"))
+                if progress_callback:
+                    progress_callback.update_progress(
+                        "Skipped frame extraction (already exists)",
+                        phase="extraction",
+                        frame_num=len(existing_frames),
+                        step_name="Frame Extraction",
+                        step_progress=1,
+                        step_total=1,
+                    )
+                return existing_frames
+
         print("Step 1/7: Extracting frames from video...")
         if progress_callback:
             progress_callback.update_progress(
@@ -275,6 +294,25 @@ class VideoProcessor:
         num_frames: int,
     ) -> bool:
         """Execute Step 6: Create final VR frames."""
+        # Check if VR frames already exist (resume functionality)
+        vr_frames_dir = directories.get("vr_frames")
+        if vr_frames_dir and vr_frames_dir.exists():
+            existing_vr_frames = sorted(list(vr_frames_dir.glob("*.png")))
+            if existing_vr_frames and len(existing_vr_frames) >= num_frames:
+                print("Step 6/7: Skipping VR frame creation (VR frames already exist)")
+                print(f"  Found {len(existing_vr_frames):04d} existing VR frames")
+                print(saved_to(f"  Location: {vr_frames_dir}\n"))
+                if progress_tracker:
+                    progress_tracker.update_progress(
+                        "Skipped VR frame creation (already exists)",
+                        phase="vr_assembly",
+                        frame_num=len(existing_vr_frames),
+                        step_name="Final Processing",
+                        step_progress=len(existing_vr_frames),
+                        step_total=len(existing_vr_frames),
+                    )
+                return True
+
         print("Step 6/7: Creating final VR frames...")
         success = self._create_vr_frames(directories, settings, progress_tracker, num_frames)
         if not success:

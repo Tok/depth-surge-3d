@@ -1487,6 +1487,8 @@
                     displayVideoInfo(data.video_info, file);
                     document.getElementById('processBtn').disabled = false;
                     btnText.innerHTML = '<i class="fas fa-check"></i> ' + file.name;
+                    // Auto-populate resume field with output directory
+                    document.getElementById('resumeDirectory').value = data.output_dir;
                 } else {
                     alert('Upload failed: ' + data.error);
                     btnText.textContent = 'Upload Video';
@@ -1698,6 +1700,8 @@
                     socket.emit('join_session', {session_id: currentSessionId});
                     showProgressPanel();
                     showCurrentBatchDirectory(data.output_dir);
+                    // Auto-populate resume field for easy resuming
+                    document.getElementById('resumeDirectory').value = data.output_dir;
                 } else {
                     alert('Failed to start processing: ' + data.error);
                 }
