@@ -954,9 +954,16 @@ class VideoProcessor:
             str(vr_frames_dir / "frame_%06d.png"),
         ]
 
-        # Add audio if preserving
+        # Add audio if preserving - use pre-extracted FLAC file
         if settings.get("preserve_audio", True):
-            cmd.extend(["-i", original_video, "-c:a", "aac", "-shortest"])
+            # Look for pre-extracted audio file in output directory
+            audio_file = output_dir / "original_audio.flac"
+            if audio_file.exists():
+                cmd.extend(["-i", str(audio_file), "-c:a", "aac", "-shortest"])
+            else:
+                # Fallback to extracting from original video if audio file not found
+                print("Warning: Pre-extracted audio not found, extracting from original video")
+                cmd.extend(["-i", original_video, "-c:a", "aac", "-shortest"])
 
         # Video encoding settings
         cmd.extend(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", str(output_path)])  # High quality

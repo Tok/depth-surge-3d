@@ -123,7 +123,6 @@ def signal_handler(signum, frame):
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "depth-surge-3d-secret"
-app.config["UPLOAD_FOLDER"] = "uploads"
 app.config["OUTPUT_FOLDER"] = "output"
 # Use threading async_mode and disable ping timeout for long-running tasks
 socketio = SocketIO(
@@ -159,8 +158,7 @@ current_processing = {
 
 
 def ensure_directories():
-    """Ensure upload and output directories exist"""
-    Path(app.config["UPLOAD_FOLDER"]).mkdir(exist_ok=True)
+    """Ensure output directory exists"""
     Path(app.config["OUTPUT_FOLDER"]).mkdir(exist_ok=True)
 
 
@@ -529,7 +527,7 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload_video():
-    """Handle video upload"""
+    """Handle video upload - saves directly to output directory with audio extraction"""
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
@@ -537,17 +535,56 @@ def upload_video():
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
 
-    # Save uploaded file
-    filename = f"{int(time.time())}_{file.filename}"
-    filepath = Path(app.config["UPLOAD_FOLDER"]) / filename
-    file.save(filepath)
+    # Create timestamped output directory
+    original_filename = file.filename
+    video_name = Path(original_filename).stem
+    file_ext = Path(original_filename).suffix
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(app.config["OUTPUT_FOLDER"]) / f"{int(time.time())}_{video_name}_{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save video to output directory as "original_video.ext"
+    video_path = output_dir / f"original_video{file_ext}"
+    file.save(video_path)
 
     # Get video information
-    video_info = get_video_info(filepath)
+    video_info = get_video_info(video_path)
     if not video_info:
         return jsonify({"error": "Invalid video file"}), 400
 
-    return jsonify({"success": True, "filename": filename, "video_info": video_info})
+    # Extract high-quality audio to FLAC immediately
+    audio_path = output_dir / "original_audio.flac"
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-i",
+                str(video_path),
+                "-vn",  # No video
+                "-acodec",
+                "flac",  # FLAC codec for lossless audio
+                "-compression_level",
+                "8",  # Maximum compression (still lossless)
+                str(audio_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            print(f"Warning: Audio extraction failed: {result.stderr}")
+            audio_path = None  # Continue without audio
+    except Exception as e:
+        print(f"Warning: Audio extraction error: {e}")
+        audio_path = None
+
+    return jsonify({
+        "success": True,
+        "filename": video_path.name,
+        "output_dir": str(output_dir),
+        "video_info": video_info,
+        "has_audio": audio_path is not None and audio_path.exists(),
+    })
 
 
 @app.route("/process", methods=["POST"])
@@ -559,20 +596,26 @@ def start_processing():
         return jsonify({"error": "Processing already in progress"}), 400
 
     data = request.json
-    filename = data.get("filename")
+    output_dir_str = data.get("output_dir")
     settings = data.get("settings", {})
 
-    if not filename:
-        return jsonify({"error": "No filename provided"}), 400
+    if not output_dir_str:
+        return jsonify({"error": "No output directory provided"}), 400
 
-    video_path = Path(app.config["UPLOAD_FOLDER"]) / filename
-    if not video_path.exists():
-        return jsonify({"error": "Video file not found"}), 404
+    output_dir = Path(output_dir_str)
+    if not output_dir.exists():
+        return jsonify({"error": "Output directory not found"}), 404
 
-    # Create timestamped output directory
-    video_name = Path(filename).stem
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(app.config["OUTPUT_FOLDER"]) / f"{video_name}_{timestamp}"
+    # Find the original video file in output directory
+    video_path = None
+    for ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
+        candidate = output_dir / f"original_video{ext}"
+        if candidate.exists():
+            video_path = candidate
+            break
+
+    if not video_path:
+        return jsonify({"error": "Original video file not found in output directory"}), 404
 
     # Generate session ID
     session_id = str(uuid.uuid4())
@@ -622,22 +665,16 @@ def resume_processing():
     if not output_path.exists():
         return jsonify({"error": "Output directory does not exist"}), 404
 
-    # Look for original video in the directory or parent directories
+    # Look for original video in the output directory itself
     original_video = None
-
-    # Check for video files in parent directory (uploads)
-    uploads_dir = Path(app.config["UPLOAD_FOLDER"])
-    if uploads_dir.exists():
-        for ext in ["mp4", "avi", "mov", "mkv", "wmv", "flv", "webm"]:
-            for video_file in uploads_dir.glob(f"*.{ext}"):
-                if video_file.stem in output_path.name:
-                    original_video = video_file
-                    break
-            if original_video:
-                break
+    for ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
+        candidate = output_path / f"original_video{ext}"
+        if candidate.exists():
+            original_video = candidate
+            break
 
     if not original_video:
-        return jsonify({"error": "Could not find original video file for resuming"}), 404
+        return jsonify({"error": "Could not find original video file in output directory for resuming"}), 404
 
     # Try to detect settings from existing files/directories
     settings = detect_resume_settings(output_path)
@@ -790,11 +827,16 @@ def analyze_batch_directory(batch_path):
                 except Exception:
                     pass
 
-    # Check for original video files for audio
-    for video_ext in ["*.mp4", "*.avi", "*.mov", "*.mkv"]:
-        if list(batch_path.parent.parent.glob(f"uploads/{video_ext}")):  # Check uploads dir
-            analysis["has_audio"] = True
-            break
+    # Check for pre-extracted audio file or original video in batch directory
+    audio_file = batch_path / "original_audio.flac"
+    if audio_file.exists():
+        analysis["has_audio"] = True
+    else:
+        # Check for original video file
+        for video_ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
+            if (batch_path / f"original_video{video_ext}").exists():
+                analysis["has_audio"] = True
+                break
 
     # Generate settings summary
     if analysis["vr_format"] != "unknown" and analysis["resolution"] != "unknown":
@@ -865,19 +907,24 @@ def create_video_from_batch(batch_path, settings):
     cmd.extend(["-c:v", "libx264", "-crf", crf, "-preset", FFMPEG_DEFAULT_PRESET])
     cmd.extend(["-pix_fmt", FFMPEG_PIX_FORMAT])  # For compatibility
 
-    # Add audio if requested and available
+    # Add audio if requested and available - use pre-extracted audio file
     if include_audio:
-        # Look for original video file
-        uploads_dir = Path("uploads")
-        video_files = []
-        for ext in ["*.mp4", "*.avi", "*.mov", "*.mkv"]:
-            video_files.extend(uploads_dir.glob(ext))
-
-        if video_files:
-            # Use the most recent video file
-            latest_video = max(video_files, key=lambda x: x.stat().st_mtime)
-            cmd.extend(["-i", str(latest_video)])
+        # Look for pre-extracted audio file in batch directory
+        audio_file = batch_path / "original_audio.flac"
+        if audio_file.exists():
+            cmd.extend(["-i", str(audio_file)])
             cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0"])
+        else:
+            # Fallback: look for original video in batch directory
+            video_file = None
+            for ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
+                candidate = batch_path / f"original_video{ext}"
+                if candidate.exists():
+                    video_file = candidate
+                    break
+            if video_file:
+                cmd.extend(["-i", str(video_file)])
+                cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0"])
 
     cmd.append(str(output_path))
 

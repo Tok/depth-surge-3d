@@ -1427,6 +1427,7 @@
         let socket;
         let currentSessionId = null;
         let uploadedFilename = null;
+        let uploadedOutputDir = null;
         let currentVideoInfo = null;
 
         // Initialize socket connection
@@ -1482,6 +1483,7 @@
             .then(data => {
                 if (data.success) {
                     uploadedFilename = data.filename;
+                    uploadedOutputDir = data.output_dir;
                     displayVideoInfo(data.video_info, file);
                     document.getElementById('processBtn').disabled = false;
                     btnText.innerHTML = '<i class="fas fa-check"></i> ' + file.name;
@@ -1685,7 +1687,7 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    filename: uploadedFilename,
+                    output_dir: uploadedOutputDir,
                     settings: settings
                 })
             })
