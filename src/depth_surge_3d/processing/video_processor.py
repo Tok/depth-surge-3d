@@ -60,7 +60,7 @@ class VideoProcessor:
 
     def _update_step_progress(
         self, progress_tracker, message: str, step_name: str, progress: int, total: int
-    ):
+    ) -> None:
         """Update progress for a processing step."""
         if progress_tracker:
             progress_tracker.update_progress(
@@ -74,13 +74,15 @@ class VideoProcessor:
 
     def _print_step_complete(
         self, num_items: int, duration: float, item_type: str = "frames"
-    ):
+    ) -> None:
         """Print step completion message."""
         print(
             step_complete(f"Processed {num_items:04d} {item_type} in {duration:.2f}s")
         )
 
-    def _print_saved_to(self, directory: Path, message_prefix: str = "Saved to"):
+    def _print_saved_to(
+        self, directory: Path, message_prefix: str = "Saved to"
+    ) -> None:
         """Print save location message."""
         if directory:
             print(saved_to(f"{message_prefix}: {directory}\n"))
@@ -127,7 +129,7 @@ class VideoProcessor:
         video_path: str,
         settings: Dict[str, Any],
         num_frames: int,
-    ):
+    ) -> None:
         """Finalize processing and update settings file."""
         if success:
             print(console_success("Processing complete!"))
@@ -605,7 +607,7 @@ class VideoProcessor:
         else:
             return 32, 518  # Standard chunks for SD
 
-    def _clear_gpu_memory(self):
+    def _clear_gpu_memory(self) -> None:
         """Clear GPU cache and print available memory."""
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -759,7 +761,7 @@ class VideoProcessor:
 
     def _save_depth_maps(
         self, depth_maps: np.ndarray, frame_files: List[Path], depth_dir: Path
-    ):
+    ) -> None:
         """Save depth maps to disk."""
         for i, (depth_map, frame_file) in enumerate(zip(depth_maps, frame_files)):
             depth_vis = (depth_map * 255).astype("uint8")
@@ -955,7 +957,7 @@ class VideoProcessor:
         right_cropped,
         left_final,
         right_final,
-    ):
+    ) -> None:
         """Save intermediate cropped and final frames."""
         if "left_cropped" in directories:
             cv2.imwrite(

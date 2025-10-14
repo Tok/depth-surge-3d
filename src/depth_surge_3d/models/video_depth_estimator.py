@@ -320,7 +320,7 @@ class VideoDepthEstimator:
 
     def _determine_chunk_overlap(
         self, chunk_start: int, chunk_end: int, num_frames: int, overlap: int, depths
-    ):
+    ) -> np.ndarray:
         """Determine which frames to keep from chunk based on overlap."""
         if chunk_start == 0:
             return depths  # First chunk: keep all
@@ -331,7 +331,7 @@ class VideoDepthEstimator:
 
     def _process_depth_chunk(
         self, frames_rgb: np.ndarray, target_fps: int, input_size: int, fp32: bool
-    ):
+    ) -> np.ndarray:
         """Process a single chunk for depth estimation with output suppression."""
         with self._suppress_model_output():
             depths, _ = self.model.infer_video_depth(
@@ -345,7 +345,7 @@ class VideoDepthEstimator:
 
     def _retry_chunk_with_reduced_resolution(
         self, frames_rgb: np.ndarray, target_fps: int, input_size: int, fp32: bool
-    ):
+    ) -> np.ndarray:
         """Retry depth processing with reduced input size on OOM error."""
         print(f"  OOM error, retrying with reduced resolution...")
         torch.cuda.empty_cache()
