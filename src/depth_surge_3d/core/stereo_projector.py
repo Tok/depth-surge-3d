@@ -335,7 +335,8 @@ class StereoProjector:
         frames_dir.mkdir(parents=True, exist_ok=True)
 
         # Build FFmpeg command for frame extraction
-        cmd = ["ffmpeg", "-y", "-i", video_path]
+        #cmd = ["ffmpeg", "-y", "-i", video_path]
+        cmd = ["ffmpeg", "-y", '-hwaccel cuda', '-hwaccel_output_format','cuda',"-i", video_path]
 
         # Add time range if specified
         if start_time:
@@ -456,6 +457,7 @@ class StereoProjector:
             fps_value = "30"  # Default fallback
 
         # Build FFmpeg command
+        """
         cmd = [
             "ffmpeg",
             "-y",
@@ -467,6 +469,27 @@ class StereoProjector:
             "libx264",
             "-pix_fmt",
             "yuv420p",
+        ]
+        """
+        cmd = [
+            "ffmpeg",
+            "-y",
+            '-c',
+            'hevc_nvenc',
+            '--thread-count',
+            '8',
+            "-framerate",
+            fps_value,
+            "-i",
+            str(vr_frames_path / "frame_%06d.png"),
+            #"-c:v",
+            #"libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-preset", 
+            "p7", 
+            "-tune", 
+            "hq"
         ]
 
         # Add audio if requested

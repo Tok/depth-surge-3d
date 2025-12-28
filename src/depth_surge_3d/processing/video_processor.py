@@ -539,6 +539,7 @@ class VideoProcessor:
         )
 
         # Build FFmpeg command
+        """
         cmd = [
             "ffmpeg",
             "-y",
@@ -548,6 +549,34 @@ class VideoProcessor:
             f"select=between(n\\,{start_frame}\\,{end_frame - 1})",
             "-vsync",
             "0",
+            str(frames_dir / "frame_%06d.png"),
+        ]
+        """
+        cmd = [
+            "ffmpeg",
+            "-y",
+            '-hwaccel', 
+            'cuda',
+            '-hwaccel_output_format',
+            'cuda',
+            #'-hwaccel',
+            #'cuvid', 
+            #'-c:v',
+            #'h264_cuvid',
+            "-i",
+            video_path,
+            "-vf",
+            #"hwdownload,format=nv12,format=rgb24",
+            "hwdownload,format=nv12,format=rgb24",
+            #"hwdownload,format=rgb24",
+            '-pix_fmt', 
+            'rgb24',
+            #'nv12',
+            '-frames:v',
+            str(total_frames),
+           # f"hwdownload,format=nv12,select=between(n\\,{start_frame}\\,{end_frame - 1}),hwupload_cuda",
+            "-fps_mode",
+            "passthrough",
             str(frames_dir / "frame_%06d.png"),
         ]
 
@@ -1058,9 +1087,23 @@ class VideoProcessor:
         if base_fps is None or str(base_fps) == "None" or base_fps == "original":
             base_fps = 30
 
+        """
         cmd = [
             "ffmpeg",
             "-y",
+            "-framerate",
+            str(base_fps),
+            "-i",
+            str(vr_frames_dir / "frame_%06d.png"),
+        ]
+        """
+        cmd = [
+            "ffmpeg",
+            "-y",
+            '-c',
+            'hevc_nvenc',
+            '--thread-count',
+            '8',
             "-framerate",
             str(base_fps),
             "-i",
@@ -1079,7 +1122,8 @@ class VideoProcessor:
                 cmd.extend(["-i", original_video, "-c:a", "aac", "-shortest"])
 
         # Video encoding settings
-        cmd.extend(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", str(output_path)])  # High quality
+        #cmd.extend(["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", str(output_path)])  # High quality
+        cmd.extend(["-pix_fmt", "yuv420p", "-preset", "p7", "-tune", "hq", str(output_path)])  # High quality
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)

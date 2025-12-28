@@ -285,7 +285,8 @@ def main():
         success = projector.process_video(
             video_path=video_path,
             output_dir=args.resume,
-            **{k: v for k, v in processing_settings.items() if k not in ["output_dir", "device"]},
+            **{k: v for k, v in processing_settings.items() if k not in ["output_dir", "device", "per_eye_width", "video_path", "per_eye_height", "vr_output_width", "vr_output_height",
+                                                                         "source_width", "source_height", "source_fps"]},
         )
 
         if success:
