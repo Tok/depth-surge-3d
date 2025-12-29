@@ -45,7 +45,19 @@ else
     source venv/bin/activate
     pip install --upgrade pip
     pip install -r requirements.txt
+    #pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 fi
+
+if [[ -f "nvidia-smi" || -f "/usr/lib/wsl/lib/nvidia-smi" ]]; then
+    echo "Installing Cuda pytorch"
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+elif [[ -f "rocminfo" ]]; then
+    echo "Installing ROC pytorch"
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/rocm6.4
+else
+    pip install torch torchvision
+fi
+
 
 # Download Video-Depth-Anything repository if not present
 if [ ! -d "video_depth_anything_repo" ]; then
