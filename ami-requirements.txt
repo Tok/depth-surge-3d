@@ -6,3 +6,5 @@ transformers>=4.30.0
 flask>=3.0.0
 flask-socketio>=5.3.0
 eventlet>=0.35.0
+easydict==1.13
+einops==0.8.1
