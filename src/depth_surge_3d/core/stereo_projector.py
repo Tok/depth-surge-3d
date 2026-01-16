@@ -185,13 +185,13 @@ class StereoProjector:
             # Auto-detect or use user-specified depth resolution
             depth_resolution = settings.get("depth_resolution", "auto")
             if depth_resolution == "auto":
-                # Auto: use image height capped at 2160 (4K) for best quality
-                input_size = min(image.shape[0], 2160)
+                # Auto: match image size (never exceed source resolution)
+                input_size = max(image.shape[0], image.shape[1])
             else:
                 try:
                     input_size = int(depth_resolution)
                 except (ValueError, TypeError):
-                    input_size = 1440  # fallback to higher quality
+                    input_size = 1080  # fallback to common resolution
 
             depth_maps = self.depth_estimator.estimate_depth_batch(
                 frames, target_fps=30, input_size=input_size, fp32=False

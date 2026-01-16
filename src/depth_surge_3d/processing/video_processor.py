@@ -774,16 +774,20 @@ class VideoProcessor:
             except (ValueError, TypeError):
                 print(f"  Warning: Invalid depth_resolution '{depth_resolution}', using auto")
 
-        # Auto mode: DA3 is much more memory efficient than V2, allowing higher quality
-        # Aggressive defaults for better quality (DA3 can handle it on modern GPUs)
+        # Auto mode: Match depth resolution to actual frame size (or slightly higher for quality)
+        # Never exceed source frame resolution - upscaling depth beyond that is pointless
         if megapixels > 8.0:  # >8MP (4K is ~8.3MP)
-            return 4, 2160  # 4K videos - full 4K depth maps
+            # For 4K, use full resolution - DA3 can handle it
+            return 4, min(max(frame_w, frame_h), 2160)
         elif megapixels > 2.0:  # >2MP (1080p is 2.1MP)
-            return 8, 1440  # 1080p videos - 2K depth for better quality
+            # For 1080p, match the resolution exactly
+            return 8, min(max(frame_w, frame_h), 1080)
         elif megapixels > 1.0:  # >1MP (720p is 0.9MP)
-            return 12, 1080  # 720p videos - upscaled to 1080p depth
+            # For 720p, match the resolution
+            return 12, min(max(frame_w, frame_h), 720)
         else:
-            return 24, 720  # SD videos - upscaled to 720p depth
+            # For SD, match actual resolution (usually 480p or 576p)
+            return 24, min(max(frame_w, frame_h), 640)
 
     def _clear_gpu_memory(self) -> None:
         """Clear GPU cache and print available memory."""
@@ -928,15 +932,15 @@ class VideoProcessor:
             ):
                 target_fps = 30
 
-            # Use depth resolution from settings (default: auto/1440px for better quality)
+            # Use depth resolution from settings (default: auto/1080px)
             depth_resolution = settings.get("depth_resolution", "auto")
             if depth_resolution == "auto":
-                input_size = 1440  # Higher default for better quality with DA3
+                input_size = 1080  # Match typical 1080p video resolution
             else:
                 try:
                     input_size = int(depth_resolution)
                 except (ValueError, TypeError):
-                    input_size = 1440
+                    input_size = 1080
 
             depth_maps = self.depth_estimator.estimate_depth_batch(
                 frames, target_fps=target_fps, input_size=input_size, fp32=False
