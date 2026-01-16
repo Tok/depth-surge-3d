@@ -671,17 +671,17 @@ class VideoProcessor:
         cmd = [
             "ffmpeg",
             "-y",
-            '-hwaccel',
-            'cuda',
-            '-hwaccel_output_format',
-            'cuda',
+            "-hwaccel",
+            "cuda",
+            "-hwaccel_output_format",
+            "cuda",
             "-i",
             video_path,
             "-vf",
             f"select=between(n\\,{start_frame}\\,{end_frame - 1}),hwdownload,format=nv12,format=rgb24",
-            '-pix_fmt',
-            'rgb24',
-            '-frames:v',
+            "-pix_fmt",
+            "rgb24",
+            "-frames:v",
             str(expected_frames),
             "-fps_mode",
             "passthrough",
@@ -740,7 +740,9 @@ class VideoProcessor:
 
         return np.array(frames_list)
 
-    def _determine_chunk_params(self, frame_w: int, frame_h: int, depth_resolution: str = "auto") -> tuple[int, int]:
+    def _determine_chunk_params(
+        self, frame_w: int, frame_h: int, depth_resolution: str = "auto"
+    ) -> tuple[int, int]:
         """Determine chunk size and input size based on frame resolution and settings.
 
         Args:
@@ -769,10 +771,14 @@ class VideoProcessor:
                     chunk_size = 16
                 else:
                     chunk_size = 32
-                print(f"  Using manual depth resolution: {input_size}px (chunk size: {chunk_size})")
+                print(
+                    f"  Using manual depth resolution: {input_size}px (chunk size: {chunk_size})"
+                )
                 return chunk_size, input_size
             except (ValueError, TypeError):
-                print(f"  Warning: Invalid depth_resolution '{depth_resolution}', using auto")
+                print(
+                    f"  Warning: Invalid depth_resolution '{depth_resolution}', using auto"
+                )
 
         # Auto mode: Match depth resolution to actual frame size (or slightly higher for quality)
         # Never exceed source frame resolution - upscaling depth beyond that is pointless
@@ -865,7 +871,9 @@ class VideoProcessor:
 
         frame_h, frame_w = sample_frame.shape[:2]
         depth_resolution = settings.get("depth_resolution", "auto")
-        chunk_size, input_size = self._determine_chunk_params(frame_w, frame_h, depth_resolution)
+        chunk_size, input_size = self._determine_chunk_params(
+            frame_w, frame_h, depth_resolution
+        )
 
         print(
             f"  Processing in chunks of {chunk_size} frames (input_size={input_size})..."
@@ -1325,52 +1333,72 @@ class VideoProcessor:
         if encoder == "auto" or encoder == "nvenc":
             # Try NVENC (NVIDIA hardware encoding) first
             cmd_nvenc = cmd + [
-                "-c:v", "hevc_nvenc",
-                "-pix_fmt", "yuv420p",
-                "-preset", "p7",
-                "-tune", "hq",
+                "-c:v",
+                "hevc_nvenc",
+                "-pix_fmt",
+                "yuv420p",
+                "-preset",
+                "p7",
+                "-tune",
+                "hq",
                 str(output_path),
             ]
             # Test if NVENC is available
             test_result = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-encoders"],
-                capture_output=True,
-                text=True
+                ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
             )
             if "hevc_nvenc" in test_result.stdout:
                 print("  Using NVENC hardware encoding (H.265)")
                 cmd = cmd_nvenc
             else:
                 if encoder == "nvenc":
-                    print("  Warning: NVENC not available, falling back to software encoding")
+                    print(
+                        "  Warning: NVENC not available, falling back to software encoding"
+                    )
                 encoder = "libx264"  # Fallback to software
 
-        if encoder == "auto" and "hevc_nvenc" not in subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
-        ).stdout:
+        if (
+            encoder == "auto"
+            and "hevc_nvenc"
+            not in subprocess.run(
+                ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
+            ).stdout
+        ):
             encoder = "libx264"  # Set default software encoder
 
         # Software encoding fallback
         if encoder in ["libx264", "libx265"]:
             codec = encoder
             print(f"  Using software encoding ({codec})")
-            cmd.extend([
-                "-c:v", codec,
-                "-pix_fmt", "yuv420p",
-                "-crf", "18",  # High quality
-                "-preset", "medium",
-                str(output_path),
-            ])
+            cmd.extend(
+                [
+                    "-c:v",
+                    codec,
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-crf",
+                    "18",  # High quality
+                    "-preset",
+                    "medium",
+                    str(output_path),
+                ]
+            )
         elif encoder not in ["auto", "nvenc"]:
             # Unknown encoder, use libx264 as safe fallback
             print(f"  Warning: Unknown encoder '{encoder}', using libx264")
-            cmd.extend([
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                "-crf", "18",
-                "-preset", "medium",
-                str(output_path),
-            ])
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-crf",
+                    "18",
+                    "-preset",
+                    "medium",
+                    str(output_path),
+                ]
+            )
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)
