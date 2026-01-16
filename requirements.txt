@@ -12,6 +12,8 @@ einops>=0.7.0
 easydict>=1.9
 
 # Depth Anything V3 dependencies
-xformers>=0.0.26
+# Note: xformers is optional - provides performance optimization for DA3
+# Uncomment the line below if you want to install xformers (may fail on some systems):
+# xformers>=0.0.26
 # Install DA3 from GitHub (not yet on PyPI)
 git+https://github.com/ByteDance-Seed/Depth-Anything-3.git

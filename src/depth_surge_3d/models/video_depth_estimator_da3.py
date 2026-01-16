@@ -84,11 +84,29 @@ class VideoDepthEstimatorDA3:
             print(
                 f"Loaded {model_variant}Depth-Anything-V3 ({self.model_name}) on {self.device}"
             )
+
+            # Check if xformers is available (optional optimization)
+            try:
+                import xformers  # noqa: F401
+
+                print("xformers detected - using optimized attention")
+            except ImportError:
+                print(
+                    "Warning: xformers not available. "
+                    "Install with 'pip install xformers' for better performance "
+                    "(optional, may fail on some systems)"
+                )
+
             return True
 
         except ImportError as e:
             print(f"Error: Depth Anything V3 not installed: {e}")
-            print("Install with: pip install depth-anything-3 xformers")
+            print(
+                "Install with: pip install git+https://github.com/ByteDance-Seed/Depth-Anything-3.git"
+            )
+            print(
+                "Optional (for better performance): pip install xformers (may fail on some systems)"
+            )
             return False
         except Exception as e:
             print(f"Error loading DA3 model: {e}")
