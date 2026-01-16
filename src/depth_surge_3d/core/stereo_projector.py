@@ -181,8 +181,10 @@ class StereoProjector:
             frames = np.array([image])  # Shape: [1, H, W, 3]
 
             # Get depth map using video model
+            # Higher input_size = better quality but more VRAM
+            # 1080 is good for 1080p videos, 1440 for 4K
             depth_maps = self.depth_estimator.estimate_depth_batch(
-                frames, target_fps=30, input_size=518, fp32=False
+                frames, target_fps=30, input_size=1080, fp32=False
             )
 
             if depth_maps is None or len(depth_maps) == 0:
@@ -538,7 +540,7 @@ class StereoProjector:
             "-y",
             '-c',
             'hevc_nvenc',
-            '--thread-count',
+            '-threads',
             '8',
             "-framerate",
             fps_value,

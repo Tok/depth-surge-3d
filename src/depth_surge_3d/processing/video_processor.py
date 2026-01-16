@@ -745,16 +745,16 @@ class VideoProcessor:
         megapixels = (frame_h * frame_w) / 1_000_000
         print(f"  Frame resolution: {frame_w}x{frame_h} ({megapixels:.1f}MP)")
 
-        # Very aggressive chunking for limited VRAM
-        # Model uses ~9GB, only ~6GB free on typical 16GB GPU
+        # DA3 is much more memory efficient than V2, allowing higher quality
+        # These parameters balance quality vs VRAM for typical GPUs
         if megapixels > 8.0:  # >8MP (4K is ~8.3MP)
-            return 4, 384  # Ultra-tiny chunks for 4K, reduce input resolution
+            return 6, 1440  # 4K videos - high quality depth maps
         elif megapixels > 2.0:  # >2MP (1080p is 2.1MP)
-            return 8, 384  # Very small chunks for HD
+            return 12, 1080  # 1080p videos - full resolution depth
         elif megapixels > 1.0:  # >1MP (720p is 0.9MP)
-            return 16, 448  # Small chunks for 720p
+            return 16, 720  # 720p videos - matched resolution
         else:
-            return 32, 518  # Standard chunks for SD
+            return 32, 518  # SD videos - original quality
 
     def _clear_gpu_memory(self) -> None:
         """Clear GPU cache and print available memory."""
@@ -898,8 +898,9 @@ class VideoProcessor:
             ):
                 target_fps = 30
 
+            # Use high quality depth maps (1080px resolution)
             depth_maps = self.depth_estimator.estimate_depth_batch(
-                frames, target_fps=target_fps, input_size=518, fp32=False
+                frames, target_fps=target_fps, input_size=1080, fp32=False
             )
 
             return depth_maps
@@ -1258,7 +1259,7 @@ class VideoProcessor:
             "-y",
             '-c',
             'hevc_nvenc',
-            '--thread-count',
+            '-threads',
             '8',
             "-framerate",
             str(base_fps),

@@ -26,6 +26,7 @@ class VideoDepthEstimatorDA3:
         model_name: str = DEFAULT_DA3_MODEL,
         device: str = "auto",
         metric: bool = False,
+        verbose: bool = False,
     ):
         """
         Initialize DA3 depth estimator.
@@ -34,10 +35,12 @@ class VideoDepthEstimatorDA3:
             model_name: Model size (small, base, large, large-metric, giant, giant-large)
             device: Device to use (auto, cuda, cpu, mps)
             metric: Use metric depth model (returns depth in meters)
+            verbose: Print detailed processing information
         """
         self.model_name = model_name
         self.device = self._determine_device(device)
         self.metric = metric
+        self.verbose = verbose
         self.model = None
 
     def _determine_device(self, device: str) -> str:
@@ -60,9 +63,15 @@ class VideoDepthEstimatorDA3:
         """
         try:
             import warnings
+            import logging
 
             # Suppress gsplat dependency warning (only needed for giant models with 3DGS)
+            # Must suppress before importing DA3 since the warning comes from DA3's __init__
             warnings.filterwarnings("ignore", message=".*gsplat.*")
+            warnings.filterwarnings("ignore", category=UserWarning, module="depth_anything_3")
+
+            # Also suppress logging warnings from DA3
+            logging.getLogger("depth_anything_3").setLevel(logging.ERROR)
 
             # Import DA3 API
             from depth_anything_3.api import DepthAnything3
@@ -154,6 +163,10 @@ class VideoDepthEstimatorDA3:
 
             # Use the larger dimension as process_res, capped at input_size
             process_res = min(max(original_height, original_width), input_size)
+
+            if self.verbose:
+                print(f"  DA3 processing: {len(frames)} frames at {process_res}px resolution")
+                print(f"  Original frame size: {original_width}x{original_height}")
 
             # Run DA3 inference directly on numpy arrays (no file I/O needed!)
             with torch.no_grad():
