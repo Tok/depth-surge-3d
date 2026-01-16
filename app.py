@@ -413,7 +413,7 @@ def process_video_async(session_id, video_path, settings, output_dir):
 
         # Initialize projector with depth model
         # Get depth model version (v2 or v3)
-        depth_model_version = settings.get("depth_model_version", "v2")  # Default to V2
+        depth_model_version = settings.get("depth_model_version", "v3")  # Default to V3
         model_size = settings.get("model_size", "vitb")  # Default to Base for 16GB GPUs
         use_metric = settings.get("use_metric_depth", True)  # Default to metric depth
 

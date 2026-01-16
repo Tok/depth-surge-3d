@@ -171,8 +171,27 @@ class VideoDepthEstimatorDA3:
 
             shutil.rmtree(temp_dir)
 
+            # Resize depth maps to match original frame resolution
+            # DA3 outputs at model's internal resolution, need to resize to input size
+            import cv2
+
+            original_height, original_width = frames.shape[1:3]
+            resized_depth_maps = []
+            for depth_map in depth_maps:
+                # Convert to numpy if tensor
+                if torch.is_tensor(depth_map):
+                    depth_map = depth_map.cpu().numpy()
+
+                # Resize to original dimensions
+                resized = cv2.resize(
+                    depth_map,
+                    (original_width, original_height),
+                    interpolation=cv2.INTER_LINEAR,
+                )
+                resized_depth_maps.append(resized)
+
             # Normalize depth maps to 0-1 range
-            return self._normalize_depths(depth_maps)
+            return self._normalize_depths(np.array(resized_depth_maps))
 
         except Exception as e:
             raise RuntimeError(f"DA3 depth estimation failed: {e}")

@@ -835,10 +835,10 @@
                             <h6 class="step-title">Depth Analysis</h6>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Depth Model Version <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="V2: Better temporal consistency (smoother), higher VRAM. V3: Lower VRAM (~50% less), faster, newer architecture."></i></label>
+                            <label class="form-label">Depth Model Version <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="V3: Lower VRAM (~50% less), faster, newer architecture (default). V2: Better temporal consistency (smoother), higher VRAM."></i></label>
                             <select class="form-select" id="depthModelVersion">
-                                <option value="v2" selected>Video-Depth-Anything V2 (Default, Temporal Consistency)</option>
-                                <option value="v3">Depth-Anything V3 (Lower VRAM, Faster)</option>
+                                <option value="v3" selected>Depth-Anything V3 (Default, Lower VRAM, Faster)</option>
+                                <option value="v2">Video-Depth-Anything V2 (Temporal Consistency)</option>
                             </select>
                             <small class="form-text text-muted">
                                 <i class="fas fa-film"></i> V2: 32-frame temporal windows for smooth depth<br>
