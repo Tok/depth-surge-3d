@@ -1,6 +1,5 @@
 """Unit tests for constants module."""
 
-import pytest
 from src.depth_surge_3d.core.constants import (
     DA3_MODEL_NAMES,
     DEFAULT_DA3_MODEL,

@@ -1,8 +1,6 @@
 """Unit tests for StereoProjector."""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 from src.depth_surge_3d.core.stereo_projector import (
     StereoProjector,
@@ -60,6 +58,7 @@ class TestStereoProjector:
             depth_model_version="v2",
         )
 
+        assert projector.depth_model_version == "v2"
         mock_create_v2.assert_called_once_with(None, "cpu", False)
 
     @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator_da3")
@@ -74,6 +73,7 @@ class TestStereoProjector:
             depth_model_version="v3",
         )
 
+        assert projector.depth_model_version == "v3"
         mock_create_v3.assert_called_once_with(None, "cpu", False)
 
     @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator")

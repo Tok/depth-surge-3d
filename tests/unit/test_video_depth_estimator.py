@@ -1,10 +1,7 @@
 """Unit tests for VideoDepthEstimator (V2)."""
 
-import pytest
 import numpy as np
-import torch
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 from src.depth_surge_3d.models.video_depth_estimator import (
     VideoDepthEstimator,

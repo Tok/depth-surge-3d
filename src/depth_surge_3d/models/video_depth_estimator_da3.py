@@ -70,7 +70,7 @@ class VideoDepthEstimatorDA3:
                 hf_model_id = self.model_name
 
             # Override with metric model if requested
-            if self.metric and not "metric" in self.model_name.lower():
+            if self.metric and "metric" not in self.model_name.lower():
                 hf_model_id = DA3_MODEL_NAMES["large-metric"]
                 print(f"Using metric depth model: {hf_model_id}")
 

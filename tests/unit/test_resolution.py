@@ -5,14 +5,8 @@ Basic tests to verify the modular architecture is working correctly.
 """
 
 import unittest
-import sys
-from pathlib import Path
 
-# Add src to path for testing
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root / "src"))
-
-from depth_surge_3d.utils.resolution import (
+from src.depth_surge_3d.utils.resolution import (
     parse_custom_resolution,
     get_resolution_dimensions,
     calculate_vr_output_dimensions,

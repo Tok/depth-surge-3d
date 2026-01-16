@@ -1,6 +1,5 @@
 """Unit tests for console utilities."""
 
-import pytest
 from src.depth_surge_3d.utils.console import (
     success,
     error,

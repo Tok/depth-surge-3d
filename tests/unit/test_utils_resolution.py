@@ -1,12 +1,12 @@
 """Unit tests for resolution utilities."""
 
 import pytest
+
 from src.depth_surge_3d.utils.resolution import (
     get_resolution_dimensions,
     validate_resolution_settings,
     get_available_resolutions,
 )
-from src.depth_surge_3d.core.constants import VR_RESOLUTIONS
 
 
 class TestResolutionUtils:

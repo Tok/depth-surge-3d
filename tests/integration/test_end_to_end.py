@@ -1,8 +1,7 @@
 """Integration tests for end-to-end processing."""
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 
 @pytest.mark.integration
