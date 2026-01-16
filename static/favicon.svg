@@ -29,22 +29,27 @@
   <!-- Dark background -->
   <rect width="64" height="64" fill="#0a0a0a" rx="8"/>
 
-  <!-- Distorted grid representing depth/gravity warping - WHITE -->
+  <!-- Outer grid border/frame -->
+  <rect x="4" y="4" width="56" height="56" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.6" rx="4"/>
+
+  <!-- Distorted grid representing depth/gravity warping - WHITE (scaled up) -->
   <!-- Horizontal lines - curved by "gravity" in center -->
-  <path d="M 8 12 Q 32 10, 56 12" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
-  <path d="M 8 20 Q 32 16, 56 20" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.6" filter="url(#gridGlow)"/>
-  <path d="M 8 28 Q 32 22, 56 28" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
-  <path d="M 8 36 Q 32 28, 56 36" stroke="#ffffff" stroke-width="1.2" fill="none" opacity="0.8" filter="url(#gridGlow)"/>
-  <path d="M 8 44 Q 32 40, 56 44" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
-  <path d="M 8 52 Q 32 50, 56 52" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
+  <path d="M 5 10 Q 32 8, 59 10" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
+  <path d="M 5 18 Q 32 14, 59 18" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.6" filter="url(#gridGlow)"/>
+  <path d="M 5 26 Q 32 20, 59 26" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
+  <path d="M 5 34 Q 32 26, 59 34" stroke="#ffffff" stroke-width="1.2" fill="none" opacity="0.8" filter="url(#gridGlow)"/>
+  <path d="M 5 42 Q 32 38, 59 42" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
+  <path d="M 5 50 Q 32 48, 59 50" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.6" filter="url(#gridGlow)"/>
+  <path d="M 5 58 Q 32 56, 59 58" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
 
   <!-- Vertical lines - warped inward at center (gravity well) -->
-  <path d="M 12 8 Q 10 32, 12 56" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
-  <path d="M 20 8 Q 16 32, 20 56" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.6" filter="url(#gridGlow)"/>
-  <path d="M 28 8 Q 22 32, 28 56" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
-  <path d="M 36 8 Q 28 32, 36 56" stroke="#ffffff" stroke-width="1.2" fill="none" opacity="0.8" filter="url(#gridGlow)"/>
-  <path d="M 44 8 Q 40 32, 44 56" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
-  <path d="M 52 8 Q 50 32, 52 56" stroke="#ffffff" stroke-width="0.8" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
+  <path d="M 10 5 Q 8 32, 10 59" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
+  <path d="M 18 5 Q 14 32, 18 59" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.6" filter="url(#gridGlow)"/>
+  <path d="M 26 5 Q 20 32, 26 59" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
+  <path d="M 34 5 Q 26 32, 34 59" stroke="#ffffff" stroke-width="1.2" fill="none" opacity="0.8" filter="url(#gridGlow)"/>
+  <path d="M 42 5 Q 38 32, 42 59" stroke="#ffffff" stroke-width="1" fill="none" opacity="0.7" filter="url(#gridGlow)"/>
+  <path d="M 50 5 Q 48 32, 50 59" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.6" filter="url(#gridGlow)"/>
+  <path d="M 58 5 Q 56 32, 58 59" stroke="#ffffff" stroke-width="0.9" fill="none" opacity="0.5" filter="url(#gridGlow)"/>
 
   <!-- Center focal point - GREEN ACCENT BALL (gravity well) -->
   <!-- Outer glow -->
