@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <!-- Define the lime green gradient -->
+    <linearGradient id="limeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#39ff14;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2acc10;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Dark background -->
+  <rect width="64" height="64" fill="#0a0a0a" rx="8"/>
+
+  <!-- Distorted grid representing depth/gravity warping -->
+  <!-- Horizontal lines - curved by "gravity" in center -->
+  <path d="M 8 12 Q 32 10, 56 12" stroke="url(#limeGradient)" stroke-width="0.8" fill="none" opacity="0.7" filter="url(#glow)"/>
+  <path d="M 8 20 Q 32 16, 56 20" stroke="url(#limeGradient)" stroke-width="0.8" fill="none" opacity="0.8" filter="url(#glow)"/>
+  <path d="M 8 28 Q 32 22, 56 28" stroke="url(#limeGradient)" stroke-width="1" fill="none" opacity="0.9" filter="url(#glow)"/>
+  <path d="M 8 36 Q 32 28, 56 36" stroke="url(#limeGradient)" stroke-width="1.2" fill="none" opacity="1" filter="url(#glow)"/>
+  <path d="M 8 44 Q 32 40, 56 44" stroke="url(#limeGradient)" stroke-width="1" fill="none" opacity="0.9" filter="url(#glow)"/>
+  <path d="M 8 52 Q 32 50, 56 52" stroke="url(#limeGradient)" stroke-width="0.8" fill="none" opacity="0.7" filter="url(#glow)"/>
+
+  <!-- Vertical lines - warped inward at center (gravity well) -->
+  <path d="M 12 8 Q 10 32, 12 56" stroke="url(#limeGradient)" stroke-width="0.8" fill="none" opacity="0.7" filter="url(#glow)"/>
+  <path d="M 20 8 Q 16 32, 20 56" stroke="url(#limeGradient)" stroke-width="0.8" fill="none" opacity="0.8" filter="url(#glow)"/>
+  <path d="M 28 8 Q 22 32, 28 56" stroke="url(#limeGradient)" stroke-width="1" fill="none" opacity="0.9" filter="url(#glow)"/>
+  <path d="M 36 8 Q 28 32, 36 56" stroke="url(#limeGradient)" stroke-width="1.2" fill="none" opacity="1" filter="url(#glow)"/>
+  <path d="M 44 8 Q 40 32, 44 56" stroke="url(#limeGradient)" stroke-width="1" fill="none" opacity="0.9" filter="url(#glow)"/>
+  <path d="M 52 8 Q 50 32, 52 56" stroke="url(#limeGradient)" stroke-width="0.8" fill="none" opacity="0.7" filter="url(#glow)"/>
+
+  <!-- Center focal point (gravity well) -->
+  <circle cx="32" cy="32" r="4" fill="#39ff14" opacity="0.3" filter="url(#glow)"/>
+  <circle cx="32" cy="32" r="2" fill="#39ff14" opacity="0.8" filter="url(#glow)"/>
+</svg>

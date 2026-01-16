@@ -7,6 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Depth Surge 3D - 2D to Immersive 3D VR Converter</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -1076,6 +1077,19 @@
                                 <i class="fas fa-exclamation-triangle"></i> May use significant disk space (~10-50GB for long videos)
                             </small>
                         </div>
+                        <div class="mb-3">
+                            <label class="form-label">Video Encoder <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Auto detects NVENC (NVIDIA GPU) and falls back to software. Software encoding is slower but works on all systems."></i></label>
+                            <select class="form-select" id="videoEncoder">
+                                <option value="auto" selected>Auto (Try NVENC, fallback to H.264)</option>
+                                <option value="nvenc">NVENC H.265 (NVIDIA GPU Only)</option>
+                                <option value="libx264">Software H.264 (Compatible, Slower)</option>
+                                <option value="libx265">Software H.265 (Best Quality, Slowest)</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-microchip"></i> NVENC: ~10x faster on NVIDIA GPUs<br>
+                                <i class="fas fa-server"></i> Software: Works everywhere, CPU-intensive
+                            </small>
+                        </div>
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="checkbox" id="experimentalFrameInterpolation">
                             <label class="form-check-label" for="experimentalFrameInterpolation">
@@ -1696,6 +1710,7 @@
                 focal_length: parseInt(document.getElementById('focalLength').value),
                 preserve_audio: document.getElementById('preserveAudio').checked,
                 keep_intermediates: document.getElementById('keepIntermediates').checked,
+                video_encoder: document.getElementById('videoEncoder').value,
                 device: document.getElementById('device').value,
                 model_size: document.getElementById('modelSize').value,
                 depth_model_version: document.getElementById('depthModelVersion').value,
@@ -2286,7 +2301,8 @@
                 // Audio and intermediates
                 preserveAudio: document.getElementById('preserveAudio').checked,
                 keepIntermediates: document.getElementById('keepIntermediates').checked,
-                
+                videoEncoder: document.getElementById('videoEncoder').value,
+
                 // Fisheye and cropping
                 applyDistortion: document.getElementById('applyDistortion').checked,
                 fisheyeProjection: document.getElementById('fisheyeProjection').value,
@@ -2357,6 +2373,7 @@
                 processingMode: 'serial',
                 preserveAudio: true,
                 keepIntermediates: true,
+                videoEncoder: 'auto',
                 applyDistortion: true,
                 fisheyeProjection: 'stereographic',
                 fisheyeFov: '180',
@@ -2389,9 +2406,9 @@
         function setupAutoSave() {
             const settingsElements = [
                 'startTime', 'endTime', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
-                'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'preserveAudio', 'keepIntermediates',
-                'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor', 'fisheyeCropFactor', 'holeFillQuality',
-                'experimentalFrameInterpolation'
+                'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'depthResolution', 'videoEncoder',
+                'preserveAudio', 'keepIntermediates', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
+                'fisheyeCropFactor', 'holeFillQuality', 'experimentalFrameInterpolation'
             ];
             
             settingsElements.forEach(id => {
