@@ -90,7 +90,8 @@ class VideoDepthEstimatorDA3:
                 import xformers  # noqa: F401
 
                 print("xformers detected - using optimized attention")
-            except ImportError:
+            except Exception:
+                # Catch all exceptions - xformers may fail to import for various reasons
                 print(
                     "Warning: xformers not available. "
                     "Install with 'pip install xformers' for better performance "
