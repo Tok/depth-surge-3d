@@ -180,10 +180,51 @@ output/
    - Document parameters, return values, and exceptions
    - Include usage examples for complex functions
 
-5. **Code Style**: Black formatting, flake8 linting (must pass)
-   - Run `black .` before committing
-   - Run `flake8 .` and fix all violations
-   - Line length: 100 characters (configured in pyproject.toml)
+5. **Code Style**: Black formatting, flake8 linting (MUST pass before committing)
+   - Run `black src/ tests/` before committing (REQUIRED)
+   - Run `flake8 src/ tests/` and fix all violations
+   - Line length: 88 characters (Black default)
+   - All code must be formatted with Black - CI will reject unformatted code
+
+6. **Testing Requirements**: Comprehensive unit tests required for all new code
+   - Write unit tests for all new functions and classes
+   - Maintain minimum 80% code coverage
+   - All tests must pass before committing: `pytest tests/ -v`
+   - Use mocking for external dependencies (models, APIs, file I/O)
+   - Test edge cases and error conditions
+
+### Testing Workflow
+
+Before committing any code changes:
+```bash
+# 1. Format code with Black (REQUIRED)
+.venv/bin/black src/ tests/
+
+# 2. Run linting
+.venv/bin/flake8 src/ tests/
+
+# 3. Run all tests
+.venv/bin/pytest tests/ -v
+
+# 4. Commit only if all checks pass
+git add -A
+git commit -m "your message"
+```
+
+### CI/CD Pipeline
+
+All pushes and pull requests automatically trigger GitHub Actions:
+- **Multi-environment testing**: Ubuntu + macOS × Python 3.8-3.11 (8 configurations)
+- **Code quality checks**: Black formatting, flake8 linting, mypy type checking
+- **Security scanning**: Dependency vulnerability checks with safety
+- **Test execution**: 80+ unit tests + integration tests
+- **Coverage reporting**: Uploaded to Codecov
+
+**Pull requests will be blocked if:**
+- Code is not formatted with Black
+- Tests fail on any platform/Python version
+- Code quality checks fail
+- Coverage drops below threshold
 
 ### Code Quality Metrics
 - **Error Handling**: Comprehensive try-catch with graceful fallbacks
