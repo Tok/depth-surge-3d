@@ -665,44 +665,24 @@ class VideoProcessor:
         start_frame, end_frame = calculate_frame_range(
             total_frames, fps, settings.get("start_time"), settings.get("end_time")
         )
+        expected_frames = end_frame - start_frame
 
-        # Build FFmpeg command
-        """
+        # Build FFmpeg command with CUDA acceleration and frame range selection
         cmd = [
             "ffmpeg",
             "-y",
-            "-i",
-            video_path,
-            "-vf",
-            f"select=between(n\\,{start_frame}\\,{end_frame - 1})",
-            "-vsync",
-            "0",
-            str(frames_dir / "frame_%06d.png"),
-        ]
-        """
-        cmd = [
-            "ffmpeg",
-            "-y",
-            '-hwaccel', 
+            '-hwaccel',
             'cuda',
             '-hwaccel_output_format',
             'cuda',
-            #'-hwaccel',
-            #'cuvid', 
-            #'-c:v',
-            #'h264_cuvid',
             "-i",
             video_path,
             "-vf",
-            #"hwdownload,format=nv12,format=rgb24",
-            "hwdownload,format=nv12,format=rgb24",
-            #"hwdownload,format=rgb24",
-            '-pix_fmt', 
+            f"select=between(n\\,{start_frame}\\,{end_frame - 1}),hwdownload,format=nv12,format=rgb24",
+            '-pix_fmt',
             'rgb24',
-            #'nv12',
             '-frames:v',
-            str(total_frames),
-           # f"hwdownload,format=nv12,select=between(n\\,{start_frame}\\,{end_frame - 1}),hwupload_cuda",
+            str(expected_frames),
             "-fps_mode",
             "passthrough",
             str(frames_dir / "frame_%06d.png"),
