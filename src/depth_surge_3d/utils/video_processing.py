@@ -18,10 +18,14 @@ def _get_cv2():
 
         return cv2
     except ImportError:
-        raise ImportError("opencv-python is required for image processing. Install with: pip install opencv-python")
+        raise ImportError(
+            "opencv-python is required for image processing. Install with: pip install opencv-python"
+        )
 
 
-def process_video_serial(projector, callback: Callable, frame_files: List[Path], output_path: Path, **kwargs) -> bool:
+def process_video_serial(
+    projector, callback: Callable, frame_files: List[Path], output_path: Path, **kwargs
+) -> bool:
     """
     Process video in serial mode (frame-by-frame, complete pipeline per frame).
     This is the original processing mode where each frame goes through the entire
@@ -46,19 +50,26 @@ def process_video_serial(projector, callback: Callable, frame_files: List[Path],
         try:
             frame_name = frame_file.stem
             vr_frame_path = (
-                directories.get("vr_frames", output_path / INTERMEDIATE_DIRS["vr_frames"]) / f"{frame_name}.png"
+                directories.get(
+                    "vr_frames", output_path / INTERMEDIATE_DIRS["vr_frames"]
+                )
+                / f"{frame_name}.png"
             )
 
             # Skip if already processed (resume support)
             if vr_frame_path.exists():
                 callback.update_progress(
-                    f"Skipping frame {i+1}/{len(frame_files)} - Already processed", i + 1, phase="extraction"
+                    f"Skipping frame {i+1}/{len(frame_files)} - Already processed",
+                    i + 1,
+                    phase="extraction",
                 )
                 continue
 
             # Load frame
             callback.update_progress(
-                f"Processing frame {i+1}/{len(frame_files)} - Loading...", i + 1, phase="extraction"
+                f"Processing frame {i+1}/{len(frame_files)} - Loading...",
+                i + 1,
+                phase="extraction",
             )
             original_image = cv2.imread(str(frame_file))
             if original_image is None:
@@ -90,7 +101,9 @@ def process_video_serial(projector, callback: Callable, frame_files: List[Path],
     return True
 
 
-def process_video_batch(projector, callback: Callable, frame_files: List[Path], output_path: Path, **kwargs) -> bool:
+def process_video_batch(
+    projector, callback: Callable, frame_files: List[Path], output_path: Path, **kwargs
+) -> bool:
     """
     Process video in batch mode (phase-by-phase, all frames per phase).
     This processes all frames through one phase before moving to the next phase.
@@ -112,38 +125,71 @@ def process_video_batch(projector, callback: Callable, frame_files: List[Path], 
     _get_cv2()
 
     # Phase 1: Super sampling (if needed)
-    if super_sample_width != 1920 or super_sample_height != 1080:  # Only if different from defaults
-        callback.update_progress("Phase 1: Super sampling all frames...", 0, phase="super_sampling")
+    if (
+        super_sample_width != 1920 or super_sample_height != 1080
+    ):  # Only if different from defaults
+        callback.update_progress(
+            "Phase 1: Super sampling all frames...", 0, phase="super_sampling"
+        )
         for i, frame_file in enumerate(frame_files):
-            callback.update_progress(f"Super sampling frame {i+1}/{total_frames}", i + 1, phase="super_sampling")
+            callback.update_progress(
+                f"Super sampling frame {i+1}/{total_frames}",
+                i + 1,
+                phase="super_sampling",
+            )
             _process_supersample_frame(
-                projector, frame_file, directories, super_sample_width, super_sample_height, **kwargs
+                projector,
+                frame_file,
+                directories,
+                super_sample_width,
+                super_sample_height,
+                **kwargs,
             )
 
     # Phase 2: Depth estimation for all frames
-    callback.update_progress("Phase 2: Generating depth maps...", 0, phase="depth_estimation")
+    callback.update_progress(
+        "Phase 2: Generating depth maps...", 0, phase="depth_estimation"
+    )
     for i, frame_file in enumerate(frame_files):
-        callback.update_progress(f"Generating depth map {i+1}/{total_frames}", i + 1, phase="depth_estimation")
+        callback.update_progress(
+            f"Generating depth map {i+1}/{total_frames}",
+            i + 1,
+            phase="depth_estimation",
+        )
         _process_depth_frame(projector, frame_file, directories, **kwargs)
 
     # Phase 3: Stereo generation for all frames
-    callback.update_progress("Phase 3: Creating stereo pairs...", 0, phase="stereo_generation")
+    callback.update_progress(
+        "Phase 3: Creating stereo pairs...", 0, phase="stereo_generation"
+    )
     for i, frame_file in enumerate(frame_files):
-        callback.update_progress(f"Creating stereo pair {i+1}/{total_frames}", i + 1, phase="stereo_generation")
+        callback.update_progress(
+            f"Creating stereo pair {i+1}/{total_frames}",
+            i + 1,
+            phase="stereo_generation",
+        )
         _process_stereo_frame(projector, frame_file, directories, **kwargs)
 
     # Phase 4: Fisheye distortion (if enabled)
     if apply_distortion:
-        callback.update_progress("Phase 4: Applying fisheye distortion...", 0, phase="distortion")
+        callback.update_progress(
+            "Phase 4: Applying fisheye distortion...", 0, phase="distortion"
+        )
         for i, frame_file in enumerate(frame_files):
-            callback.update_progress(f"Fisheye distortion {i+1}/{total_frames}", i + 1, phase="distortion")
+            callback.update_progress(
+                f"Fisheye distortion {i+1}/{total_frames}", i + 1, phase="distortion"
+            )
             _process_fisheye_frame(projector, frame_file, directories, **kwargs)
 
     # Phase 5: VR assembly for all frames
     callback.update_progress("Phase 5: Assembling VR frames...", 0, phase="vr_assembly")
     for i, frame_file in enumerate(frame_files):
-        callback.update_progress(f"Assembling VR frame {i+1}/{total_frames}", i + 1, phase="vr_assembly")
-        _process_vr_assembly_frame(projector, frame_file, directories, apply_distortion, **kwargs)
+        callback.update_progress(
+            f"Assembling VR frame {i+1}/{total_frames}", i + 1, phase="vr_assembly"
+        )
+        _process_vr_assembly_frame(
+            projector, frame_file, directories, apply_distortion, **kwargs
+        )
 
     return True
 
@@ -187,11 +233,18 @@ def _process_single_frame_complete(
     cv2 = _get_cv2()
 
     # Super sampling
-    if super_sample_width != original_image.shape[1] or super_sample_height != original_image.shape[0]:
+    if (
+        super_sample_width != original_image.shape[1]
+        or super_sample_height != original_image.shape[0]
+    ):
         callback.update_progress(
-            f"Processing frame {frame_idx+1}/{total_frames} - Super sampling...", frame_idx + 1, phase="super_sampling"
+            f"Processing frame {frame_idx+1}/{total_frames} - Super sampling...",
+            frame_idx + 1,
+            phase="super_sampling",
         )
-        image = projector.apply_super_sampling(original_image, super_sample_width, super_sample_height)
+        image = projector.apply_super_sampling(
+            original_image, super_sample_width, super_sample_height
+        )
         if "supersampled" in directories:
             cv2.imwrite(str(directories["supersampled"] / f"{frame_name}.png"), image)
     else:
@@ -214,7 +267,9 @@ def _process_single_frame_complete(
         frame_idx + 1,
         phase="stereo_generation",
     )
-    left_img, right_img = projector.create_stereo_pair_from_depth(image, depth_map, **kwargs)
+    left_img, right_img = projector.create_stereo_pair_from_depth(
+        image, depth_map, **kwargs
+    )
     if "left_frames" in directories:
         cv2.imwrite(str(directories["left_frames"] / f"{frame_name}.png"), left_img)
         cv2.imwrite(str(directories["right_frames"] / f"{frame_name}.png"), right_img)
@@ -222,27 +277,40 @@ def _process_single_frame_complete(
     # Fisheye distortion (if enabled)
     if apply_distortion:
         callback.update_progress(
-            f"Processing frame {frame_idx+1}/{total_frames} - Fisheye projection...", frame_idx + 1, phase="distortion"
+            f"Processing frame {frame_idx+1}/{total_frames} - Fisheye projection...",
+            frame_idx + 1,
+            phase="distortion",
         )
         left_distorted = projector.apply_fisheye_distortion(left_img, **kwargs)
         right_distorted = projector.apply_fisheye_distortion(right_img, **kwargs)
         if "left_distorted" in directories:
-            cv2.imwrite(str(directories["left_distorted"] / f"{frame_name}.png"), left_distorted)
-            cv2.imwrite(str(directories["right_distorted"] / f"{frame_name}.png"), right_distorted)
+            cv2.imwrite(
+                str(directories["left_distorted"] / f"{frame_name}.png"), left_distorted
+            )
+            cv2.imwrite(
+                str(directories["right_distorted"] / f"{frame_name}.png"),
+                right_distorted,
+            )
         left_final, right_final = left_distorted, right_distorted
     else:
         left_final, right_final = left_img, right_img
 
     # VR assembly
     callback.update_progress(
-        f"Processing frame {frame_idx+1}/{total_frames} - Creating VR frame...", frame_idx + 1, phase="vr_assembly"
+        f"Processing frame {frame_idx+1}/{total_frames} - Creating VR frame...",
+        frame_idx + 1,
+        phase="vr_assembly",
     )
-    vr_frame = projector.create_vr_format(left_final, right_final, kwargs.get("vr_format", "side_by_side"))
+    vr_frame = projector.create_vr_format(
+        left_final, right_final, kwargs.get("vr_format", "side_by_side")
+    )
 
     return vr_frame
 
 
-def _process_supersample_frame(projector, frame_file, directories, width, height, **kwargs):
+def _process_supersample_frame(
+    projector, frame_file, directories, width, height, **kwargs
+):
     """Process super sampling for a single frame (batch mode)."""
     cv2 = _get_cv2()
     frame_name = frame_file.stem
@@ -309,7 +377,9 @@ def _process_stereo_frame(projector, frame_file, directories, **kwargs):
     depth_map = depth_vis.astype(np.float32) / 255.0
 
     # Create stereo pair
-    left_img, right_img = projector.create_stereo_pair_from_depth(image, depth_map, **kwargs)
+    left_img, right_img = projector.create_stereo_pair_from_depth(
+        image, depth_map, **kwargs
+    )
 
     # Save stereo frames
     if "left_frames" in directories:
@@ -338,11 +408,17 @@ def _process_fisheye_frame(projector, frame_file, directories, **kwargs):
 
     # Save distorted frames
     if "left_distorted" in directories:
-        cv2.imwrite(str(directories["left_distorted"] / f"{frame_name}.png"), left_distorted)
-        cv2.imwrite(str(directories["right_distorted"] / f"{frame_name}.png"), right_distorted)
+        cv2.imwrite(
+            str(directories["left_distorted"] / f"{frame_name}.png"), left_distorted
+        )
+        cv2.imwrite(
+            str(directories["right_distorted"] / f"{frame_name}.png"), right_distorted
+        )
 
 
-def _process_vr_assembly_frame(projector, frame_file, directories, apply_distortion, **kwargs):
+def _process_vr_assembly_frame(
+    projector, frame_file, directories, apply_distortion, **kwargs
+):
     """Process VR assembly for a single frame (batch mode)."""
     cv2 = _get_cv2()
     frame_name = frame_file.stem
@@ -362,7 +438,9 @@ def _process_vr_assembly_frame(projector, frame_file, directories, apply_distort
         return
 
     # Create VR frame
-    vr_frame = projector.create_vr_format(left_final, right_final, kwargs.get("vr_format", "side_by_side"))
+    vr_frame = projector.create_vr_format(
+        left_final, right_final, kwargs.get("vr_format", "side_by_side")
+    )
 
     # Save VR frame
     if "vr_frames" in directories:

@@ -81,7 +81,9 @@ class VideoDepthEstimatorDA3:
             self.model.eval()
 
             model_variant = "Metric-" if self.metric else ""
-            print(f"Loaded {model_variant}Depth-Anything-V3 ({self.model_name}) on {self.device}")
+            print(
+                f"Loaded {model_variant}Depth-Anything-V3 ({self.model_name}) on {self.device}"
+            )
             return True
 
         except ImportError as e:
@@ -129,6 +131,7 @@ class VideoDepthEstimatorDA3:
             for idx, frame in enumerate(frames_rgb):
                 frame_path = temp_dir / f"frame_{idx:06d}.png"
                 import cv2
+
                 cv2.imwrite(str(frame_path), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
                 frame_paths.append(str(frame_path))
 
@@ -141,6 +144,7 @@ class VideoDepthEstimatorDA3:
 
             # Clean up temporary frames
             import shutil
+
             shutil.rmtree(temp_dir)
 
             # Normalize depth maps to 0-1 range

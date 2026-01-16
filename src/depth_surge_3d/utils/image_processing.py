@@ -14,7 +14,10 @@ from ..core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE
 
 
 def resize_image(
-    image: np.ndarray, target_width: int, target_height: int, interpolation: int = cv2.INTER_CUBIC
+    image: np.ndarray,
+    target_width: int,
+    target_height: int,
+    interpolation: int = cv2.INTER_CUBIC,
 ) -> np.ndarray:
     """
     Resize image to target dimensions.
@@ -48,7 +51,9 @@ def normalize_depth_map(depth_map: np.ndarray) -> np.ndarray:
     return np.clip(normalized, MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
 
 
-def depth_to_disparity(depth_map: np.ndarray, baseline: float, focal_length: float) -> np.ndarray:
+def depth_to_disparity(
+    depth_map: np.ndarray, baseline: float, focal_length: float
+) -> np.ndarray:
     """
     Convert depth map to disparity map for stereo generation.
 
@@ -72,7 +77,9 @@ def depth_to_disparity(depth_map: np.ndarray, baseline: float, focal_length: flo
     return disparity
 
 
-def create_shifted_image(image: np.ndarray, disparity_map: np.ndarray, direction: str = "left") -> np.ndarray:
+def create_shifted_image(
+    image: np.ndarray, disparity_map: np.ndarray, direction: str = "left"
+) -> np.ndarray:
     """
     Create shifted image for stereo pair using disparity map.
 
@@ -228,10 +235,14 @@ def apply_fisheye_distortion(
     height, width = image.shape[:2]
 
     # Get coordinate mappings
-    x_map, y_map = calculate_fisheye_coordinates(width, height, fov_degrees, projection_type)
+    x_map, y_map = calculate_fisheye_coordinates(
+        width, height, fov_degrees, projection_type
+    )
 
     # Apply remapping with reflection to avoid black borders
-    distorted = cv2.remap(image, x_map, y_map, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+    distorted = cv2.remap(
+        image, x_map, y_map, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101
+    )
 
     return distorted
 
@@ -285,7 +296,9 @@ def apply_fisheye_square_crop(
     return scaled
 
 
-def create_vr_frame(left_image: np.ndarray, right_image: np.ndarray, vr_format: str) -> np.ndarray:
+def create_vr_frame(
+    left_image: np.ndarray, right_image: np.ndarray, vr_format: str
+) -> np.ndarray:
     """
     Combine left and right images into VR format.
 
@@ -306,7 +319,9 @@ def create_vr_frame(left_image: np.ndarray, right_image: np.ndarray, vr_format: 
         return np.hstack([left_image, right_image])
 
 
-def hole_fill_image(image: np.ndarray, mask: Optional[np.ndarray] = None, method: str = "fast") -> np.ndarray:
+def hole_fill_image(
+    image: np.ndarray, mask: Optional[np.ndarray] = None, method: str = "fast"
+) -> np.ndarray:
     """
     Fill holes in image using inpainting.
 
@@ -389,7 +404,11 @@ def calculate_image_statistics(image: np.ndarray) -> dict:
         stats["channels"] = image.shape[2]
         # Per-channel statistics
         for i in range(image.shape[2]):
-            channel_name = ["blue", "green", "red", "alpha"][i] if image.shape[2] <= 4 else f"channel_{i}"
+            channel_name = (
+                ["blue", "green", "red", "alpha"][i]
+                if image.shape[2] <= 4
+                else f"channel_{i}"
+            )
             stats[f"{channel_name}_mean"] = float(image[:, :, i].mean())
 
     return stats

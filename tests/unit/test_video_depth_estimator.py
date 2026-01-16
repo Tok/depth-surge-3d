@@ -27,9 +27,7 @@ class TestVideoDepthEstimator:
     def test_init_with_custom_params(self):
         """Test initialization with custom parameters."""
         custom_path = "models/custom.pth"
-        estimator = VideoDepthEstimator(
-            custom_path, device="cpu", metric=True
-        )
+        estimator = VideoDepthEstimator(custom_path, device="cpu", metric=True)
         assert estimator.model_path == custom_path
         assert estimator.device == "cpu"
         assert estimator.metric is True
@@ -67,10 +65,12 @@ class TestVideoDepthEstimator:
         estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
 
         # Create test depth maps
-        depths = np.array([
-            [[0.0, 0.5, 1.0], [0.2, 0.8, 0.6]],
-            [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
-        ])
+        depths = np.array(
+            [
+                [[0.0, 0.5, 1.0], [0.2, 0.8, 0.6]],
+                [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
+            ]
+        )
 
         normalized = estimator._normalize_depths(depths)
 
@@ -89,9 +89,11 @@ class TestVideoDepthEstimator:
         """Test normalization of flat depth map."""
         estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
 
-        depths = np.array([
-            [[5.0, 5.0, 5.0], [5.0, 5.0, 5.0]],
-        ])
+        depths = np.array(
+            [
+                [[5.0, 5.0, 5.0], [5.0, 5.0, 5.0]],
+            ]
+        )
 
         normalized = estimator._normalize_depths(depths)
         assert np.all(normalized == 0.0)

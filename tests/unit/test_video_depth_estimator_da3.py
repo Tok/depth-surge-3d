@@ -27,9 +27,7 @@ class TestVideoDepthEstimatorDA3:
 
     def test_init_with_custom_params(self):
         """Test initialization with custom parameters."""
-        estimator = VideoDepthEstimatorDA3(
-            model_name="base", device="cpu", metric=True
-        )
+        estimator = VideoDepthEstimatorDA3(model_name="base", device="cpu", metric=True)
         assert estimator.model_name == "base"
         assert estimator.device == "cpu"
         assert estimator.metric is True
@@ -53,7 +51,10 @@ class TestVideoDepthEstimatorDA3:
 
     def test_load_model_success(self):
         """Test successful model loading."""
-        with patch.dict("sys.modules", {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()}):
+        with patch.dict(
+            "sys.modules",
+            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+        ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
             mock_model.to.return_value = mock_model  # Return self for chaining
@@ -72,19 +73,27 @@ class TestVideoDepthEstimatorDA3:
 
     def test_load_model_metric_override(self):
         """Test metric model override."""
-        with patch.dict("sys.modules", {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()}):
+        with patch.dict(
+            "sys.modules",
+            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+        ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
             mock_da3.from_pretrained.return_value = mock_model
 
             with patch("depth_anything_3.api.DepthAnything3", mock_da3):
-                estimator = VideoDepthEstimatorDA3(model_name="base", device="cpu", metric=True)
+                estimator = VideoDepthEstimatorDA3(
+                    model_name="base", device="cpu", metric=True
+                )
                 result = estimator.load_model()
 
                 assert result is True
                 # Should use large-metric model when metric=True
                 call_args = mock_da3.from_pretrained.call_args
-                assert "metric" in call_args[0][0].lower() or call_args[0][0] == DA3_MODEL_NAMES["large-metric"]
+                assert (
+                    "metric" in call_args[0][0].lower()
+                    or call_args[0][0] == DA3_MODEL_NAMES["large-metric"]
+                )
 
     def test_load_model_import_error(self):
         """Test model loading when DA3 is not installed."""
@@ -98,10 +107,12 @@ class TestVideoDepthEstimatorDA3:
         estimator = VideoDepthEstimatorDA3(device="cpu")
 
         # Create test depth maps with known values
-        depths = np.array([
-            [[0.0, 0.5, 1.0], [0.2, 0.8, 0.6]],
-            [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
-        ])
+        depths = np.array(
+            [
+                [[0.0, 0.5, 1.0], [0.2, 0.8, 0.6]],
+                [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
+            ]
+        )
 
         normalized = estimator._normalize_depths(depths)
 
@@ -123,10 +134,12 @@ class TestVideoDepthEstimatorDA3:
         estimator = VideoDepthEstimatorDA3(device="cpu")
 
         # Create test depth maps as torch tensor
-        depths = torch.tensor([
-            [[0.0, 0.5, 1.0], [0.2, 0.8, 0.6]],
-            [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
-        ])
+        depths = torch.tensor(
+            [
+                [[0.0, 0.5, 1.0], [0.2, 0.8, 0.6]],
+                [[1.0, 2.0, 3.0], [0.5, 1.5, 2.5]],
+            ]
+        )
 
         normalized = estimator._normalize_depths(depths)
 
@@ -142,9 +155,11 @@ class TestVideoDepthEstimatorDA3:
         estimator = VideoDepthEstimatorDA3(device="cpu")
 
         # All values the same
-        depths = np.array([
-            [[5.0, 5.0, 5.0], [5.0, 5.0, 5.0]],
-        ])
+        depths = np.array(
+            [
+                [[5.0, 5.0, 5.0], [5.0, 5.0, 5.0]],
+            ]
+        )
 
         normalized = estimator._normalize_depths(depths)
 
@@ -166,7 +181,10 @@ class TestVideoDepthEstimatorDA3:
 
     def test_get_model_info_loaded(self):
         """Test model info when model is loaded."""
-        with patch.dict("sys.modules", {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()}):
+        with patch.dict(
+            "sys.modules",
+            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+        ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
             mock_da3.from_pretrained.return_value = mock_model
@@ -182,7 +200,10 @@ class TestVideoDepthEstimatorDA3:
     @patch("torch.cuda.empty_cache")
     def test_unload_model_with_cuda(self, mock_empty_cache, mock_cuda_available):
         """Test model unloading with CUDA cleanup."""
-        with patch.dict("sys.modules", {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()}):
+        with patch.dict(
+            "sys.modules",
+            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+        ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
             mock_da3.from_pretrained.return_value = mock_model

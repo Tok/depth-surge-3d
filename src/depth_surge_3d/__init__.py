@@ -7,7 +7,9 @@ using state-of-the-art depth estimation models.
 
 __version__ = "1.0.0"
 __author__ = "Depth Surge 3D Team"
-__description__ = "Convert 2D videos to immersive 3D VR format using AI depth estimation"
+__description__ = (
+    "Convert 2D videos to immersive 3D VR format using AI depth estimation"
+)
 
 
 # Lazy imports to avoid loading heavy dependencies at package import time

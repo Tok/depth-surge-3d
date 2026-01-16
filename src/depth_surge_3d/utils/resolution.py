@@ -62,7 +62,9 @@ def get_resolution_dimensions(vr_resolution: str) -> Tuple[int, int]:
     raise ValueError(f"Invalid resolution setting: {vr_resolution}")
 
 
-def calculate_vr_output_dimensions(per_eye_width: int, per_eye_height: int, vr_format: str) -> Tuple[int, int]:
+def calculate_vr_output_dimensions(
+    per_eye_width: int, per_eye_height: int, vr_format: str
+) -> Tuple[int, int]:
     """
     Calculate final VR output dimensions based on per-eye dimensions and format.
 
@@ -117,7 +119,9 @@ def classify_aspect_ratio(aspect_ratio: float) -> str:
         return "standard"
 
 
-def auto_detect_resolution(source_width: int, source_height: int, vr_format: str) -> str:
+def auto_detect_resolution(
+    source_width: int, source_height: int, vr_format: str
+) -> str:
     """
     Auto-detect optimal VR resolution based on source dimensions.
 
@@ -188,7 +192,13 @@ def validate_resolution_settings(
     Returns:
         Dictionary with validation results and recommendations
     """
-    result = {"valid": True, "warnings": [], "recommendations": [], "final_resolution": None, "final_format": vr_format}
+    result = {
+        "valid": True,
+        "warnings": [],
+        "recommendations": [],
+        "final_resolution": None,
+        "final_format": vr_format,
+    }
 
     try:
         if vr_resolution == "auto":
@@ -207,7 +217,9 @@ def validate_resolution_settings(
             result["warnings"].append(
                 f"Wide content (aspect ratio {source_aspect:.2f}) works better with {recommended_format} format"
             )
-            result["recommendations"].append(f"Consider using --format {recommended_format}")
+            result["recommendations"].append(
+                f"Consider using --format {recommended_format}"
+            )
 
     except ValueError as e:
         result["valid"] = False
@@ -228,19 +240,35 @@ def get_available_resolutions() -> Dict[str, Dict[str, list]]:
     for res_name, (width, height) in VR_RESOLUTIONS.items():
         if res_name.startswith("square-"):
             categorized["square"].append(
-                {"name": res_name, "description": f"{width}×{height} per eye", "dimensions": (width, height)}
+                {
+                    "name": res_name,
+                    "description": f"{width}×{height} per eye",
+                    "dimensions": (width, height),
+                }
             )
         elif res_name.startswith("16x9-"):
             categorized["16x9"].append(
-                {"name": res_name, "description": f"{width}×{height} per eye", "dimensions": (width, height)}
+                {
+                    "name": res_name,
+                    "description": f"{width}×{height} per eye",
+                    "dimensions": (width, height),
+                }
             )
         elif res_name.startswith("cinema-"):
             categorized["cinema"].append(
-                {"name": res_name, "description": f"{width}×{height} per eye", "dimensions": (width, height)}
+                {
+                    "name": res_name,
+                    "description": f"{width}×{height} per eye",
+                    "dimensions": (width, height),
+                }
             )
         else:
             categorized["legacy"].append(
-                {"name": res_name, "description": f"{width}×{height} per eye", "dimensions": (width, height)}
+                {
+                    "name": res_name,
+                    "description": f"{width}×{height} per eye",
+                    "dimensions": (width, height),
+                }
             )
 
     return categorized
