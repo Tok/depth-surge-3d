@@ -94,10 +94,28 @@ class TestVideoDepthEstimatorDA3:
 
     def test_load_model_import_error(self):
         """Test model loading when DA3 is not installed."""
+        import sys
+
         estimator = VideoDepthEstimatorDA3(device="cpu")
-        # Don't mock the module - let it fail naturally
-        result = estimator.load_model()
-        assert result is False
+
+        # Remove depth_anything_3 from sys.modules to simulate it not being installed
+        modules_to_remove = [
+            key for key in sys.modules.keys() if key.startswith("depth_anything_3")
+        ]
+        saved_modules = {key: sys.modules[key] for key in modules_to_remove}
+
+        try:
+            # Remove the modules
+            for key in modules_to_remove:
+                del sys.modules[key]
+
+            # Mock sys.modules to prevent reimport
+            with patch.dict("sys.modules", {"depth_anything_3": None}):
+                result = estimator.load_model()
+                assert result is False
+        finally:
+            # Restore the modules
+            sys.modules.update(saved_modules)
 
     def test_normalize_depths_with_numpy_array(self):
         """Test depth normalization with numpy array."""
