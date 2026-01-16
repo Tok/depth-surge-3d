@@ -1,18 +1,26 @@
 # Depth Surge 3D
 
+[![CI](https://github.com/Tok/depth-surge-3d/actions/workflows/ci.yml/badge.svg)](https://github.com/Tok/depth-surge-3d/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Tok/depth-surge-3d/branch/main/graph/badge.svg)](https://codecov.io/gh/Tok/depth-surge-3d)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **Convert 2D videos to 3D VR format using AI depth estimation.**
 
-Depth Surge 3D transforms flat videos into stereoscopic 3D for VR headsets using the **Video-Depth-Anything** neural network. It analyzes video frames with temporal consistency to predict depth, then generates left and right eye views for immersive stereoscopic viewing.
+Depth Surge 3D transforms flat videos into stereoscopic 3D for VR headsets using **Depth Anything V3** and **Video-Depth-Anything V2** neural networks. It analyzes video frames with temporal consistency to predict depth, then generates left and right eye views for immersive stereoscopic viewing.
 
 ## Key Features
 
-- **Temporal Consistency**: Uses Video-Depth-Anything for smooth depth across frames with 32-frame sliding windows
+- **Dual Depth Models**:
+  - **Depth Anything V3** (default): 50% lower VRAM, faster processing, optimized for modern GPUs
+  - **Video-Depth-Anything V2**: Superior temporal consistency with 32-frame sliding windows
+- **CUDA Hardware Acceleration**: NVENC H.265 encoding and GPU-accelerated frame decoding
+- **Configurable Depth Quality**: Adjustable depth map resolution (518px to 4K) for quality vs. speed
 - **Multiple VR Formats**: Side-by-side and over-under stereoscopic formats
 - **Flexible Resolutions**: Square (VR-optimized), 16:9 (standard), cinema, and custom resolutions up to 8K
 - **Resume Capability**: Intelligent step-level resume for interrupted processing
-- **Audio Preservation**: Maintains original audio synchronization
-- **Web Interface**: Modern browser-based UI with real-time progress tracking
-- **GPU Acceleration**: CUDA support for 10x faster processing
+- **Audio Preservation**: Maintains original audio synchronization with lossless FLAC extraction
+- **Web Interface**: Modern browser-based UI with real-time progress tracking and live previews
 - **Wide Format Support**: Cinema, ultra-wide, and standard aspect ratios
 
 ## Quick Start
@@ -99,7 +107,12 @@ Generated videos work with:
 
 ## Attribution
 
-This project uses [Video-Depth-Anything](https://github.com/DepthAnything/Video-Depth-Anything) for temporal-consistent depth estimation. The model is based on Depth Anything V2 architecture and processes frames in 32-frame chunks with overlap to ensure smooth depth transitions.
+This project uses state-of-the-art depth estimation models:
+
+- **[Depth Anything V3](https://github.com/ByteDance-Seed/Depth-Anything-3)** - Default model with improved memory efficiency and performance
+- **[Video-Depth-Anything V2](https://github.com/DepthAnything/Video-Depth-Anything)** - Temporal-consistent depth estimation with 32-frame sliding windows
+
+Both models are based on vision transformer architectures optimized for monocular depth prediction.
 
 ## License
 

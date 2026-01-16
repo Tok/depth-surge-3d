@@ -740,12 +740,41 @@ class VideoProcessor:
 
         return np.array(frames_list)
 
-    def _determine_chunk_params(self, frame_w: int, frame_h: int) -> tuple[int, int]:
-        """Determine chunk size and input size based on frame resolution."""
+    def _determine_chunk_params(self, frame_w: int, frame_h: int, depth_resolution: str = "auto") -> tuple[int, int]:
+        """Determine chunk size and input size based on frame resolution and settings.
+
+        Args:
+            frame_w: Frame width in pixels
+            frame_h: Frame height in pixels
+            depth_resolution: Either "auto" or specific resolution like "1080", "720", etc.
+
+        Returns:
+            Tuple of (chunk_size, input_size)
+        """
         megapixels = (frame_h * frame_w) / 1_000_000
         print(f"  Frame resolution: {frame_w}x{frame_h} ({megapixels:.1f}MP)")
 
-        # DA3 is much more memory efficient than V2, allowing higher quality
+        # If specific resolution is requested, use it
+        if depth_resolution != "auto":
+            try:
+                input_size = int(depth_resolution)
+                # Adjust chunk size based on input_size for memory management
+                if input_size >= 2160:
+                    chunk_size = 4
+                elif input_size >= 1440:
+                    chunk_size = 6
+                elif input_size >= 1080:
+                    chunk_size = 12
+                elif input_size >= 720:
+                    chunk_size = 16
+                else:
+                    chunk_size = 32
+                print(f"  Using manual depth resolution: {input_size}px (chunk size: {chunk_size})")
+                return chunk_size, input_size
+            except (ValueError, TypeError):
+                print(f"  Warning: Invalid depth_resolution '{depth_resolution}', using auto")
+
+        # Auto mode: DA3 is much more memory efficient than V2, allowing higher quality
         # These parameters balance quality vs VRAM for typical GPUs
         if megapixels > 8.0:  # >8MP (4K is ~8.3MP)
             return 6, 1440  # 4K videos - high quality depth maps
@@ -831,7 +860,8 @@ class VideoProcessor:
             return None
 
         frame_h, frame_w = sample_frame.shape[:2]
-        chunk_size, input_size = self._determine_chunk_params(frame_w, frame_h)
+        depth_resolution = settings.get("depth_resolution", "auto")
+        chunk_size, input_size = self._determine_chunk_params(frame_w, frame_h, depth_resolution)
 
         print(
             f"  Processing in chunks of {chunk_size} frames (input_size={input_size})..."
@@ -898,9 +928,18 @@ class VideoProcessor:
             ):
                 target_fps = 30
 
-            # Use high quality depth maps (1080px resolution)
+            # Use depth resolution from settings (default: auto/1080px)
+            depth_resolution = settings.get("depth_resolution", "auto")
+            if depth_resolution == "auto":
+                input_size = 1080  # Default for batch mode
+            else:
+                try:
+                    input_size = int(depth_resolution)
+                except (ValueError, TypeError):
+                    input_size = 1080
+
             depth_maps = self.depth_estimator.estimate_depth_batch(
-                frames, target_fps=target_fps, input_size=1080, fp32=False
+                frames, target_fps=target_fps, input_size=input_size, fp32=False
             )
 
             return depth_maps

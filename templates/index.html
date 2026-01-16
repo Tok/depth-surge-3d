@@ -858,6 +858,21 @@
                             </small>
                         </div>
                         <div class="mb-3">
+                            <label class="form-label">Depth Map Resolution <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Higher resolution = better quality depth maps but slower processing and more VRAM. Auto selects optimal resolution based on video."></i></label>
+                            <select class="form-select" id="depthResolution">
+                                <option value="auto" selected>Auto (Recommended)</option>
+                                <option value="518">SD - 518px (Fast, Low VRAM)</option>
+                                <option value="720">HD - 720px (Balanced)</option>
+                                <option value="1080">Full HD - 1080px (High Quality)</option>
+                                <option value="1440">2K - 1440px (Very High Quality)</option>
+                                <option value="2160">4K - 2160px (Maximum Quality, High VRAM)</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-layer-group"></i> Auto: 720p→720px, 1080p→1080px, 4K→1440px<br>
+                                <i class="fas fa-memory"></i> Higher resolution requires more VRAM
+                            </small>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label">Depth Model Type <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Metric models provide actual depth in meters (better for VR). Relative models only provide depth ordering."></i></label>
                             <select class="form-select" id="depthModelType">
                                 <option value="metric" selected>Metric Depth (Accurate meters, best for VR)</option>
@@ -1684,6 +1699,7 @@
                 device: document.getElementById('device').value,
                 model_size: document.getElementById('modelSize').value,
                 depth_model_version: document.getElementById('depthModelVersion').value,
+                depth_resolution: document.getElementById('depthResolution').value,
                 use_metric_depth: document.getElementById('depthModelType').value === 'metric',
                 super_sample: document.getElementById('superSample').value,
                 apply_distortion: document.getElementById('applyDistortion').checked,

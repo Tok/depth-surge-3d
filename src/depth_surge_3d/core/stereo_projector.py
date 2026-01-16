@@ -182,9 +182,19 @@ class StereoProjector:
 
             # Get depth map using video model
             # Higher input_size = better quality but more VRAM
-            # 1080 is good for 1080p videos, 1440 for 4K
+            # Auto-detect or use user-specified depth resolution
+            depth_resolution = settings.get("depth_resolution", "auto")
+            if depth_resolution == "auto":
+                # Auto: use image height capped at 1440
+                input_size = min(image.shape[0], 1440)
+            else:
+                try:
+                    input_size = int(depth_resolution)
+                except (ValueError, TypeError):
+                    input_size = 1080  # fallback
+
             depth_maps = self.depth_estimator.estimate_depth_batch(
-                frames, target_fps=30, input_size=1080, fp32=False
+                frames, target_fps=30, input_size=input_size, fp32=False
             )
 
             if depth_maps is None or len(depth_maps) == 0:
