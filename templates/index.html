@@ -835,6 +835,17 @@
                             <h6 class="step-title">Depth Analysis</h6>
                         </div>
                         <div class="mb-3">
+                            <label class="form-label">Depth Model Version <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="V2: Better temporal consistency (smoother), higher VRAM. V3: Lower VRAM (~50% less), faster, newer architecture."></i></label>
+                            <select class="form-select" id="depthModelVersion">
+                                <option value="v2" selected>Video-Depth-Anything V2 (Default, Temporal Consistency)</option>
+                                <option value="v3">Depth-Anything V3 (Lower VRAM, Faster)</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-film"></i> V2: 32-frame temporal windows for smooth depth<br>
+                                <i class="fas fa-bolt"></i> V3: Frame-by-frame, ~50% less VRAM, optional xformers optimization
+                            </small>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label">Depth Model Size <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Smaller models use less VRAM but may be slightly less accurate. Use Small if you have OOM errors."></i></label>
                             <select class="form-select" id="modelSize">
                                 <option value="vitb" selected>Base (Balanced, ~8GB VRAM) - Recommended</option>
@@ -1672,6 +1683,7 @@
                 keep_intermediates: document.getElementById('keepIntermediates').checked,
                 device: document.getElementById('device').value,
                 model_size: document.getElementById('modelSize').value,
+                depth_model_version: document.getElementById('depthModelVersion').value,
                 use_metric_depth: document.getElementById('depthModelType').value === 'metric',
                 super_sample: document.getElementById('superSample').value,
                 apply_distortion: document.getElementById('applyDistortion').checked,
