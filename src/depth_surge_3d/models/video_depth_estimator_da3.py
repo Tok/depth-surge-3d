@@ -59,6 +59,11 @@ class VideoDepthEstimatorDA3:
             True if model loaded successfully, False otherwise
         """
         try:
+            import warnings
+
+            # Suppress gsplat dependency warning (only needed for giant models with 3DGS)
+            warnings.filterwarnings("ignore", message=".*gsplat.*")
+
             # Import DA3 API
             from depth_anything_3.api import DepthAnything3
 

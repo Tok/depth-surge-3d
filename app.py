@@ -20,6 +20,11 @@ import cv2
 # This helps prevent memory fragmentation on GPU
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
+# Suppress warnings from dependencies
+import warnings
+
+warnings.filterwarnings("ignore", category=SyntaxWarning)  # moviepy old regex patterns
+
 # Import our constants and utilities
 from src.depth_surge_3d.core.constants import (
     INTERMEDIATE_DIRS,
