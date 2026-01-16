@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, depth-anything-v3]
+    branches: [main, dev, depth-anything-v3]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   test:
@@ -53,6 +53,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
