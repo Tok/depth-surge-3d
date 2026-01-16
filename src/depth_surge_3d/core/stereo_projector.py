@@ -401,12 +401,13 @@ class StereoProjector:
         frames_dir = output_path / "00_original_frames"
         frames_dir.mkdir(parents=True, exist_ok=True)
 
-        # Build FFmpeg command for frame extraction
-        # cmd = ["ffmpeg", "-y", "-i", video_path]
+        # Build FFmpeg command for frame extraction with CUDA acceleration
+        # Try CUDA first, fall back to CPU if unavailable
         cmd = [
             "ffmpeg",
             "-y",
-            "-hwaccel cuda",
+            "-hwaccel",
+            "cuda",
             "-hwaccel_output_format",
             "cuda",
             "-i",
@@ -423,9 +424,24 @@ class StereoProjector:
         output_pattern = str(frames_dir / "frame_%06d.png")
         cmd.extend(["-vsync", "0", output_pattern])
 
-        # Run FFmpeg
+        # Run FFmpeg with CUDA, fall back to CPU if it fails
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                # CUDA failed, try CPU fallback
+                print("  CUDA frame extraction failed, falling back to CPU")
+                cmd_cpu = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                ]
+                if start_time:
+                    cmd_cpu.extend(["-ss", start_time])
+                if end_time:
+                    cmd_cpu.extend(["-to", end_time])
+                cmd_cpu.extend(["-vsync", "0", output_pattern])
+                subprocess.run(cmd_cpu, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"FFmpeg frame extraction failed: {e.stderr}")
 
@@ -498,6 +514,51 @@ class StereoProjector:
         # Calculate final VR dimensions based on format
         return calculate_vr_output_dimensions(per_eye_width, per_eye_height, vr_format)
 
+    def _check_nvenc_available(self) -> bool:
+        """Check if NVENC hardware encoding is available."""
+        try:
+            test_result = subprocess.run(
+                ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
+            )
+            return "hevc_nvenc" in test_result.stdout
+        except Exception:
+            return False
+
+    def _add_video_encoder_options(self, cmd: list) -> None:
+        """Add appropriate video encoder options to FFmpeg command.
+
+        Args:
+            cmd: FFmpeg command list to append encoder options to
+        """
+        if self._check_nvenc_available():
+            print("  Using NVENC hardware encoding (H.265)")
+            cmd.extend(
+                [
+                    "-c:v",
+                    "hevc_nvenc",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-preset",
+                    "p7",
+                    "-tune",
+                    "hq",
+                ]
+            )
+        else:
+            print("  Using software encoding (H.264)")
+            cmd.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-crf",
+                    "18",
+                    "-preset",
+                    "medium",
+                ]
+            )
+
     def create_output_video(
         self,
         vr_frames_dir: str,
@@ -538,8 +599,7 @@ class StereoProjector:
         else:
             fps_value = "30"  # Default fallback
 
-        # Build FFmpeg command
-        """
+        # Build base FFmpeg command with input
         cmd = [
             "ffmpeg",
             "-y",
@@ -547,31 +607,6 @@ class StereoProjector:
             fps_value,
             "-i",
             str(vr_frames_path / "frame_%06d.png"),
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-        ]
-        """
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-c",
-            "hevc_nvenc",
-            "-threads",
-            "8",
-            "-framerate",
-            fps_value,
-            "-i",
-            str(vr_frames_path / "frame_%06d.png"),
-            # "-c:v",
-            # "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-preset",
-            "p7",
-            "-tune",
-            "hq",
         ]
 
         # Add audio if requested
@@ -582,6 +617,9 @@ class StereoProjector:
             if end_time:
                 cmd.extend(["-to", end_time])
             cmd.extend(["-c:a", "aac", "-shortest"])
+
+        # Add video codec options
+        self._add_video_encoder_options(cmd)
 
         # Add output path
         cmd.append(output_path)

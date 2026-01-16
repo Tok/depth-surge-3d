@@ -74,14 +74,22 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
         if not cap.isOpened():
             return properties
 
+        fps = float(cap.get(cv2.CAP_PROP_FPS))
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        # Guard against zero FPS to prevent division by zero
+        if fps > 0:
+            duration = frame_count / fps
+        else:
+            duration = 0.0
+
         properties.update(
             {
                 "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                 "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                "fps": float(cap.get(cv2.CAP_PROP_FPS)),
-                "frame_count": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-                "duration": int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                / float(cap.get(cv2.CAP_PROP_FPS)),
+                "fps": fps,
+                "frame_count": frame_count,
+                "duration": duration,
                 "codec": int(cap.get(cv2.CAP_PROP_FOURCC)),
             }
         )

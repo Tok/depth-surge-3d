@@ -667,8 +667,8 @@ class VideoProcessor:
         )
         expected_frames = end_frame - start_frame
 
-        # Build FFmpeg command with CUDA acceleration and frame range selection
-        cmd = [
+        # Try CUDA acceleration first, fall back to CPU if unavailable
+        cmd_cuda = [
             "ffmpeg",
             "-y",
             "-hwaccel",
@@ -689,10 +689,29 @@ class VideoProcessor:
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd_cuda, capture_output=True, text=True)
             if result.returncode != 0:
-                print(f"FFmpeg error: {result.stderr}")
-                return []
+                # CUDA failed, try CPU fallback
+                print("  CUDA frame extraction failed, falling back to CPU")
+                cmd_cpu = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                    "-vf",
+                    f"select=between(n\\,{start_frame}\\,{end_frame - 1})",
+                    "-pix_fmt",
+                    "rgb24",
+                    "-frames:v",
+                    str(expected_frames),
+                    "-fps_mode",
+                    "passthrough",
+                    str(frames_dir / "frame_%06d.png"),
+                ]
+                result_cpu = subprocess.run(cmd_cpu, capture_output=True, text=True)
+                if result_cpu.returncode != 0:
+                    print(f"FFmpeg error: {result_cpu.stderr}")
+                    return []
         except Exception as e:
             print(f"Error extracting frames: {e}")
             return []
