@@ -133,7 +133,7 @@ class VideoDepthEstimatorDA3:
         Args:
             frames: Input frames array (shape: [N, H, W, 3], BGR format)
             target_fps: Target frame rate (unused in DA3, kept for API compatibility)
-            input_size: Input size for the model (unused in DA3)
+            input_size: Processing resolution for DA3 (controls quality vs speed)
             fp32: Use FP32 instead of FP16 (unused in DA3)
 
         Returns:
@@ -143,52 +143,51 @@ class VideoDepthEstimatorDA3:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
         try:
-            # Convert BGR to RGB
-            frames_rgb = frames[..., ::-1].copy()
+            # Convert BGR to RGB for DA3
+            frames_rgb = [frame[..., ::-1].copy() for frame in frames]
 
-            # Save frames temporarily for DA3 inference
-            # DA3 API expects file paths, so we need to write frames to disk
-            temp_dir = Path("temp_frames_da3")
-            temp_dir.mkdir(exist_ok=True)
+            # Determine processing resolution
+            # Use input_size parameter to control DA3's internal resolution
+            # Higher values = better quality but slower & more VRAM
+            # DA3 default is 504, but we can go higher for better quality
+            original_height, original_width = frames.shape[1:3]
 
-            frame_paths = []
-            for idx, frame in enumerate(frames_rgb):
-                frame_path = temp_dir / f"frame_{idx:06d}.png"
-                import cv2
+            # Use the larger dimension as process_res, capped at input_size
+            process_res = min(max(original_height, original_width), input_size)
 
-                cv2.imwrite(str(frame_path), cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-                frame_paths.append(str(frame_path))
-
-            # Run DA3 inference
+            # Run DA3 inference directly on numpy arrays (no file I/O needed!)
             with torch.no_grad():
-                prediction = self.model.inference(frame_paths)
+                prediction = self.model.inference(
+                    frames_rgb,
+                    process_res=process_res,
+                    process_res_method="upper_bound_resize",
+                )
 
             # Extract depth maps
             depth_maps = prediction.depth  # [N, H, W] float32
 
-            # Clean up temporary frames
-            import shutil
-
-            shutil.rmtree(temp_dir)
-
-            # Resize depth maps to match original frame resolution
-            # DA3 outputs at model's internal resolution, need to resize to input size
+            # Resize depth maps to match original frame resolution if needed
             import cv2
 
-            original_height, original_width = frames.shape[1:3]
             resized_depth_maps = []
             for depth_map in depth_maps:
                 # Convert to numpy if tensor
                 if torch.is_tensor(depth_map):
                     depth_map = depth_map.cpu().numpy()
 
-                # Resize to original dimensions
-                resized = cv2.resize(
-                    depth_map,
-                    (original_width, original_height),
-                    interpolation=cv2.INTER_LINEAR,
-                )
-                resized_depth_maps.append(resized)
+                # Resize to original dimensions if different
+                if (
+                    depth_map.shape[0] != original_height
+                    or depth_map.shape[1] != original_width
+                ):
+                    resized = cv2.resize(
+                        depth_map,
+                        (original_width, original_height),
+                        interpolation=cv2.INTER_LINEAR,
+                    )
+                    resized_depth_maps.append(resized)
+                else:
+                    resized_depth_maps.append(depth_map)
 
             # Normalize depth maps to 0-1 range
             return self._normalize_depths(np.array(resized_depth_maps))
