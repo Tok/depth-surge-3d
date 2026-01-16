@@ -13,4 +13,5 @@ easydict>=1.9
 
 # Depth Anything V3 dependencies
 xformers>=0.0.26
-depth-anything-3>=0.1.0
+# Install DA3 from GitHub (not yet on PyPI)
+git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
