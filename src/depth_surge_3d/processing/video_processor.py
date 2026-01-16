@@ -775,15 +775,15 @@ class VideoProcessor:
                 print(f"  Warning: Invalid depth_resolution '{depth_resolution}', using auto")
 
         # Auto mode: DA3 is much more memory efficient than V2, allowing higher quality
-        # These parameters balance quality vs VRAM for typical GPUs
+        # Aggressive defaults for better quality (DA3 can handle it on modern GPUs)
         if megapixels > 8.0:  # >8MP (4K is ~8.3MP)
-            return 6, 1440  # 4K videos - high quality depth maps
+            return 4, 2160  # 4K videos - full 4K depth maps
         elif megapixels > 2.0:  # >2MP (1080p is 2.1MP)
-            return 12, 1080  # 1080p videos - full resolution depth
+            return 8, 1440  # 1080p videos - 2K depth for better quality
         elif megapixels > 1.0:  # >1MP (720p is 0.9MP)
-            return 16, 720  # 720p videos - matched resolution
+            return 12, 1080  # 720p videos - upscaled to 1080p depth
         else:
-            return 32, 518  # SD videos - original quality
+            return 24, 720  # SD videos - upscaled to 720p depth
 
     def _clear_gpu_memory(self) -> None:
         """Clear GPU cache and print available memory."""
@@ -928,15 +928,15 @@ class VideoProcessor:
             ):
                 target_fps = 30
 
-            # Use depth resolution from settings (default: auto/1080px)
+            # Use depth resolution from settings (default: auto/1440px for better quality)
             depth_resolution = settings.get("depth_resolution", "auto")
             if depth_resolution == "auto":
-                input_size = 1080  # Default for batch mode
+                input_size = 1440  # Higher default for better quality with DA3
             else:
                 try:
                     input_size = int(depth_resolution)
                 except (ValueError, TypeError):
-                    input_size = 1080
+                    input_size = 1440
 
             depth_maps = self.depth_estimator.estimate_depth_batch(
                 frames, target_fps=target_fps, input_size=input_size, fp32=False

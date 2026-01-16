@@ -66,12 +66,21 @@ class VideoDepthEstimatorDA3:
             import logging
 
             # Suppress gsplat dependency warning (only needed for giant models with 3DGS)
-            # Must suppress before importing DA3 since the warning comes from DA3's __init__
+            # DA3 uses loguru logger which prints directly, need to suppress before import
             warnings.filterwarnings("ignore", message=".*gsplat.*")
             warnings.filterwarnings("ignore", category=UserWarning, module="depth_anything_3")
 
-            # Also suppress logging warnings from DA3
-            logging.getLogger("depth_anything_3").setLevel(logging.ERROR)
+            # Suppress all depth_anything_3 logging including loguru output
+            logging.getLogger("depth_anything_3").setLevel(logging.CRITICAL)
+
+            # Suppress loguru logger used by DA3 (if available)
+            try:
+                import sys
+                from loguru import logger
+                logger.remove()  # Remove default handler
+                logger.add(sys.stderr, level="ERROR")  # Re-add with ERROR level only
+            except ImportError:
+                pass  # loguru not installed or not used
 
             # Import DA3 API
             from depth_anything_3.api import DepthAnything3
