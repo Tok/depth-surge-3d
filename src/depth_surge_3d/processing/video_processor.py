@@ -1296,10 +1296,6 @@ class VideoProcessor:
         cmd = [
             "ffmpeg",
             "-y",
-            '-c',
-            'hevc_nvenc',
-            '-threads',
-            '8',
             "-framerate",
             str(base_fps),
             "-i",
@@ -1319,20 +1315,58 @@ class VideoProcessor:
                 )
                 cmd.extend(["-i", original_video, "-c:a", "aac", "-shortest"])
 
-        # Video encoding settings - use NVENC hardware encoding if available
-        cmd.extend(
-            [
-                "-c:v",
-                "hevc_nvenc",
-                "-pix_fmt",
-                "yuv420p",
-                "-preset",
-                "p7",
-                "-tune",
-                "hq",
+        # Video encoding settings - support multiple encoders
+        encoder = settings.get("video_encoder", "auto")
+
+        if encoder == "auto" or encoder == "nvenc":
+            # Try NVENC (NVIDIA hardware encoding) first
+            cmd_nvenc = cmd + [
+                "-c:v", "hevc_nvenc",
+                "-pix_fmt", "yuv420p",
+                "-preset", "p7",
+                "-tune", "hq",
                 str(output_path),
             ]
-        )  # NVENC hardware encoding
+            # Test if NVENC is available
+            test_result = subprocess.run(
+                ["ffmpeg", "-hide_banner", "-encoders"],
+                capture_output=True,
+                text=True
+            )
+            if "hevc_nvenc" in test_result.stdout:
+                print("  Using NVENC hardware encoding (H.265)")
+                cmd = cmd_nvenc
+            else:
+                if encoder == "nvenc":
+                    print("  Warning: NVENC not available, falling back to software encoding")
+                encoder = "libx264"  # Fallback to software
+
+        if encoder == "auto" and "hevc_nvenc" not in subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
+        ).stdout:
+            encoder = "libx264"  # Set default software encoder
+
+        # Software encoding fallback
+        if encoder in ["libx264", "libx265"]:
+            codec = encoder
+            print(f"  Using software encoding ({codec})")
+            cmd.extend([
+                "-c:v", codec,
+                "-pix_fmt", "yuv420p",
+                "-crf", "18",  # High quality
+                "-preset", "medium",
+                str(output_path),
+            ])
+        elif encoder not in ["auto", "nvenc"]:
+            # Unknown encoder, use libx264 as safe fallback
+            print(f"  Warning: Unknown encoder '{encoder}', using libx264")
+            cmd.extend([
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-crf", "18",
+                "-preset", "medium",
+                str(output_path),
+            ])
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)
