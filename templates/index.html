@@ -1987,8 +1987,32 @@
             document.getElementById('outputPath').textContent = data.output_dir;
             document.getElementById('outputDirectoryCard').style.display = 'block';
 
+            // Show success modal
             document.getElementById('successMessage').textContent = data.message;
-            new bootstrap.Modal(document.getElementById('successModal')).show();
+            const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+            successModal.show();
+
+            // Reset upload state when modal is dismissed to allow new processing
+            document.getElementById('successModal').addEventListener('hidden.bs.modal', function resetAfterComplete() {
+                // Reset file input to allow uploading new videos
+                const videoFile = document.getElementById('videoFile');
+                if (videoFile) {
+                    videoFile.value = '';
+                }
+
+                // Hide video preview and info
+                const videoPreview = document.getElementById('videoPreview');
+                const videoInfo = document.getElementById('videoInfo');
+                if (videoPreview) videoPreview.style.display = 'none';
+                if (videoInfo) videoInfo.style.display = 'none';
+
+                // Reset upload button text
+                const uploadBtnText = document.getElementById('uploadBtnText');
+                if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+                // Remove this event listener to prevent multiple bindings
+                this.removeEventListener('hidden.bs.modal', resetAfterComplete);
+            }, { once: true });
         }
 
         // Handle processing error
@@ -2009,8 +2033,32 @@
             hideProgressPanel();
             currentSessionId = null;
 
+            // Show error modal
             document.getElementById('errorMessage').textContent = data.error;
-            new bootstrap.Modal(document.getElementById('errorModal')).show();
+            const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+            errorModal.show();
+
+            // Reset upload state when modal is dismissed to allow new processing
+            document.getElementById('errorModal').addEventListener('hidden.bs.modal', function resetAfterError() {
+                // Reset file input to allow uploading new videos
+                const videoFile = document.getElementById('videoFile');
+                if (videoFile) {
+                    videoFile.value = '';
+                }
+
+                // Hide video preview and info
+                const videoPreview = document.getElementById('videoPreview');
+                const videoInfo = document.getElementById('videoInfo');
+                if (videoPreview) videoPreview.style.display = 'none';
+                if (videoInfo) videoInfo.style.display = 'none';
+
+                // Reset upload button text
+                const uploadBtnText = document.getElementById('uploadBtnText');
+                if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+                // Remove this event listener to prevent multiple bindings
+                this.removeEventListener('hidden.bs.modal', resetAfterError);
+            }, { once: true });
         }
         
         // Handle processing stopped
@@ -2024,9 +2072,25 @@
             // Hide stop button, show start button
             hideProgressPanel();
             currentSessionId = null;
-            
+
             // Show info message
             alert('Processing has been stopped: ' + data.message);
+
+            // Reset upload state to allow new processing
+            const videoFile = document.getElementById('videoFile');
+            if (videoFile) {
+                videoFile.value = '';
+            }
+
+            // Hide video preview and info
+            const videoPreview = document.getElementById('videoPreview');
+            const videoInfo = document.getElementById('videoInfo');
+            if (videoPreview) videoPreview.style.display = 'none';
+            if (videoInfo) videoInfo.style.display = 'none';
+
+            // Reset upload button text
+            const uploadBtnText = document.getElementById('uploadBtnText');
+            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
         }
 
 
