@@ -80,7 +80,8 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
                 "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
                 "fps": float(cap.get(cv2.CAP_PROP_FPS)),
                 "frame_count": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-                "duration": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) / float(cap.get(cv2.CAP_PROP_FPS)),
+                "duration": int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                / float(cap.get(cv2.CAP_PROP_FPS)),
                 "codec": int(cap.get(cv2.CAP_PROP_FOURCC)),
             }
         )
@@ -193,7 +194,9 @@ def parse_time_string(time_str: str) -> Optional[float]:
     return None
 
 
-def create_output_directories(base_path: Path, keep_intermediates: bool = True) -> Dict[str, Path]:
+def create_output_directories(
+    base_path: Path, keep_intermediates: bool = True
+) -> Dict[str, Path]:
     """
     Create output directory structure.
 
@@ -268,7 +271,9 @@ def generate_output_filename(
     base_name: str,
     vr_format: str,
     vr_resolution: str,
-    processing_mode: Optional[str] = None,  # Deprecated, kept for backwards compatibility
+    processing_mode: Optional[
+        str
+    ] = None,  # Deprecated, kept for backwards compatibility
 ) -> str:
     """
     Generate output filename with metadata.
@@ -431,7 +436,9 @@ def _cleanup_directory(directory: Path, keep_patterns: List[str]) -> int:
     return removed_count
 
 
-def cleanup_intermediate_files(base_path: Path, keep_patterns: Optional[List[str]] = None) -> int:
+def cleanup_intermediate_files(
+    base_path: Path, keep_patterns: Optional[List[str]] = None
+) -> int:
     """
     Clean up intermediate files, optionally keeping certain patterns.
 
@@ -465,7 +472,9 @@ def verify_ffmpeg_installation() -> bool:
         True if FFmpeg is available
     """
     try:
-        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(
+            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=10
+        )
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
@@ -661,14 +670,18 @@ def update_processing_status(
         settings_data["metadata"]["last_updated_timestamp"] = time.time()
 
         if status == "completed":
-            settings_data["metadata"]["completed_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            settings_data["metadata"]["completed_at"] = time.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
             settings_data["metadata"]["completed_timestamp"] = time.time()
 
             # Calculate processing duration
             if "created_timestamp" in settings_data["metadata"]:
                 duration = time.time() - settings_data["metadata"]["created_timestamp"]
                 settings_data["metadata"]["processing_duration_seconds"] = duration
-                settings_data["metadata"]["processing_duration_formatted"] = format_time_duration(duration)
+                settings_data["metadata"]["processing_duration_formatted"] = (
+                    format_time_duration(duration)
+                )
 
         # Add any additional info
         if additional_info:
@@ -687,7 +700,9 @@ def update_processing_status(
         return False
 
 
-def find_settings_file(output_dir: Path, batch_name: Optional[str] = None) -> Optional[Path]:
+def find_settings_file(
+    output_dir: Path, batch_name: Optional[str] = None
+) -> Optional[Path]:
     """
     Find a settings file in the output directory.
 
@@ -767,7 +782,9 @@ def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
                     f"Found {progress_info['frames_processed']} processed frames - can resume from where left off"
                 )
             else:
-                result["recommendations"].append("No processed frames found - will restart from beginning")
+                result["recommendations"].append(
+                    "No processed frames found - will restart from beginning"
+                )
 
         return result
 
@@ -776,7 +793,9 @@ def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
         return result
 
 
-def analyze_processing_progress(output_dir: Path, settings_data: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_processing_progress(
+    output_dir: Path, settings_data: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Analyze how much processing has been completed.
 

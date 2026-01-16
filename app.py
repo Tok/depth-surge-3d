@@ -20,6 +20,11 @@ import cv2
 # This helps prevent memory fragmentation on GPU
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
+# Suppress warnings from dependencies
+import warnings
+
+warnings.filterwarnings("ignore", category=SyntaxWarning)  # moviepy old regex patterns
+
 # Import our constants and utilities
 from src.depth_surge_3d.core.constants import (
     INTERMEDIATE_DIRS,
@@ -85,7 +90,9 @@ def cleanup_processes():
 
     # Kill any ffmpeg processes related to this app
     try:
-        subprocess.run(["pkill", "-f", "ffmpeg.*depth-surge"], check=False, capture_output=True)
+        subprocess.run(
+            ["pkill", "-f", "ffmpeg.*depth-surge"], check=False, capture_output=True
+        )
     except:
         pass
 
@@ -194,7 +201,12 @@ def get_system_info():
     """Get system information including GPU details"""
     import torch  # Import here to avoid early CUDA initialization
 
-    info = {"gpu_device": "CPU", "vram_usage": "N/A", "device_mode": "CPU", "cuda_available": False}
+    info = {
+        "gpu_device": "CPU",
+        "vram_usage": "N/A",
+        "device_mode": "CPU",
+        "cuda_available": False,
+    }
 
     try:
         if torch.cuda.is_available():
@@ -205,7 +217,10 @@ def get_system_info():
             # Get VRAM usage
             try:
                 allocated = torch.cuda.memory_allocated() / BYTES_TO_GB_DIVISOR
-                total_memory = torch.cuda.get_device_properties(0).total_memory / BYTES_TO_GB_DIVISOR
+                total_memory = (
+                    torch.cuda.get_device_properties(0).total_memory
+                    / BYTES_TO_GB_DIVISOR
+                )
                 info["vram_usage"] = f"{allocated:.1f}GB / {total_memory:.1f}GB"
             except Exception as vram_error:
                 vprint(f"Error getting VRAM details: {vram_error}")
@@ -247,7 +262,15 @@ class ProgressCallback:
         self.step_progress = 0
         self.step_total = 0
 
-    def update_progress(self, stage, frame_num=None, phase=None, step_name=None, step_progress=None, step_total=None):
+    def update_progress(
+        self,
+        stage,
+        frame_num=None,
+        phase=None,
+        step_name=None,
+        step_progress=None,
+        step_total=None,
+    ):
         global current_processing
         import time
 
@@ -288,14 +311,18 @@ class ProgressCallback:
         current_processing["stage"] = stage
 
         # Calculate overall progress using weighted steps
-        step_progress_ratio = (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
+        step_progress_ratio = (
+            (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
+        )
 
         # Sum weights of all completed steps
         cumulative_weight = sum(self.step_weights[: self.current_step_index])
 
         # Add weighted progress of current step
         if self.current_step_index < len(self.step_weights):
-            cumulative_weight += step_progress_ratio * self.step_weights[self.current_step_index]
+            cumulative_weight += (
+                step_progress_ratio * self.step_weights[self.current_step_index]
+            )
 
         progress = round(cumulative_weight * 100, PROGRESS_DECIMAL_PLACES)
 
@@ -323,7 +350,11 @@ class ProgressCallback:
         }
 
         # Console output - show both overall and step progress
-        step_percent = (self.step_progress / max(self.step_total, 1)) * 100 if self.step_total > 0 else 0
+        step_percent = (
+            (self.step_progress / max(self.step_total, 1)) * 100
+            if self.step_total > 0
+            else 0
+        )
         progress_msg = (
             f"Overall: {progress:05.1f}% | "
             f"Step: {step_percent:03.0f}% ({self.step_progress:04d}/{self.step_total:04d}) | "
@@ -354,7 +385,11 @@ class ProgressCallback:
         """Finish progress tracking (compatibility with ProgressTracker interface)."""
         print(f"{message}")
         try:
-            socketio.emit("processing_complete", {"success": True, "message": message}, room=self.session_id)
+            socketio.emit(
+                "processing_complete",
+                {"success": True, "message": message},
+                room=self.session_id,
+            )
         except Exception as e:
             print(console_warning(f"Error emitting completion: {e}"))
 
@@ -376,20 +411,11 @@ def process_video_async(session_id, video_path, settings, output_dir):
         else:
             print("CUDA not available, using CPU")
 
-        # Initialize projector with Video-Depth-Anything model
-        # Use model_size setting to select the appropriate model
+        # Initialize projector with depth model
+        # Get depth model version (v2 or v3)
+        depth_model_version = settings.get("depth_model_version", "v3")  # Default to V3
         model_size = settings.get("model_size", "vitb")  # Default to Base for 16GB GPUs
         use_metric = settings.get("use_metric_depth", True)  # Default to metric depth
-
-        # Select the appropriate model path based on size and metric/relative
-        if use_metric:
-            model_paths_dict = MODEL_PATHS_METRIC
-            depth_type = "Metric"
-        else:
-            model_paths_dict = MODEL_PATHS
-            depth_type = "Relative"
-
-        model_path = settings.get("model_path", model_paths_dict.get(model_size, MODEL_PATHS_METRIC["vitb"]))
 
         device = settings.get("device", "auto")
         if device == "auto":
@@ -403,10 +429,39 @@ def process_video_async(session_id, video_path, settings, output_dir):
             )
             raise Exception(error_msg)
 
-        print(f"Loading {model_size.upper()} {depth_type} Depth model from: {model_path}")
+        # For V2, select the appropriate model path based on size and metric/relative
+        # For V3, model_path is just the model name (e.g., "large", "base", "small")
+        if depth_model_version == "v2":
+            if use_metric:
+                model_paths_dict = MODEL_PATHS_METRIC
+                depth_type = "Metric"
+            else:
+                model_paths_dict = MODEL_PATHS
+                depth_type = "Relative"
+
+            model_path = settings.get(
+                "model_path",
+                model_paths_dict.get(model_size, MODEL_PATHS_METRIC["vitb"]),
+            )
+            print(
+                f"Loading Video-Depth-Anything V2: {model_size.upper()} {depth_type} from: {model_path}"
+            )
+        else:
+            # For V3, map model_size to DA3 model names
+            da3_model_map = {"vits": "small", "vitb": "base", "vitl": "large"}
+            model_path = da3_model_map.get(model_size, "large")
+            print(
+                f"Loading Depth-Anything V3: {model_path.upper()} model (metric: {use_metric})"
+            )
+
         print(f"Using device: {device.upper()}")
 
-        projector = create_stereo_projector(model_path, device, metric=use_metric)
+        projector = create_stereo_projector(
+            model_path,
+            device,
+            metric=use_metric,
+            depth_model_version=depth_model_version,
+        )
 
         # Ensure the model is loaded before processing
         if not projector.depth_estimator.load_model():
@@ -427,7 +482,9 @@ def process_video_async(session_id, video_path, settings, output_dir):
         # Calculate actual frame range that will be extracted (matching VideoProcessor logic)
         from depth_surge_3d.utils.file_operations import calculate_frame_range
 
-        start_frame, end_frame = calculate_frame_range(video_info["frame_count"], original_fps, start_time, end_time)
+        start_frame, end_frame = calculate_frame_range(
+            video_info["frame_count"], original_fps, start_time, end_time
+        )
         expected_frames = end_frame - start_frame
 
         processing_mode = settings.get("processing_mode", "serial")
@@ -455,7 +512,9 @@ def process_video_async(session_id, video_path, settings, output_dir):
         vr_resolution = settings.get("vr_resolution", "auto")
         if vr_resolution == "auto":
             vr_resolution = auto_detect_resolution(
-                video_info["width"], video_info["height"], settings.get("vr_format", "side_by_side")
+                video_info["width"],
+                video_info["height"],
+                settings.get("vr_format", "side_by_side"),
             )
 
         # Get resolution dimensions
@@ -492,7 +551,11 @@ def process_video_async(session_id, video_path, settings, output_dir):
         try:
             socketio.emit(
                 "processing_complete",
-                {"success": True, "output_dir": str(output_dir), "message": "Video processing completed successfully!"},
+                {
+                    "success": True,
+                    "output_dir": str(output_dir),
+                    "message": "Video processing completed successfully!",
+                },
                 room=session_id,
             )
         except Exception as e:
@@ -501,13 +564,19 @@ def process_video_async(session_id, video_path, settings, output_dir):
     except InterruptedError as e:
         # Handle user-requested stop
         try:
-            socketio.emit("processing_stopped", {"success": True, "message": str(e)}, room=session_id)
+            socketio.emit(
+                "processing_stopped",
+                {"success": True, "message": str(e)},
+                room=session_id,
+            )
         except Exception as emit_error:
             print(console_warning(f"Error emitting stop: {emit_error}"))
 
     except Exception as e:
         try:
-            socketio.emit("processing_error", {"success": False, "error": str(e)}, room=session_id)
+            socketio.emit(
+                "processing_error", {"success": False, "error": str(e)}, room=session_id
+            )
         except Exception as emit_error:
             print(console_warning(f"Error emitting error: {emit_error}"))
         print(f"Processing error: {e}")  # Always print errors
@@ -540,7 +609,10 @@ def upload_video():
     video_name = Path(original_filename).stem
     file_ext = Path(original_filename).suffix
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(app.config["OUTPUT_FOLDER"]) / f"{int(time.time())}_{video_name}_{timestamp}"
+    output_dir = (
+        Path(app.config["OUTPUT_FOLDER"])
+        / f"{int(time.time())}_{video_name}_{timestamp}"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save video to output directory as "original_video.ext"
@@ -602,13 +674,15 @@ def upload_video():
         print(f"Warning: Audio extraction error: {e}")
         audio_path = None
 
-    return jsonify({
-        "success": True,
-        "filename": video_path.name,
-        "output_dir": str(output_dir),
-        "video_info": video_info,
-        "has_audio": audio_path is not None and audio_path.exists(),
-    })
+    return jsonify(
+        {
+            "success": True,
+            "filename": video_path.name,
+            "output_dir": str(output_dir),
+            "video_info": video_info,
+            "has_audio": audio_path is not None and audio_path.exists(),
+        }
+    )
 
 
 @app.route("/process", methods=["POST"])
@@ -639,16 +713,23 @@ def start_processing():
             break
 
     if not video_path:
-        return jsonify({"error": "Original video file not found in output directory"}), 404
+        return (
+            jsonify({"error": "Original video file not found in output directory"}),
+            404,
+        )
 
     # Generate session ID
     session_id = str(uuid.uuid4())
 
     # Start processing in background using socketio's method for proper context handling
-    thread = socketio.start_background_task(process_video_async, session_id, video_path, settings, output_dir)
+    thread = socketio.start_background_task(
+        process_video_async, session_id, video_path, settings, output_dir
+    )
     current_processing["thread"] = thread
 
-    return jsonify({"success": True, "session_id": session_id, "output_dir": str(output_dir)})
+    return jsonify(
+        {"success": True, "session_id": session_id, "output_dir": str(output_dir)}
+    )
 
 
 @app.route("/stop", methods=["POST"])
@@ -698,7 +779,14 @@ def resume_processing():
             break
 
     if not original_video:
-        return jsonify({"error": "Could not find original video file in output directory for resuming"}), 404
+        return (
+            jsonify(
+                {
+                    "error": "Could not find original video file in output directory for resuming"
+                }
+            ),
+            404,
+        )
 
     # Try to detect settings from existing files/directories
     settings = detect_resume_settings(output_path)
@@ -707,10 +795,14 @@ def resume_processing():
     session_id = str(uuid.uuid4())
 
     # Start processing in background using socketio's method for proper context handling
-    thread = socketio.start_background_task(process_video_async, session_id, original_video, settings, output_path)
+    thread = socketio.start_background_task(
+        process_video_async, session_id, original_video, settings, output_path
+    )
     current_processing["thread"] = thread
 
-    return jsonify({"success": True, "session_id": session_id, "output_dir": str(output_path)})
+    return jsonify(
+        {"success": True, "session_id": session_id, "output_dir": str(output_path)}
+    )
 
 
 def detect_resume_settings(output_path):
@@ -814,7 +906,9 @@ def analyze_batch_directory(batch_path):
     for stage_dir, stage_name in stages.items():
         stage_path = batch_path / stage_dir
         if stage_path.exists():
-            frame_count = len(list(stage_path.glob("*.png"))) + len(list(stage_path.glob("*.jpg")))
+            frame_count = len(list(stage_path.glob("*.png"))) + len(
+                list(stage_path.glob("*.jpg"))
+            )
             if frame_count > 0:
                 stage_num = int(stage_dir.split("_")[0])
                 if stage_num > highest_stage_num:
@@ -826,7 +920,11 @@ def analyze_batch_directory(batch_path):
     if highest_stage_num >= 6:  # Final frames available
         sample_frame_dirs = [
             d
-            for d in [INTERMEDIATE_DIRS["left_final"], INTERMEDIATE_DIRS["right_final"], INTERMEDIATE_DIRS["vr_frames"]]
+            for d in [
+                INTERMEDIATE_DIRS["left_final"],
+                INTERMEDIATE_DIRS["right_final"],
+                INTERMEDIATE_DIRS["vr_frames"],
+            ]
             if (batch_path / d).exists()
         ]
         for frame_dir in sample_frame_dirs:
@@ -864,7 +962,9 @@ def analyze_batch_directory(batch_path):
 
     # Generate settings summary
     if analysis["vr_format"] != "unknown" and analysis["resolution"] != "unknown":
-        analysis["settings_summary"] = f"{analysis['vr_format']}, {analysis['resolution']}"
+        analysis["settings_summary"] = (
+            f"{analysis['vr_format']}, {analysis['resolution']}"
+        )
 
     return analysis
 
@@ -880,7 +980,11 @@ def create_video_from_batch(batch_path, settings):
     # Determine frame directory to use
     if frame_source == "auto":
         # Auto-detect highest available stage
-        stages = [INTERMEDIATE_DIRS["vr_frames"], INTERMEDIATE_DIRS["left_final"], INTERMEDIATE_DIRS["right_final"]]
+        stages = [
+            INTERMEDIATE_DIRS["vr_frames"],
+            INTERMEDIATE_DIRS["left_final"],
+            INTERMEDIATE_DIRS["right_final"],
+        ]
         frame_dir = None
         for stage in stages:
             stage_path = batch_path / stage
@@ -917,7 +1021,9 @@ def create_video_from_batch(batch_path, settings):
     cmd = ["ffmpeg", FFMPEG_OVERWRITE_FLAG]
 
     # Input frames
-    cmd.extend(["-framerate", str(fps) if fps != "original" else str(DEFAULT_FALLBACK_FPS)])
+    cmd.extend(
+        ["-framerate", str(fps) if fps != "original" else str(DEFAULT_FALLBACK_FPS)]
+    )
     cmd.extend(["-i", str(frame_dir / "frame_%06d.png")])
 
     # Quality settings
@@ -954,7 +1060,9 @@ def create_video_from_batch(batch_path, settings):
 
     # Execute FFmpeg
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=VIDEO_CREATION_TIMEOUT)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=VIDEO_CREATION_TIMEOUT
+        )
         if result.returncode != 0:
             raise Exception(f"FFmpeg error: {result.stderr}")
     except subprocess.TimeoutExpired:
@@ -1026,7 +1134,9 @@ def handle_join_session(data):
         from flask_socketio import join_room
 
         join_room(session_id)
-        vprint(f"Client {request.sid} joined session {session_id[:SESSION_ID_DISPLAY_LENGTH]}...")
+        vprint(
+            f"Client {request.sid} joined session {session_id[:SESSION_ID_DISPLAY_LENGTH]}..."
+        )
 
         # Send initial status to joined client
         try:
@@ -1060,7 +1170,11 @@ if __name__ == "__main__":
         default=DEFAULT_SERVER_PORT,
         help=f"Port to run the server on (default: {DEFAULT_SERVER_PORT})",
     )
-    parser.add_argument("--host", default=DEFAULT_SERVER_HOST, help=f"Host to bind to (default: {DEFAULT_SERVER_HOST})")
+    parser.add_argument(
+        "--host",
+        default=DEFAULT_SERVER_HOST,
+        help=f"Host to bind to (default: {DEFAULT_SERVER_HOST})",
+    )
     args = parser.parse_args()
 
     # Set global verbose flag
@@ -1090,4 +1204,10 @@ if __name__ == "__main__":
 
         warnings.filterwarnings("ignore", message=".*Werkzeug.*production.*")
 
-    socketio.run(app, host=args.host, port=args.port, debug=args.verbose, allow_unsafe_werkzeug=True)
+    socketio.run(
+        app,
+        host=args.host,
+        port=args.port,
+        debug=args.verbose,
+        allow_unsafe_werkzeug=True,
+    )

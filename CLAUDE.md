@@ -1,27 +1,60 @@
 # Depth Surge 3D - Claude Development Notes
 
 ## Project Overview
-A comprehensive 2D to 3D VR video converter using Video-Depth-Anything for temporal-consistent depth estimation and advanced FFmpeg processing for high-quality stereo pair generation.
+A comprehensive 2D to 3D VR video converter using Video-Depth-Anything V2 or Depth-Anything V3 for depth estimation and advanced FFmpeg processing for high-quality stereo pair generation.
 
-**Current Version**: 0.7.7
+**Current Version**: 0.8.0 (depth-anything-v3 branch)
 
 ## Key Features Implemented
 - **Command-line Interface**: Full-featured CLI with time range selection, resolution control, and VR format options
 - **Web UI**: Modern dark-themed Flask interface with real-time progress tracking and live frame previews
+- **Dual Depth Model Support**: Choose between Video-Depth-Anything V2 (temporal consistency) or Depth-Anything V3 (better VRAM efficiency)
 - **Resume Capability**: Intelligent step-level resume that skips completed processing stages
 - **Audio Preservation**: Immediate lossless FLAC extraction with time-synchronized audio in final output
 - **Symmetric Stereo Generation**: Proper half-disparity shifts for both left and right eyes
 - **Multiple VR Formats**: Side-by-side and over-under variants with auto-detection
 - **Generation-Specific Storage**: Self-contained timestamped output directories with original video
-- **Temporal Consistency**: Video-Depth-Anything with 32-frame sliding windows for smooth depth
+- **Temporal Consistency**: Video-Depth-Anything V2 with 32-frame sliding windows for smooth depth transitions
 
 ## Technical Architecture
 - **Backend**: Flask + SocketIO (threading async_mode) for real-time communication
-- **AI Model**: Video-Depth-Anything (Large/Base/Small) for temporal-consistent depth estimation
+- **AI Models**:
+  - Video-Depth-Anything V2 (Large/Base/Small) for temporal-consistent depth estimation
+  - Depth-Anything V3 (Giant/Large/Base/Small) for improved VRAM efficiency
 - **Video Processing**: FFmpeg for frame extraction, enhancement, and final video assembly
 - **Progress Tracking**: 7-step weighted progress system with WebSocket-based real-time updates
 - **GPU Acceleration**: CUDA support with automatic fallback to CPU
 - **Storage Architecture**: Generation-specific directories eliminating redundant uploads
+
+## Depth Model Comparison
+
+### Video-Depth-Anything V2 (Default)
+- **Best for**: Temporal consistency across video frames
+- **Processing**: 32-frame sliding windows with overlap for smooth transitions
+- **VRAM**: Higher memory usage, may struggle on 6GB GPUs with high-resolution videos
+- **Temporal Artifacts**: Minimal, excellent for smooth video output
+- **Use with**: `--depth-model-version v2` (default)
+
+### Depth-Anything V3 (New)
+- **Best for**: Limited VRAM (6GB GPUs like RTX 3060), faster processing
+- **Processing**: Frame-by-frame independent processing
+- **VRAM**: Significantly lower memory usage, better for high-resolution videos
+- **Temporal Artifacts**: May have slight frame-to-frame variations
+- **Models**: small, base, large (default), large-metric, giant
+- **Use with**: `--depth-model-version v3 --model large`
+
+### When to Use Each Model
+
+**Use V2 if:**
+- You have ≥12GB VRAM
+- You need maximum temporal consistency
+- Processing speed is not critical
+
+**Use V3 if:**
+- You have limited VRAM (6-8GB)
+- You need faster processing
+- You can accept minor frame-to-frame variations
+- You're processing high-resolution (4K+) videos
 
 ## Development Commands
 ```bash
@@ -30,9 +63,14 @@ A comprehensive 2D to 3D VR video converter using Video-Depth-Anything for tempo
 ./test.sh                     # Verify installation and system info
 ./run_ui.sh                   # Launch web interface (auto-opens browser)
 
-# Command-line usage
+# Command-line usage (V2 - default)
 ./start.sh 1:00 2:00          # Quick processing with time range
 python depth_surge_3d.py --help  # Full CLI options
+
+# Command-line usage (V3 - better VRAM efficiency)
+python depth_surge_3d.py input.mp4 --depth-model-version v3
+python depth_surge_3d.py input.mp4 --depth-model-version v3 --model base  # Use smaller model
+python depth_surge_3d.py input.mp4 --depth-model-version v3 --metric      # Use metric depth
 
 # Development workflow
 git status                    # Check current state
@@ -95,10 +133,13 @@ output/
 - **Export Formats**: Additional VR-compatible output formats
 
 ## Dependencies
-- **Core**: Python 3.8+, PyTorch 2.0+, OpenCV 4.8+, CUDA 13.0+ (required for GPU)
+- **Core**: Python 3.8+, PyTorch 2.0+, OpenCV 4.8+, CUDA 13.0+ (optional for GPU)
 - **Web UI**: Flask 3.0+, SocketIO 5.3+, Bootstrap 5.3
 - **Video**: FFmpeg with full codec support
-- **AI Model**: Depth Anything V2 (pre-downloaded in /models)
+- **AI Models**:
+  - Video-Depth-Anything V2 (pre-downloaded in /models, default)
+  - Depth-Anything V3 (auto-downloaded from HuggingFace on first use)
+  - xformers (optional - provides performance optimization for DA3, may fail on some systems)
 
 ## Browser Compatibility
 - **Chrome/Edge**: Full feature support
@@ -139,10 +180,51 @@ output/
    - Document parameters, return values, and exceptions
    - Include usage examples for complex functions
 
-5. **Code Style**: Black formatting, flake8 linting (must pass)
-   - Run `black .` before committing
-   - Run `flake8 .` and fix all violations
-   - Line length: 100 characters (configured in pyproject.toml)
+5. **Code Style**: Black formatting, flake8 linting (MUST pass before committing)
+   - Run `black src/ tests/` before committing (REQUIRED)
+   - Run `flake8 src/ tests/` and fix all violations
+   - Line length: 88 characters (Black default)
+   - All code must be formatted with Black - CI will reject unformatted code
+
+6. **Testing Requirements**: Comprehensive unit tests required for all new code
+   - Write unit tests for all new functions and classes
+   - Maintain minimum 80% code coverage
+   - All tests must pass before committing: `pytest tests/ -v`
+   - Use mocking for external dependencies (models, APIs, file I/O)
+   - Test edge cases and error conditions
+
+### Testing Workflow
+
+Before committing any code changes:
+```bash
+# 1. Format code with Black (REQUIRED)
+.venv/bin/black src/ tests/
+
+# 2. Run linting
+.venv/bin/flake8 src/ tests/
+
+# 3. Run all tests
+.venv/bin/pytest tests/ -v
+
+# 4. Commit only if all checks pass
+git add -A
+git commit -m "your message"
+```
+
+### CI/CD Pipeline
+
+All pushes and pull requests automatically trigger GitHub Actions:
+- **Multi-environment testing**: Ubuntu + macOS × Python 3.8-3.11 (8 configurations)
+- **Code quality checks**: Black formatting, flake8 linting, mypy type checking
+- **Security scanning**: Dependency vulnerability checks with safety
+- **Test execution**: 80+ unit tests + integration tests
+- **Coverage reporting**: Uploaded to Codecov
+
+**Pull requests will be blocked if:**
+- Code is not formatted with Black
+- Tests fail on any platform/Python version
+- Code quality checks fail
+- Coverage drops below threshold
 
 ### Code Quality Metrics
 - **Error Handling**: Comprehensive try-catch with graceful fallbacks

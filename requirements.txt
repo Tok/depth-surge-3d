@@ -6,5 +6,12 @@ transformers>=4.30.0
 flask>=3.0.0
 flask-socketio>=5.3.0
 eventlet>=0.35.0
-easydict==1.13
-einops==0.8.1
+einops>=0.7.0
+easydict>=1.9
+
+# Depth Anything V3 dependencies
+# Note: xformers is optional - provides performance optimization for DA3
+# Uncomment the line below if you want to install xformers (may fail on some systems):
+# xformers>=0.0.26
+# Install DA3 from GitHub (not yet on PyPI)
+git+https://github.com/ByteDance-Seed/Depth-Anything-3.git

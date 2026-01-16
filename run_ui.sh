@@ -35,14 +35,15 @@ trap cleanup SIGINT SIGTERM EXIT
 
 echo "Starting Depth Surge 3D Web UI..."
 
-# Check if virtual environment exists
-if [ ! -d ".venv" ]; then
+# Check if virtual environment exists and activate it
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
+    source venv/bin/activate
+else
     echo "Error: Virtual environment not found. Run ./setup.sh first."
     exit 1
 fi
-
-# Activate virtual environment
-source .venv/bin/activate
 
 # Install additional Flask dependencies if needed (quietly)
 python -m pip install flask flask-socketio > /dev/null 2>&1

@@ -18,7 +18,9 @@ VIDEO_DEPTH_ANYTHING_REPO_DIR = "video_depth_anything_repo"
 # Depth estimation model parameters
 DEPTH_MODEL_INPUT_SIZE = 518  # Input resolution for depth estimation model
 DEPTH_MODEL_CHUNK_SIZE = 32  # Number of frames to process in one batch
-DEPTH_MODEL_DEFAULT_FPS = 30  # Default FPS for depth estimation when original cannot be determined
+DEPTH_MODEL_DEFAULT_FPS = (
+    30  # Default FPS for depth estimation when original cannot be determined
+)
 
 # Video model configurations
 MODEL_CONFIGS = {
@@ -104,13 +106,31 @@ RESOLUTION_CATEGORIES = {
         "wide-4k",
         "ultrawide",
     ],
-    "standard": ["square-480", "square-720", "square-1k", "square-2k", "square-3k", "square-4k", "square-5k"],
+    "standard": [
+        "square-480",
+        "square-720",
+        "square-1k",
+        "square-2k",
+        "square-3k",
+        "square-4k",
+        "square-5k",
+    ],
 }
 
 # Progress tracking configuration
-PROGRESS_UPDATE_INTERVAL = 0.1  # seconds - throttle for progress updates (10 updates/sec)
+PROGRESS_UPDATE_INTERVAL = (
+    0.1  # seconds - throttle for progress updates (10 updates/sec)
+)
 PROGRESS_DECIMAL_PLACES = 1  # decimal places for progress percentage
-PROGRESS_STEP_WEIGHTS = [0.01, 0.17, 0.01, 0.30, 0.38, 0.06, 0.07]  # Weighted progress distribution
+PROGRESS_STEP_WEIGHTS = [
+    0.01,
+    0.17,
+    0.01,
+    0.30,
+    0.38,
+    0.06,
+    0.07,
+]  # Weighted progress distribution
 PROCESSING_STEPS = [
     "Frame Extraction",
     "Super Sampling",
@@ -198,18 +218,34 @@ INTERMEDIATE_DIRS = {
     "vr_frames": "99_vr_frames",  # Step 6: Final VR assembled frames (for FFmpeg)
 }
 
-# Model download URLs (Video-Depth-Anything)
+# Depth Anything V3 model names (Hugging Face IDs)
+DA3_MODEL_NAMES = {
+    "small": "depth-anything/DA3-SMALL",
+    "base": "depth-anything/DA3-BASE",
+    "large": "depth-anything/DA3MONO-LARGE",
+    "large-metric": "depth-anything/DA3METRIC-LARGE",
+    "giant": "depth-anything/DA3-GIANT-1.1",
+    "giant-large": "depth-anything/DA3NESTED-GIANT-LARGE-1.1",
+}
+
+# Default DA3 model
+DEFAULT_DA3_MODEL = "large"  # DA3MONO-LARGE for monocular depth
+
+# Model download URLs (Video-Depth-Anything V2)
 # Keys match encoder types in MODEL_CONFIGS (vits, vitb, vitl)
 # Relative depth models (trained on general scenes)
 MODEL_DOWNLOAD_URLS = {
     "vits": (
-        "https://huggingface.co/depth-anything/Video-Depth-Anything-Small/" "resolve/main/video_depth_anything_vits.pth"
+        "https://huggingface.co/depth-anything/Video-Depth-Anything-Small/"
+        "resolve/main/video_depth_anything_vits.pth"
     ),
     "vitb": (
-        "https://huggingface.co/depth-anything/Video-Depth-Anything-Base/" "resolve/main/video_depth_anything_vitb.pth"
+        "https://huggingface.co/depth-anything/Video-Depth-Anything-Base/"
+        "resolve/main/video_depth_anything_vitb.pth"
     ),
     "vitl": (
-        "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/" "resolve/main/video_depth_anything_vitl.pth"
+        "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/"
+        "resolve/main/video_depth_anything_vitl.pth"
     ),
 }
 
