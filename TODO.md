@@ -23,6 +23,18 @@
 
 ## Medium Priority
 
+### 🎯 Motion & Temporal Consistency
+- [ ] RAFT (Optical Flow) Integration
+  - Repository: https://github.com/princeton-vl/RAFT
+  - Use optical flow for motion-aware depth refinement
+  - Improve temporal consistency between frames
+  - Enable motion-guided warping for smoother depth transitions
+  - Potential uses:
+    - Temporal smoothing of depth maps across frames
+    - Motion-compensated depth prediction
+    - Frame interpolation for higher output frame rates
+    - Depth-guided video stabilization
+
 ### ⚡ Performance Enhancements
 - [ ] GPU memory optimization
   - Process frames in smaller batches to manage VRAM
