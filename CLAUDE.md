@@ -133,13 +133,13 @@ output/
 - **Export Formats**: Additional VR-compatible output formats
 
 ## Dependencies
-- **Core**: Python 3.8+, PyTorch 2.0+, OpenCV 4.8+, CUDA 13.0+ (required for GPU)
+- **Core**: Python 3.8+, PyTorch 2.0+, OpenCV 4.8+, CUDA 13.0+ (optional for GPU)
 - **Web UI**: Flask 3.0+, SocketIO 5.3+, Bootstrap 5.3
 - **Video**: FFmpeg with full codec support
 - **AI Models**:
   - Video-Depth-Anything V2 (pre-downloaded in /models, default)
   - Depth-Anything V3 (auto-downloaded from HuggingFace on first use)
-  - xformers (required for DA3, optional for DA2)
+  - xformers (optional - provides performance optimization for DA3, may fail on some systems)
 
 ## Browser Compatibility
 - **Chrome/Edge**: Full feature support
