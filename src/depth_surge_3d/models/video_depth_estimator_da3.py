@@ -8,7 +8,6 @@ memory efficiency and performance compared to Video-Depth-Anything V2.
 import torch
 import numpy as np
 from typing import Optional, Dict, Any
-from pathlib import Path
 
 from ..core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
 

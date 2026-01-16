@@ -740,6 +740,26 @@ class VideoProcessor:
 
         return np.array(frames_list)
 
+    def _get_chunk_size_for_resolution(self, input_size: int) -> int:
+        """Get appropriate chunk size based on depth map resolution.
+
+        Args:
+            input_size: Depth map resolution in pixels
+
+        Returns:
+            Chunk size for processing
+        """
+        if input_size >= 2160:
+            return 4
+        elif input_size >= 1440:
+            return 6
+        elif input_size >= 1080:
+            return 12
+        elif input_size >= 720:
+            return 16
+        else:
+            return 32
+
     def _determine_chunk_params(
         self, frame_w: int, frame_h: int, depth_resolution: str = "auto"
     ) -> tuple[int, int]:
@@ -760,17 +780,7 @@ class VideoProcessor:
         if depth_resolution != "auto":
             try:
                 input_size = int(depth_resolution)
-                # Adjust chunk size based on input_size for memory management
-                if input_size >= 2160:
-                    chunk_size = 4
-                elif input_size >= 1440:
-                    chunk_size = 6
-                elif input_size >= 1080:
-                    chunk_size = 12
-                elif input_size >= 720:
-                    chunk_size = 16
-                else:
-                    chunk_size = 32
+                chunk_size = self._get_chunk_size_for_resolution(input_size)
                 print(
                     f"  Using manual depth resolution: {input_size}px (chunk size: {chunk_size})"
                 )
@@ -1270,6 +1280,74 @@ class VideoProcessor:
             print(f"Error creating VR frames: {e}")
             return False
 
+    def _check_nvenc_available(self) -> bool:
+        """Check if NVENC hardware encoding is available."""
+        test_result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
+        )
+        return "hevc_nvenc" in test_result.stdout
+
+    def _build_encoder_cmd(
+        self, encoder: str, output_path: Path
+    ) -> tuple[list[str], bool]:
+        """Build FFmpeg encoder arguments.
+
+        Args:
+            encoder: Encoder name (auto, nvenc, libx264, libx265)
+            output_path: Output video file path
+
+        Returns:
+            Tuple of (encoder_args, is_nvenc_used)
+        """
+        # Try NVENC for auto or explicit nvenc
+        if encoder in ["auto", "nvenc"]:
+            if self._check_nvenc_available():
+                print("  Using NVENC hardware encoding (H.265)")
+                return (
+                    [
+                        "-c:v",
+                        "hevc_nvenc",
+                        "-pix_fmt",
+                        "yuv420p",
+                        "-preset",
+                        "p7",
+                        "-tune",
+                        "hq",
+                        str(output_path),
+                    ],
+                    True,
+                )
+            elif encoder == "nvenc":
+                print(
+                    "  Warning: NVENC not available, falling back to software encoding"
+                )
+            # Fall through to software encoding
+
+        # Software encoding (default or explicit)
+        if encoder in ["libx264", "libx265"]:
+            codec = encoder
+        else:
+            # Unknown encoder or auto fallback
+            codec = "libx264"
+            if encoder not in ["auto", "nvenc"]:
+                print(f"  Warning: Unknown encoder '{encoder}', using libx264")
+
+        print(f"  Using software encoding ({codec})")
+        return (
+            [
+                "-c:v",
+                codec,
+                "-pix_fmt",
+                "yuv420p",
+                "-crf",
+                "18",  # High quality
+                "-preset",
+                "medium",
+                str(output_path),
+            ],
+            False,
+        )
+
     def _create_output_video(
         self,
         vr_frames_dir: Path,
@@ -1287,24 +1365,13 @@ class VideoProcessor:
         output_filename = generate_output_filename(
             Path(original_video).name, settings["vr_format"], settings["vr_resolution"]
         )
-
         output_path = output_dir / output_filename
 
-        # Build FFmpeg command
+        # Build base FFmpeg command
         base_fps = settings.get("target_fps", 30)
         if base_fps is None or str(base_fps) == "None" or base_fps == "original":
             base_fps = 30
 
-        """
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-framerate",
-            str(base_fps),
-            "-i",
-            str(vr_frames_dir / "frame_%06d.png"),
-        ]
-        """
         cmd = [
             "ffmpeg",
             "-y",
@@ -1316,89 +1383,19 @@ class VideoProcessor:
 
         # Add audio if preserving - use pre-extracted FLAC file
         if settings.get("preserve_audio", True):
-            # Look for pre-extracted audio file in output directory
             audio_file = output_dir / "original_audio.flac"
             if audio_file.exists():
                 cmd.extend(["-i", str(audio_file), "-c:a", "aac", "-shortest"])
             else:
-                # Fallback to extracting from original video if audio file not found
                 print(
                     "Warning: Pre-extracted audio not found, extracting from original video"
                 )
                 cmd.extend(["-i", original_video, "-c:a", "aac", "-shortest"])
 
-        # Video encoding settings - support multiple encoders
+        # Add video encoding settings
         encoder = settings.get("video_encoder", "auto")
-
-        if encoder == "auto" or encoder == "nvenc":
-            # Try NVENC (NVIDIA hardware encoding) first
-            cmd_nvenc = cmd + [
-                "-c:v",
-                "hevc_nvenc",
-                "-pix_fmt",
-                "yuv420p",
-                "-preset",
-                "p7",
-                "-tune",
-                "hq",
-                str(output_path),
-            ]
-            # Test if NVENC is available
-            test_result = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
-            )
-            if "hevc_nvenc" in test_result.stdout:
-                print("  Using NVENC hardware encoding (H.265)")
-                cmd = cmd_nvenc
-            else:
-                if encoder == "nvenc":
-                    print(
-                        "  Warning: NVENC not available, falling back to software encoding"
-                    )
-                encoder = "libx264"  # Fallback to software
-
-        if (
-            encoder == "auto"
-            and "hevc_nvenc"
-            not in subprocess.run(
-                ["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True
-            ).stdout
-        ):
-            encoder = "libx264"  # Set default software encoder
-
-        # Software encoding fallback
-        if encoder in ["libx264", "libx265"]:
-            codec = encoder
-            print(f"  Using software encoding ({codec})")
-            cmd.extend(
-                [
-                    "-c:v",
-                    codec,
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-crf",
-                    "18",  # High quality
-                    "-preset",
-                    "medium",
-                    str(output_path),
-                ]
-            )
-        elif encoder not in ["auto", "nvenc"]:
-            # Unknown encoder, use libx264 as safe fallback
-            print(f"  Warning: Unknown encoder '{encoder}', using libx264")
-            cmd.extend(
-                [
-                    "-c:v",
-                    "libx264",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-crf",
-                    "18",
-                    "-preset",
-                    "medium",
-                    str(output_path),
-                ]
-            )
+        encoder_args, _ = self._build_encoder_cmd(encoder, output_path)
+        cmd.extend(encoder_args)
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True)
