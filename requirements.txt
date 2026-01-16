@@ -10,3 +10,7 @@ flask-socketio>=5.3.0
 eventlet>=0.35.0
 einops>=0.7.0
 easydict>=1.9
+
+# Depth Anything V3 dependencies
+xformers>=0.0.26
+depth-anything-3>=0.1.0

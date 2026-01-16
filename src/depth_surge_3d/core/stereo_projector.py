@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 
 from ..models.video_depth_estimator import create_video_depth_estimator
+from ..models.video_depth_estimator_da3 import create_video_depth_estimator_da3
 from ..utils.resolution import (
     get_resolution_dimensions,
     calculate_vr_output_dimensions,
@@ -33,16 +34,32 @@ class StereoProjector:
     Uses Video-Depth-Anything for temporal consistency across video frames.
     """
 
-    def __init__(self, model_path: Optional[str] = None, device: str = "auto", metric: bool = False):
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        device: str = "auto",
+        metric: bool = False,
+        depth_model_version: str = "v2",
+    ):
         """
         Initialize StereoProjector.
 
         Args:
-            model_path: Path to video depth estimation model
+            model_path: Path to video depth estimation model (DA2) or model name (DA3)
             device: Processing device ('auto', 'cuda', 'cpu')
             metric: Use metric depth model (true depth values)
+            depth_model_version: Depth model version ('v2' or 'v3', default: 'v2')
         """
-        self.depth_estimator = create_video_depth_estimator(model_path, device, metric)
+        self.depth_model_version = depth_model_version
+
+        if depth_model_version == "v3":
+            # Use Depth Anything V3 (model_path is used as model_name)
+            model_name = model_path if model_path else None
+            self.depth_estimator = create_video_depth_estimator_da3(model_name, device, metric)
+        else:
+            # Use Video-Depth-Anything V2 (default)
+            self.depth_estimator = create_video_depth_estimator(model_path, device, metric)
+
         self._model_loaded = False
 
     def process_video(
@@ -501,17 +518,21 @@ class StereoProjector:
 
 
 def create_stereo_projector(
-    model_path: Optional[str] = None, device: str = "auto", metric: bool = False
+    model_path: Optional[str] = None,
+    device: str = "auto",
+    metric: bool = False,
+    depth_model_version: str = "v2",
 ) -> StereoProjector:
     """
     Factory function to create a StereoProjector instance.
 
     Args:
-        model_path: Path to video depth estimation model
+        model_path: Path to model file (V2) or model name (V3)
         device: Processing device
         metric: Use metric depth model (true depth values)
+        depth_model_version: Depth model version ('v2' or 'v3')
 
     Returns:
         Configured StereoProjector instance
     """
-    return StereoProjector(model_path, device, metric)
+    return StereoProjector(model_path, device, metric, depth_model_version)

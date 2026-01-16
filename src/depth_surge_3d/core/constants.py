@@ -198,7 +198,20 @@ INTERMEDIATE_DIRS = {
     "vr_frames": "99_vr_frames",  # Step 6: Final VR assembled frames (for FFmpeg)
 }
 
-# Model download URLs (Video-Depth-Anything)
+# Depth Anything V3 model names (Hugging Face IDs)
+DA3_MODEL_NAMES = {
+    "small": "depth-anything/DA3-SMALL",
+    "base": "depth-anything/DA3-BASE",
+    "large": "depth-anything/DA3MONO-LARGE",
+    "large-metric": "depth-anything/DA3METRIC-LARGE",
+    "giant": "depth-anything/DA3-GIANT-1.1",
+    "giant-large": "depth-anything/DA3NESTED-GIANT-LARGE-1.1",
+}
+
+# Default DA3 model
+DEFAULT_DA3_MODEL = "large"  # DA3MONO-LARGE for monocular depth
+
+# Model download URLs (Video-Depth-Anything V2)
 # Keys match encoder types in MODEL_CONFIGS (vits, vitb, vitl)
 # Relative depth models (trained on general scenes)
 MODEL_DOWNLOAD_URLS = {
