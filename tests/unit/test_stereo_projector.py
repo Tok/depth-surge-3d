@@ -299,3 +299,143 @@ class TestStereoProjectorHelpers:
         result = projector._validate_inputs("invalid.txt", "/tmp/output", {})
 
         assert result is False
+
+
+class TestResolveSettings:
+    """Test _resolve_settings method."""
+
+    @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.core.stereo_projector.auto_detect_resolution")
+    @patch("src.depth_surge_3d.core.stereo_projector.validate_resolution_settings")
+    @patch("src.depth_surge_3d.core.stereo_projector.get_resolution_dimensions")
+    @patch("src.depth_surge_3d.core.stereo_projector.calculate_vr_output_dimensions")
+    def test_resolve_settings_with_auto_resolution(
+        self,
+        mock_calc_vr,
+        mock_get_dims,
+        mock_validate,
+        mock_auto_detect,
+        mock_create,
+    ):
+        """Test settings resolution with auto resolution detection."""
+        mock_create.return_value = MagicMock()
+
+        # Mock auto-detection
+        mock_auto_detect.return_value = "16x9-1080p"
+
+        # Mock validation
+        mock_validate.return_value = {
+            "valid": True,
+            "warnings": [],
+            "recommendations": ["Use this resolution"],
+        }
+
+        # Mock dimensions
+        mock_get_dims.return_value = (1920, 1080)
+        mock_calc_vr.return_value = (3840, 1080)
+
+        projector = StereoProjector(device="cpu")
+
+        settings = {
+            "vr_resolution": "auto",
+            "vr_format": "side_by_side",
+        }
+        video_props = {"width": 1920, "height": 1080, "fps": 30}
+
+        resolved = projector._resolve_settings(settings, video_props)
+
+        # Should have auto-detected resolution
+        assert resolved["vr_resolution"] == "16x9-1080p"
+        assert resolved["per_eye_width"] == 1920
+        assert resolved["per_eye_height"] == 1080
+        assert resolved["vr_output_width"] == 3840
+        assert resolved["vr_output_height"] == 1080
+        assert resolved["source_width"] == 1920
+        assert resolved["source_height"] == 1080
+        assert resolved["source_fps"] == 30
+
+        mock_auto_detect.assert_called_once_with(1920, 1080, "side_by_side")
+
+    @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.core.stereo_projector.validate_resolution_settings")
+    @patch("src.depth_surge_3d.core.stereo_projector.get_resolution_dimensions")
+    @patch("src.depth_surge_3d.core.stereo_projector.calculate_vr_output_dimensions")
+    def test_resolve_settings_with_manual_resolution(
+        self,
+        mock_calc_vr,
+        mock_get_dims,
+        mock_validate,
+        mock_create,
+    ):
+        """Test settings resolution with manual resolution."""
+        mock_create.return_value = MagicMock()
+
+        # Mock validation
+        mock_validate.return_value = {
+            "valid": True,
+            "warnings": [],
+            "recommendations": [],
+        }
+
+        # Mock dimensions
+        mock_get_dims.return_value = (2048, 2048)
+        mock_calc_vr.return_value = (4096, 2048)
+
+        projector = StereoProjector(device="cpu")
+
+        settings = {
+            "vr_resolution": "square-2k",
+            "vr_format": "side_by_side",
+        }
+        video_props = {"width": 1920, "height": 1080, "fps": 60}
+
+        resolved = projector._resolve_settings(settings, video_props)
+
+        # Should keep manual resolution
+        assert resolved["vr_resolution"] == "square-2k"
+        assert resolved["per_eye_width"] == 2048
+        assert resolved["per_eye_height"] == 2048
+        assert resolved["vr_output_width"] == 4096
+        assert resolved["vr_output_height"] == 2048
+
+    @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.core.stereo_projector.auto_detect_resolution")
+    @patch("src.depth_surge_3d.core.stereo_projector.validate_resolution_settings")
+    @patch("src.depth_surge_3d.core.stereo_projector.get_resolution_dimensions")
+    @patch("src.depth_surge_3d.core.stereo_projector.calculate_vr_output_dimensions")
+    def test_resolve_settings_with_validation_warnings(
+        self,
+        mock_calc_vr,
+        mock_get_dims,
+        mock_validate,
+        mock_auto_detect,
+        mock_create,
+    ):
+        """Test settings resolution with validation warnings."""
+        mock_create.return_value = MagicMock()
+
+        mock_auto_detect.return_value = "cinema-4k"
+
+        # Mock validation with warnings
+        mock_validate.return_value = {
+            "valid": False,
+            "warnings": ["Resolution too high for source", "Consider downscaling"],
+            "recommendations": ["Use 16x9-1080p instead"],
+        }
+
+        mock_get_dims.return_value = (4096, 2160)
+        mock_calc_vr.return_value = (8192, 2160)
+
+        projector = StereoProjector(device="cpu")
+
+        settings = {
+            "vr_resolution": "auto",
+            "vr_format": "side_by_side",
+        }
+        video_props = {"width": 1280, "height": 720, "fps": 30}
+
+        # Should not raise error even with invalid validation
+        resolved = projector._resolve_settings(settings, video_props)
+
+        assert resolved is not None
+        assert "per_eye_width" in resolved
