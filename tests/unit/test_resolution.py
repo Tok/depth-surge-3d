@@ -46,14 +46,10 @@ class TestResolutionUtils(unittest.TestCase):
     def test_calculate_vr_output_dimensions(self):
         """Test VR output dimension calculation."""
         # Side by side
-        self.assertEqual(
-            calculate_vr_output_dimensions(1920, 1080, "side_by_side"), (3840, 1080)
-        )
+        self.assertEqual(calculate_vr_output_dimensions(1920, 1080, "side_by_side"), (3840, 1080))
 
         # Over under
-        self.assertEqual(
-            calculate_vr_output_dimensions(1920, 1080, "over_under"), (1920, 2160)
-        )
+        self.assertEqual(calculate_vr_output_dimensions(1920, 1080, "over_under"), (1920, 2160))
 
     def test_calculate_aspect_ratio(self):
         """Test aspect ratio calculation."""

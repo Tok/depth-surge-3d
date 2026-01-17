@@ -56,9 +56,7 @@ class TestConstants:
     def test_validation_ranges_valid(self):
         """Test validation ranges are sensible."""
         assert VALIDATION_RANGES["baseline"][0] < VALIDATION_RANGES["baseline"][1]
-        assert (
-            VALIDATION_RANGES["focal_length"][0] < VALIDATION_RANGES["focal_length"][1]
-        )
+        assert VALIDATION_RANGES["focal_length"][0] < VALIDATION_RANGES["focal_length"][1]
         assert VALIDATION_RANGES["fisheye_fov"][0] < VALIDATION_RANGES["fisheye_fov"][1]
         assert VALIDATION_RANGES["target_fps"][0] < VALIDATION_RANGES["target_fps"][1]
 

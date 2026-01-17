@@ -1,36 +1,48 @@
 """
-File operations utilities for video and image processing.
+I/O operations with side effects for video processing.
 
-This module contains pure functions for file handling, validation,
-and path operations without side effects.
+This module contains functions that perform I/O operations and have side effects:
+- Filesystem I/O (reading, writing, creating, deleting)
+- Subprocess execution
+- External state queries
+
+All functions here are expected to interact with external systems.
+For pure functions without side effects, see utils/path_utils.py.
 """
+
+from __future__ import annotations
 
 import os
 import json
 import subprocess
-from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
 import time
+from pathlib import Path
+from typing import Any
 import cv2
 
 from ..core.constants import (
     SUPPORTED_VIDEO_FORMATS,
     SUPPORTED_IMAGE_FORMATS,
-    OUTPUT_IMAGE_FORMAT,
-    OUTPUT_VIDEO_FORMAT,
     INTERMEDIATE_DIRS,
+)
+from ..utils.path_utils import (
+    generate_output_filename,
+    format_time_duration,
 )
 
 
 def validate_video_file(video_path: str) -> bool:
     """
-    Validate if file is a supported video format.
+    Validate if file exists and is a supported video format.
 
     Args:
         video_path: Path to video file
 
     Returns:
-        True if valid video file
+        True if valid video file exists
+
+    Side Effects:
+        Reads filesystem to check file existence
     """
     if not os.path.exists(video_path):
         return False
@@ -41,13 +53,16 @@ def validate_video_file(video_path: str) -> bool:
 
 def validate_image_file(image_path: str) -> bool:
     """
-    Validate if file is a supported image format.
+    Validate if file exists and is a supported image format.
 
     Args:
         image_path: Path to image file
 
     Returns:
-        True if valid image file
+        True if valid image file exists
+
+    Side Effects:
+        Reads filesystem to check file existence
     """
     if not os.path.exists(image_path):
         return False
@@ -56,7 +71,7 @@ def validate_image_file(image_path: str) -> bool:
     return file_ext in SUPPORTED_IMAGE_FORMATS
 
 
-def get_video_properties(video_path: str) -> Dict[str, Any]:
+def get_video_properties(video_path: str) -> dict[str, Any]:
     """
     Get video properties using OpenCV.
 
@@ -64,9 +79,13 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
         video_path: Path to video file
 
     Returns:
-        Dictionary with video properties
+        Dictionary with video properties (width, height, fps, frame_count, duration, codec)
+
+    Side Effects:
+        Opens and reads video file with cv2.VideoCapture
     """
-    properties = {}
+    properties: dict[str, Any] = {}
+    cap = None
 
     try:
         cap = cv2.VideoCapture(video_path)
@@ -94,24 +113,28 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
             }
         )
 
-        cap.release()
-
     except Exception:
         # Return empty dict if unable to read properties
         pass
+    finally:
+        if cap is not None:
+            cap.release()
 
     return properties
 
 
-def get_video_info_ffprobe(video_path: str) -> Dict[str, Any]:
+def get_video_info_ffprobe(video_path: str) -> dict[str, Any]:
     """
-    Get detailed video information using ffprobe.
+    Get detailed video information using ffprobe subprocess.
 
     Args:
         video_path: Path to video file
 
     Returns:
-        Dictionary with video information
+        Dictionary with video information from ffprobe
+
+    Side Effects:
+        Executes ffprobe subprocess
     """
     try:
         cmd = [
@@ -128,8 +151,6 @@ def get_video_info_ffprobe(video_path: str) -> Dict[str, Any]:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if result.returncode == 0:
-            import json
-
             return json.loads(result.stdout)
 
     except Exception:
@@ -138,75 +159,9 @@ def get_video_info_ffprobe(video_path: str) -> Dict[str, Any]:
     return {}
 
 
-def calculate_frame_range(
-    total_frames: int,
-    fps: float,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
-) -> Tuple[int, int]:
+def create_output_directories(base_path: Path, keep_intermediates: bool = True) -> dict[str, Path]:
     """
-    Calculate frame range from time specifications.
-
-    Args:
-        total_frames: Total frames in video
-        fps: Frames per second
-        start_time: Start time in "mm:ss" or "hh:mm:ss" format
-        end_time: End time in "mm:ss" or "hh:mm:ss" format
-
-    Returns:
-        Tuple of (start_frame, end_frame)
-    """
-    start_frame = 0
-    end_frame = total_frames
-
-    if start_time:
-        start_seconds = parse_time_string(start_time)
-        if start_seconds is not None:
-            start_frame = int(start_seconds * fps)
-
-    if end_time:
-        end_seconds = parse_time_string(end_time)
-        if end_seconds is not None:
-            end_frame = int(end_seconds * fps)
-
-    # Ensure valid range
-    start_frame = max(0, min(start_frame, total_frames - 1))
-    end_frame = max(start_frame + 1, min(end_frame, total_frames))
-
-    return start_frame, end_frame
-
-
-def parse_time_string(time_str: str) -> Optional[float]:
-    """
-    Parse time string into seconds.
-
-    Args:
-        time_str: Time in "mm:ss" or "hh:mm:ss" format
-
-    Returns:
-        Time in seconds or None if invalid
-    """
-    try:
-        parts = time_str.split(":")
-
-        if len(parts) == 2:  # mm:ss
-            minutes, seconds = map(int, parts)
-            return minutes * 60 + seconds
-        elif len(parts) == 3:  # hh:mm:ss
-            hours, minutes, seconds = map(int, parts)
-            return hours * 3600 + minutes * 60 + seconds
-
-    except (ValueError, TypeError):
-        pass
-
-    return None
-
-
-def create_output_directories(
-    base_path: Path, keep_intermediates: bool = True
-) -> Dict[str, Path]:
-    """
-    Create output directory structure.
+    Create output directory structure on filesystem.
 
     Args:
         base_path: Base output directory path
@@ -214,6 +169,9 @@ def create_output_directories(
 
     Returns:
         Dictionary mapping directory names to paths
+
+    Side Effects:
+        Creates directories on filesystem
     """
     directories = {"base": base_path}
 
@@ -229,7 +187,7 @@ def create_output_directories(
     return directories
 
 
-def get_frame_files(frames_dir: Path) -> List[Path]:
+def get_frame_files(frames_dir: Path) -> list[Path]:
     """
     Get sorted list of frame files from directory.
 
@@ -238,16 +196,19 @@ def get_frame_files(frames_dir: Path) -> List[Path]:
 
     Returns:
         Sorted list of frame file paths
+
+    Side Effects:
+        Reads directory contents from filesystem
     """
     if not frames_dir.exists():
         return []
 
-    frame_files = []
+    frame_files: list[Path] = []
     for ext in SUPPORTED_IMAGE_FORMATS:
         frame_files.extend(frames_dir.glob(f"*{ext}"))
 
     # Sort numerically by filename
-    def sort_key(path):
+    def sort_key(path: Path) -> int:
         try:
             # Extract number from filename
             stem = path.stem
@@ -261,82 +222,6 @@ def get_frame_files(frames_dir: Path) -> List[Path]:
     return sorted(frame_files, key=sort_key)
 
 
-def generate_frame_filename(index: int, prefix: str = "frame") -> str:
-    """
-    Generate standardized frame filename.
-
-    Args:
-        index: Frame index
-        prefix: Filename prefix
-
-    Returns:
-        Formatted filename
-    """
-    return f"{prefix}_{index:06d}{OUTPUT_IMAGE_FORMAT}"
-
-
-def generate_output_filename(
-    base_name: str,
-    vr_format: str,
-    vr_resolution: str,
-    processing_mode: Optional[
-        str
-    ] = None,  # Deprecated, kept for backwards compatibility
-) -> str:
-    """
-    Generate output filename with metadata.
-
-    Args:
-        base_name: Base name from input file
-        vr_format: VR format used
-        vr_resolution: VR resolution used
-        processing_mode: (Deprecated) Processing mode - no longer used
-
-    Returns:
-        Generated filename
-    """
-    # Clean base name
-    clean_base = Path(base_name).stem
-
-    # Add metadata (no longer include processing_mode)
-    metadata_parts = [clean_base, vr_format.replace("_", "-"), vr_resolution]
-
-    filename = "_".join(metadata_parts) + OUTPUT_VIDEO_FORMAT
-
-    # Sanitize filename
-    filename = sanitize_filename(filename)
-
-    return filename
-
-
-def sanitize_filename(filename: str) -> str:
-    """
-    Sanitize filename for cross-platform compatibility.
-
-    Args:
-        filename: Original filename
-
-    Returns:
-        Sanitized filename
-    """
-    # Replace invalid characters
-    invalid_chars = '<>:"/\\|?*'
-    for char in invalid_chars:
-        filename = filename.replace(char, "_")
-
-    # Remove multiple underscores
-    while "__" in filename:
-        filename = filename.replace("__", "_")
-
-    # Trim and limit length
-    filename = filename.strip("_")
-    if len(filename) > 200:  # Reasonable filename length limit
-        name, ext = os.path.splitext(filename)
-        filename = name[: 200 - len(ext)] + ext
-
-    return filename
-
-
 def calculate_directory_size(directory: Path) -> int:
     """
     Calculate total size of directory in bytes.
@@ -346,6 +231,9 @@ def calculate_directory_size(directory: Path) -> int:
 
     Returns:
         Total size in bytes
+
+    Side Effects:
+        Walks directory tree and stats files
     """
     total_size = 0
 
@@ -361,43 +249,19 @@ def calculate_directory_size(directory: Path) -> int:
     return total_size
 
 
-def format_file_size(size_bytes: int) -> str:
-    """
-    Format file size in human-readable format.
-
-    Args:
-        size_bytes: Size in bytes
-
-    Returns:
-        Formatted size string
-    """
-    if size_bytes == 0:
-        return "0 B"
-
-    units = ["B", "KB", "MB", "GB", "TB"]
-    unit_index = 0
-    size = float(size_bytes)
-
-    while size >= 1024 and unit_index < len(units) - 1:
-        size /= 1024
-        unit_index += 1
-
-    if unit_index == 0:
-        return f"{int(size)} {units[unit_index]}"
-    else:
-        return f"{size:.1f} {units[unit_index]}"
-
-
-def _should_keep_file(file_path: Path, keep_patterns: List[str]) -> bool:
+def _should_keep_file(file_path: Path, keep_patterns: list[str]) -> bool:
     """
     Check if file should be kept based on pattern matching.
 
     Args:
         file_path: Path to file to check
-        keep_patterns: List of patterns to keep
+        keep_patterns: List of glob patterns to keep
 
     Returns:
         True if file should be kept
+
+    Side Effects:
+        None (pure pattern matching)
     """
     for pattern in keep_patterns:
         if file_path.match(pattern):
@@ -414,6 +278,9 @@ def _remove_file_safe(file_path: Path) -> bool:
 
     Returns:
         True if file was removed successfully
+
+    Side Effects:
+        Deletes file from filesystem
     """
     try:
         file_path.unlink()
@@ -422,7 +289,7 @@ def _remove_file_safe(file_path: Path) -> bool:
         return False
 
 
-def _cleanup_directory(directory: Path, keep_patterns: List[str]) -> int:
+def _cleanup_directory(directory: Path, keep_patterns: list[str]) -> int:
     """
     Clean up files in a single directory.
 
@@ -432,6 +299,9 @@ def _cleanup_directory(directory: Path, keep_patterns: List[str]) -> int:
 
     Returns:
         Number of files removed
+
+    Side Effects:
+        Deletes files from filesystem
     """
     removed_count = 0
 
@@ -444,18 +314,19 @@ def _cleanup_directory(directory: Path, keep_patterns: List[str]) -> int:
     return removed_count
 
 
-def cleanup_intermediate_files(
-    base_path: Path, keep_patterns: Optional[List[str]] = None
-) -> int:
+def cleanup_intermediate_files(base_path: Path, keep_patterns: list[str] | None = None) -> int:
     """
     Clean up intermediate files, optionally keeping certain patterns.
 
     Args:
         base_path: Base directory containing intermediate files
-        keep_patterns: List of patterns to keep (glob patterns)
+        keep_patterns: List of glob patterns to keep
 
     Returns:
         Number of files removed
+
+    Side Effects:
+        Deletes files from filesystem
     """
     removed_count = 0
     keep_patterns = keep_patterns or []
@@ -478,11 +349,12 @@ def verify_ffmpeg_installation() -> bool:
 
     Returns:
         True if FFmpeg is available
+
+    Side Effects:
+        Executes ffmpeg subprocess
     """
     try:
-        result = subprocess.run(
-            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=10
-        )
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10)
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
@@ -497,6 +369,9 @@ def get_available_space(directory: Path) -> int:
 
     Returns:
         Available space in bytes
+
+    Side Effects:
+        Queries filesystem for disk space information
     """
     try:
         stat = os.statvfs(directory)
@@ -512,55 +387,11 @@ def get_available_space(directory: Path) -> int:
             return 0
 
 
-def estimate_output_size(
-    frame_count: int, vr_width: int, vr_height: int, keep_intermediates: bool = True
-) -> Dict[str, int]:
-    """
-    Estimate storage requirements for processing.
-
-    Args:
-        frame_count: Number of frames to process
-        vr_width: VR output width
-        vr_height: VR output height
-        keep_intermediates: Whether intermediate files will be kept
-
-    Returns:
-        Dictionary with size estimates in bytes
-    """
-    # Rough estimates based on typical compression ratios
-    estimates = {}
-
-    # VR frame size (PNG format, roughly 3 bytes per pixel with compression)
-    vr_frame_size = vr_width * vr_height * 3
-    estimates["vr_frames"] = vr_frame_size * frame_count
-
-    if keep_intermediates:
-        # Original frames (smaller than VR frames)
-        estimates["original_frames"] = vr_frame_size * 0.5 * frame_count
-
-        # Depth maps (single channel)
-        estimates["depth_maps"] = vr_width * vr_height * frame_count
-
-        # Stereo pairs (2x VR frame size)
-        estimates["stereo_pairs"] = vr_frame_size * 2 * frame_count
-
-        # Other intermediate files
-        estimates["other_intermediates"] = vr_frame_size * 0.5 * frame_count
-
-    # Final video (much smaller due to compression)
-    estimates["final_video"] = vr_frame_size * 0.1 * frame_count
-
-    # Total estimate
-    estimates["total"] = sum(estimates.values())
-
-    return estimates
-
-
 def save_processing_settings(
     output_dir: Path,
     batch_name: str,
-    settings: Dict[str, Any],
-    video_properties: Dict[str, Any],
+    settings: dict[str, Any],
+    video_properties: dict[str, Any],
     source_video_path: str,
 ) -> Path:
     """
@@ -575,6 +406,9 @@ def save_processing_settings(
 
     Returns:
         Path to the saved settings file
+
+    Side Effects:
+        Writes JSON file to disk
     """
     settings_data = {
         "metadata": {
@@ -583,7 +417,7 @@ def save_processing_settings(
             "source_video_name": Path(source_video_path).name,
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "created_timestamp": time.time(),
-            "project_version": "0.8.0",
+            "project_version": "0.8.1",
             "processing_status": "in_progress",
         },
         "video_properties": video_properties,
@@ -627,7 +461,7 @@ def save_processing_settings(
         return settings_file
 
 
-def load_processing_settings(settings_file: Path) -> Optional[Dict[str, Any]]:
+def load_processing_settings(settings_file: Path) -> dict[str, Any] | None:
     """
     Load processing settings from a JSON file.
 
@@ -636,6 +470,9 @@ def load_processing_settings(settings_file: Path) -> Optional[Dict[str, Any]]:
 
     Returns:
         Dictionary with loaded settings data or None if failed
+
+    Side Effects:
+        Reads JSON file from disk
     """
     try:
         if not settings_file.exists():
@@ -654,7 +491,7 @@ def load_processing_settings(settings_file: Path) -> Optional[Dict[str, Any]]:
 
 
 def update_processing_status(
-    settings_file: Path, status: str, additional_info: Optional[Dict[str, Any]] = None
+    settings_file: Path, status: str, additional_info: dict[str, Any] | None = None
 ) -> bool:
     """
     Update the processing status in the settings file.
@@ -666,6 +503,9 @@ def update_processing_status(
 
     Returns:
         True if update was successful
+
+    Side Effects:
+        Reads and writes JSON file
     """
     try:
         settings_data = load_processing_settings(settings_file)
@@ -678,17 +518,15 @@ def update_processing_status(
         settings_data["metadata"]["last_updated_timestamp"] = time.time()
 
         if status == "completed":
-            settings_data["metadata"]["completed_at"] = time.strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+            settings_data["metadata"]["completed_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
             settings_data["metadata"]["completed_timestamp"] = time.time()
 
             # Calculate processing duration
             if "created_timestamp" in settings_data["metadata"]:
                 duration = time.time() - settings_data["metadata"]["created_timestamp"]
                 settings_data["metadata"]["processing_duration_seconds"] = duration
-                settings_data["metadata"]["processing_duration_formatted"] = (
-                    format_time_duration(duration)
+                settings_data["metadata"]["processing_duration_formatted"] = format_time_duration(
+                    duration
                 )
 
         # Add any additional info
@@ -708,9 +546,7 @@ def update_processing_status(
         return False
 
 
-def find_settings_file(
-    output_dir: Path, batch_name: Optional[str] = None
-) -> Optional[Path]:
+def find_settings_file(output_dir: Path, batch_name: str | None = None) -> Path | None:
     """
     Find a settings file in the output directory.
 
@@ -720,6 +556,9 @@ def find_settings_file(
 
     Returns:
         Path to settings file or None if not found
+
+    Side Effects:
+        Reads directory contents from filesystem
     """
     try:
         if batch_name:
@@ -738,7 +577,7 @@ def find_settings_file(
         return None
 
 
-def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
+def can_resume_processing(output_dir: Path) -> dict[str, Any]:
     """
     Check if processing can be resumed from the given directory.
 
@@ -746,7 +585,16 @@ def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
         output_dir: Output directory to check
 
     Returns:
-        Dictionary with resume information
+        Dictionary with resume information including:
+        - can_resume: bool
+        - settings_file: Path | None
+        - batch_name: str | None
+        - status: str | None
+        - progress_info: dict | None
+        - recommendations: list[str]
+
+    Side Effects:
+        Reads files and directory structure from filesystem
     """
     result = {
         "can_resume": False,
@@ -801,9 +649,7 @@ def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
         return result
 
 
-def analyze_processing_progress(
-    output_dir: Path, settings_data: Dict[str, Any]
-) -> Dict[str, Any]:
+def analyze_processing_progress(output_dir: Path, settings_data: dict[str, Any]) -> dict[str, Any]:
     """
     Analyze how much processing has been completed.
 
@@ -812,7 +658,14 @@ def analyze_processing_progress(
         settings_data: Loaded settings data
 
     Returns:
-        Dictionary with progress analysis
+        Dictionary with progress analysis including:
+        - frames_processed: int
+        - vr_frames_created: int
+        - intermediate_stages: dict
+        - can_resume_from_intermediates: bool
+
+    Side Effects:
+        Reads directory contents and counts files
     """
     progress = {
         "frames_processed": 0,
@@ -850,25 +703,3 @@ def analyze_processing_progress(
     except Exception as e:
         print(f"Warning: Could not analyze processing progress: {e}")
         return progress
-
-
-def format_time_duration(seconds: float) -> str:
-    """
-    Format duration in seconds to human-readable string.
-
-    Args:
-        seconds: Duration in seconds
-
-    Returns:
-        Formatted duration string
-    """
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        remaining_seconds = int(seconds % 60)
-        return f"{minutes}m {remaining_seconds}s"
-    else:
-        hours = int(seconds // 3600)
-        remaining_minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {remaining_minutes}m"

@@ -5,8 +5,10 @@ This module provides progress tracking classes and utilities with minimal
 side effects and clear separation of concerns.
 """
 
+from __future__ import annotations
+
 import time
-from typing import Optional, Callable
+from collections.abc import Callable
 from abc import ABC, abstractmethod
 
 try:
@@ -61,19 +63,14 @@ class ConsoleProgressReporter(ProgressReporter):
 
     def _get_phase_description(self, phase: str) -> str:
         """Get a user-friendly description for a phase."""
-        return PROCESSING_PHASES.get(phase, {}).get(
-            "description", phase.replace("_", " ").title()
-        )
+        return PROCESSING_PHASES.get(phase, {}).get("description", phase.replace("_", " ").title())
 
     def report_progress(self, current: int, total: int, message: str = "") -> None:
         """Report progress to console with optional tqdm support."""
         current_time = time.time()
 
         # Throttle updates for non-tqdm mode
-        if (
-            not self.use_tqdm
-            and current_time - self.last_update_time < PROGRESS_UPDATE_INTERVAL
-        ):
+        if not self.use_tqdm and current_time - self.last_update_time < PROGRESS_UPDATE_INTERVAL:
             return
 
         self.last_update_time = current_time
@@ -104,9 +101,7 @@ class ConsoleProgressReporter(ProgressReporter):
                 else:
                     eta_str = ""
 
-                progress_line = (
-                    f"\r{message} {percentage:.1f}% ({current}/{total}){eta_str}"
-                )
+                progress_line = f"\r{message} {percentage:.1f}% ({current}/{total}){eta_str}"
                 print(progress_line, end="", flush=True)
 
     def report_completion(self, message: str = "") -> None:
@@ -127,7 +122,7 @@ class ProgressTracker:
         self,
         total_frames: int,
         processing_mode: str = "serial",
-        reporter: Optional[ProgressReporter] = None,
+        reporter: ProgressReporter | None = None,
     ):
         self.total_frames = total_frames
         self.processing_mode = processing_mode
@@ -147,9 +142,7 @@ class ProgressTracker:
         message = f"[SERIAL] Frame {frame_num}/{self.total_frames} - {step_description}"
         self.reporter.report_progress(frame_num, self.total_frames, message)
 
-    def update_batch_step(
-        self, step_name: str, progress: int = 0, total: int = 0
-    ) -> None:
+    def update_batch_step(self, step_name: str, progress: int = 0, total: int = 0) -> None:
         """Update progress for batch processing step."""
         if step_name in self.steps:
             self.current_step_index = self.steps.index(step_name)
@@ -157,7 +150,7 @@ class ProgressTracker:
         self.step_total = total
         self._display_batch()
 
-    def update_batch_progress(self, progress: int, total: Optional[int] = None) -> None:
+    def update_batch_progress(self, progress: int, total: int | None = None) -> None:
         """Update progress within current batch step."""
         self.step_progress = progress
         if total is not None:
@@ -176,9 +169,7 @@ class ProgressTracker:
         step_progress_ratio = (
             (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
         )
-        overall_progress = (
-            (self.current_step_index + step_progress_ratio) / len(self.steps)
-        ) * 100
+        overall_progress = ((self.current_step_index + step_progress_ratio) / len(self.steps)) * 100
 
         if self.step_total > 0:
             step_percentage = (self.step_progress / self.step_total) * 100
@@ -192,11 +183,11 @@ class ProgressTracker:
     def update_progress(
         self,
         stage: str,
-        frame_num: Optional[int] = None,
-        phase: Optional[str] = None,
-        step_name: Optional[str] = None,
-        step_progress: Optional[int] = None,
-        step_total: Optional[int] = None,
+        frame_num: int | None = None,
+        phase: str | None = None,
+        step_name: str | None = None,
+        step_progress: int | None = None,
+        step_total: int | None = None,
     ) -> None:
         """Update progress for video processing."""
         if step_name:
@@ -217,7 +208,7 @@ class ProgressCallback:
         session_id: str,
         total_frames: int,
         processing_mode: str = "serial",
-        callback_func: Optional[Callable] = None,
+        callback_func: Callable | None = None,
     ):
         self.session_id = session_id
         self.total_frames = total_frames
@@ -235,11 +226,11 @@ class ProgressCallback:
     def update_progress(
         self,
         stage: str,
-        frame_num: Optional[int] = None,
-        phase: Optional[str] = None,
-        step_name: Optional[str] = None,
-        step_progress: Optional[int] = None,
-        step_total: Optional[int] = None,
+        frame_num: int | None = None,
+        phase: str | None = None,
+        step_name: str | None = None,
+        step_progress: int | None = None,
+        step_total: int | None = None,
     ) -> None:
         """Update progress with callback notification."""
         current_time = time.time()
@@ -256,15 +247,11 @@ class ProgressCallback:
 
         # Calculate progress based on processing mode
         if self.processing_mode == "batch":
-            progress = self._calculate_batch_progress(
-                step_name, step_progress, step_total
-            )
+            progress = self._calculate_batch_progress(step_name, step_progress, step_total)
             progress_data = self._create_batch_progress_data(stage, step_name, progress)
         else:
             progress = self._calculate_serial_progress(frame_num)
-            progress_data = self._create_serial_progress_data(
-                stage, frame_num, progress
-            )
+            progress_data = self._create_serial_progress_data(stage, frame_num, progress)
 
         # Execute callback if provided
         if self.callback_func:
@@ -272,9 +259,9 @@ class ProgressCallback:
 
     def _calculate_batch_progress(
         self,
-        step_name: Optional[str],
-        step_progress: Optional[int],
-        step_total: Optional[int],
+        step_name: str | None,
+        step_progress: int | None,
+        step_total: int | None,
     ) -> float:
         """Calculate batch mode progress percentage."""
         if step_name and step_name in self.steps:
@@ -287,13 +274,11 @@ class ProgressCallback:
         step_progress_ratio = (
             (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
         )
-        overall_progress = (
-            (self.current_step_index + step_progress_ratio) / len(self.steps)
-        ) * 100
+        overall_progress = ((self.current_step_index + step_progress_ratio) / len(self.steps)) * 100
 
         return round(overall_progress, PROGRESS_DECIMAL_PLACES)
 
-    def _calculate_serial_progress(self, frame_num: Optional[int]) -> float:
+    def _calculate_serial_progress(self, frame_num: int | None) -> float:
         """Calculate serial mode progress percentage."""
         if frame_num is None:
             return 0.0
@@ -302,9 +287,7 @@ class ProgressCallback:
         if self.current_phase == "extraction":
             return (frame_num / self.total_frames * 20) if self.total_frames > 0 else 0
         elif self.current_phase == "processing":
-            frame_progress = (
-                (frame_num / self.total_frames * 65) if self.total_frames > 0 else 0
-            )
+            frame_progress = (frame_num / self.total_frames * 65) if self.total_frames > 0 else 0
             return 20 + frame_progress
         elif self.current_phase == "video":
             return 85 + 15  # Set to 100% for video phase
@@ -312,7 +295,7 @@ class ProgressCallback:
             return 0.0
 
     def _create_batch_progress_data(
-        self, stage: str, step_name: Optional[str], progress: float
+        self, stage: str, step_name: str | None, progress: float
     ) -> dict:
         """Create progress data dictionary for batch mode."""
         return {
@@ -334,7 +317,7 @@ class ProgressCallback:
         }
 
     def _create_serial_progress_data(
-        self, stage: str, frame_num: Optional[int], progress: float
+        self, stage: str, frame_num: int | None, progress: float
     ) -> dict:
         """Create progress data dictionary for serial mode."""
         return {

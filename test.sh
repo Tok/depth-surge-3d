@@ -51,7 +51,7 @@ if [ -f "models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth" ]; the
     echo "  Model size: $(du -h 'models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth' | cut -f1)"
 else
     echo "✗ Model file not found at expected location"
-    echo "  Run ./download_models.sh large to download"
+    echo "  Run ./scripts/download_models.sh large to download"
 fi
 
 # Test ffmpeg

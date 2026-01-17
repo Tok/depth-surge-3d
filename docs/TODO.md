@@ -24,8 +24,14 @@
 ## Medium Priority
 
 ### 🎯 Motion & Temporal Consistency
-- [ ] RAFT (Optical Flow) Integration
-  - Repository: https://github.com/princeton-vl/RAFT
+- [ ] Optical Flow Integration - Evaluate Alternatives
+  - **Option 1: RAFT** (Princeton)
+    - Repository: https://github.com/princeton-vl/RAFT
+    - Well-established, widely used
+  - **Option 2: UniMatch** (New alternative - needs evaluation)
+    - Paper: https://openreview.net/forum?id=iJ7cyttpVj
+    - Downloadable code available
+    - **TODO**: Check license compatibility, compare performance vs RAFT
   - Use optical flow for motion-aware depth refinement
   - Improve temporal consistency between frames
   - Enable motion-guided warping for smoother depth transitions

@@ -21,7 +21,11 @@ from depth_surge_3d.core.constants import (
     VALIDATION_RANGES,
 )
 from depth_surge_3d.utils.resolution import get_available_resolutions
-from depth_surge_3d.utils.file_operations import validate_video_file, can_resume_processing, load_processing_settings
+from depth_surge_3d.processing.io_operations import (
+    validate_video_file,
+    can_resume_processing,
+    load_processing_settings,
+)
 from depth_surge_3d.utils.console import warning as console_warning
 
 

@@ -1,6 +1,6 @@
 source /opt/pytorch/bin/activate
 pip install --upgrade pip
-pip install -r ami-requirements.txt
+pip install -r scripts/ami-requirements.txt
 
 
 # Download Video-Depth-Anything repository if not present
@@ -17,4 +17,4 @@ else
     echo "[OK] Video-Depth-Anything repository already exists"
 fi
 
-./download_models.sh large
+./scripts/download_models.sh large

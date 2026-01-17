@@ -5,11 +5,13 @@ This module provides the main orchestration class that coordinates all
 processing steps using the modular utility functions.
 """
 
+from __future__ import annotations
+
 import cv2
 import numpy as np
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple, List
+from typing import Any
 
 from ..models.video_depth_estimator import create_video_depth_estimator
 from ..models.video_depth_estimator_da3 import create_video_depth_estimator_da3
@@ -19,7 +21,7 @@ from ..utils.resolution import (
     validate_resolution_settings,
     auto_detect_resolution,
 )
-from ..utils.file_operations import (
+from ..processing.io_operations import (
     validate_video_file,
     get_video_properties,
 )
@@ -36,7 +38,7 @@ class StereoProjector:
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         device: str = "auto",
         metric: bool = False,
         depth_model_version: str = "v2",
@@ -55,14 +57,10 @@ class StereoProjector:
         if depth_model_version == "v3":
             # Use Depth Anything V3 (model_path is used as model_name)
             model_name = model_path if model_path else None
-            self.depth_estimator = create_video_depth_estimator_da3(
-                model_name, device, metric
-            )
+            self.depth_estimator = create_video_depth_estimator_da3(model_name, device, metric)
         else:
             # Use Video-Depth-Anything V2 (default)
-            self.depth_estimator = create_video_depth_estimator(
-                model_path, device, metric
-            )
+            self.depth_estimator = create_video_depth_estimator(model_path, device, metric)
 
         self._model_loaded = False
 
@@ -70,25 +68,25 @@ class StereoProjector:
         self,
         video_path: str,
         output_dir: str,
-        vr_format: str = None,
-        baseline: float = None,
-        focal_length: float = None,
-        keep_intermediates: bool = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        preserve_audio: bool = None,
-        target_fps: Optional[int] = None,
-        min_resolution: str = None,
-        super_sample: str = None,
-        apply_distortion: bool = None,
-        fisheye_projection: str = None,
-        fisheye_fov: float = None,
-        crop_factor: float = None,
-        vr_resolution: str = None,
-        fisheye_crop_factor: float = None,
-        hole_fill_quality: str = None,
-        processing_mode: str = None,
-        experimental_frame_interpolation: bool = None,
+        vr_format: str | None = None,
+        baseline: float | None = None,
+        focal_length: float | None = None,
+        keep_intermediates: bool | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        preserve_audio: bool | None = None,
+        target_fps: int | None = None,
+        min_resolution: str | None = None,
+        super_sample: str | None = None,
+        apply_distortion: bool | None = None,
+        fisheye_projection: str | None = None,
+        fisheye_fov: float | None = None,
+        crop_factor: float | None = None,
+        vr_resolution: str | None = None,
+        fisheye_crop_factor: float | None = None,
+        hole_fill_quality: str | None = None,
+        processing_mode: str | None = None,
+        experimental_frame_interpolation: bool | None = None,
     ) -> bool:
         """
         Process video to create 3D VR version.
@@ -154,9 +152,7 @@ class StereoProjector:
         Returns:
             True if processing completed successfully
         """
-        print(
-            "WARNING: Single image processing is not optimized with Video-Depth-Anything."
-        )
+        print("WARNING: Single image processing is not optimized with Video-Depth-Anything.")
         print("For best results, convert your image to a video first.")
         print("This feature will process the image as a single-frame video.")
 
@@ -226,12 +222,8 @@ class StereoProjector:
 
             # Apply hole filling
             if settings["hole_fill_quality"] in ["fast", "advanced"]:
-                left_img = hole_fill_image(
-                    left_img, method=settings["hole_fill_quality"]
-                )
-                right_img = hole_fill_image(
-                    right_img, method=settings["hole_fill_quality"]
-                )
+                left_img = hole_fill_image(left_img, method=settings["hole_fill_quality"])
+                right_img = hole_fill_image(right_img, method=settings["hole_fill_quality"])
 
             # Apply center cropping
             left_cropped = apply_center_crop(left_img, settings["crop_factor"])
@@ -264,7 +256,7 @@ class StereoProjector:
             traceback.print_exc()
             return False
 
-    def _apply_default_settings(self, params: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_default_settings(self, params: dict[str, Any]) -> dict[str, Any]:
         """Apply default settings for None parameters."""
         settings = {}
         for key, default_value in DEFAULT_SETTINGS.items():
@@ -289,9 +281,7 @@ class StereoProjector:
 
         return settings
 
-    def _validate_inputs(
-        self, video_path: str, output_dir: str, settings: Dict[str, Any]
-    ) -> bool:
+    def _validate_inputs(self, video_path: str, output_dir: str, settings: dict[str, Any]) -> bool:
         """Validate input parameters."""
         # Validate video file
         if not validate_video_file(video_path):
@@ -317,8 +307,8 @@ class StereoProjector:
         return True
 
     def _resolve_settings(
-        self, settings: Dict[str, Any], video_props: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, settings: dict[str, Any], video_props: dict[str, Any]
+    ) -> dict[str, Any]:
         """Resolve and validate settings based on video properties."""
         resolved = settings.copy()
 
@@ -345,9 +335,7 @@ class StereoProjector:
             print(f"Recommendation: {recommendation}")
 
         # Get final resolution dimensions
-        per_eye_width, per_eye_height = get_resolution_dimensions(
-            resolved["vr_resolution"]
-        )
+        per_eye_width, per_eye_height = get_resolution_dimensions(resolved["vr_resolution"])
         vr_output_width, vr_output_height = calculate_vr_output_dimensions(
             per_eye_width, per_eye_height, resolved["vr_format"]
         )
@@ -370,11 +358,11 @@ class StereoProjector:
         self,
         video_path: str,
         output_dir: str,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        target_fps: Optional[str] = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        target_fps: str | None = None,
         extraction_mode: str = "original",
-    ) -> List[Path]:
+    ) -> list[Path]:
         """
         Extract frames from video for processing.
 
@@ -389,7 +377,7 @@ class StereoProjector:
         Returns:
             List of extracted frame file paths
         """
-        from ..utils.file_operations import get_video_properties
+        from ..processing.io_operations import get_video_properties
 
         # Get video properties
         video_props = get_video_properties(video_path)
@@ -451,7 +439,7 @@ class StereoProjector:
 
     def determine_super_sample_resolution(
         self, original_width: int, original_height: int, super_sample: str = "auto"
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Determine super sampling resolution for better quality.
 
@@ -486,7 +474,7 @@ class StereoProjector:
         original_height: int,
         vr_resolution: str = "auto",
         vr_format: str = "side_by_side",
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         """
         Determine VR output resolution.
 
@@ -565,10 +553,10 @@ class StereoProjector:
         output_path: str,
         original_video_path: str,
         vr_format: str = "side_by_side",
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
         preserve_audio: bool = True,
-        target_fps: Optional[str] = None,
+        target_fps: str | None = None,
     ) -> bool:
         """
         Create final output video from VR frames.
@@ -633,7 +621,7 @@ class StereoProjector:
             print(f"FFmpeg video creation failed: {e.stderr}")
             return False
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
         return self.depth_estimator.get_model_info()
 
@@ -644,7 +632,7 @@ class StereoProjector:
 
 
 def create_stereo_projector(
-    model_path: Optional[str] = None,
+    model_path: str | None = None,
     device: str = "auto",
     metric: bool = False,
     depth_model_version: str = "v2",

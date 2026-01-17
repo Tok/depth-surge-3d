@@ -85,5 +85,7 @@ def title_bar(text: str) -> str:
     # Extract the === markers and color them
     if text.startswith("=== ") and text.endswith(" ==="):
         content = text[4:-4]  # Extract content without === markers
-        return f"{Colors.LIME_GREEN}==={Colors.RESET} {content} {Colors.LIME_GREEN}==={Colors.RESET}"
+        return (
+            f"{Colors.LIME_GREEN}==={Colors.RESET} {content} {Colors.LIME_GREEN}==={Colors.RESET}"
+        )
     return text
