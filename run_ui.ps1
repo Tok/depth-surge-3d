@@ -22,9 +22,6 @@ Write-Host "Activating virtual environment..."
 Write-Host "Checking dependencies..."
 python -m pip install flask flask-socketio *>$null
 
-# Install optional AI upscaling dependency if not present (quietly)
-python -m pip install realesrgan *>$null
-
 # Create upload and output directories
 New-Item -ItemType Directory -Force -Path "uploads" | Out-Null
 New-Item -ItemType Directory -Force -Path "output" | Out-Null

@@ -17,5 +17,5 @@ easydict>=1.9
 git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
 
 # AI Upscaling (optional - only needed if using --upscale-model)
-# Provides Real-ESRGAN for style-preserving video enhancement
-realesrgan>=0.3.0
+# Currently uses Lanczos interpolation (fast, no external dependencies)
+# TODO: Add Real-ESRGAN when compatible with torch 2.9+ / torchvision 0.24+

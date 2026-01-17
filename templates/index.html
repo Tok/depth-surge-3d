@@ -1066,16 +1066,15 @@
                             <br><strong>Warning:</strong> Advanced is 3-5x slower with often minimal visual improvement</small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">AI Upscaling Model <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Real-ESRGAN upscaling applied after fisheye distortion for enhanced resolution. Increases processing time and VRAM usage."></i></label>
+                            <label class="form-label">Upscaling <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Upscaling applied after fisheye distortion for enhanced resolution. Currently uses Lanczos interpolation (fast)."></i></label>
                             <select class="form-select" id="upscaleModel">
                                 <option value="none" selected>None (No Upscaling)</option>
-                                <option value="x2">2x Upscale (Fast, +2GB VRAM)</option>
-                                <option value="x4">4x Upscale (Best Quality, +4GB VRAM)</option>
-                                <option value="x4-conservative">4x Conservative (No GAN Artifacts, +4GB VRAM)</option>
+                                <option value="x2">2x Upscale (Lanczos)</option>
+                                <option value="x4">4x Upscale (Lanczos)</option>
                             </select>
                             <small class="form-text text-muted">
-                                <i class="fas fa-bolt"></i> Uses Real-ESRGAN for style-preserving enhancement<br>
-                                <i class="fas fa-exclamation-triangle"></i> Significantly increases processing time (~2-3x)
+                                <i class="fas fa-expand-arrows-alt"></i> Uses Lanczos interpolation (fast, no AI)<br>
+                                <i class="fas fa-info-circle"></i> AI upscaling (Real-ESRGAN) coming soon
                             </small>
                         </div>
                         <div class="step-indicator">Cropping removes edge artifacts from stereo generation</div>

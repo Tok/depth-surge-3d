@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Literal
 import torch
 import numpy as np
+import cv2
 
 UpscaleModel = Literal["none", "x2", "x4", "x4-conservative"]
 
@@ -29,10 +30,7 @@ class ImageUpscaler:
     def _determine_device(self, device: str) -> str:
         """Determine best device for inference."""
         if device == "auto":
-            if torch.cuda.is_available():
-                return "cuda"
-            else:
-                return "cpu"
+            return "cuda" if torch.cuda.is_available() else "cpu"
         return device
 
     def load_model(self) -> bool:
@@ -65,73 +63,29 @@ class ImageUpscaler:
                 torch.cuda.empty_cache()
 
 
-class RealESRGANUpscaler(ImageUpscaler):
-    """Real-ESRGAN upscaler implementation."""
+class LanczosUpscaler(ImageUpscaler):
+    """Fallback upscaler using Lanczos interpolation (fast, dependency-free)."""
 
-    def __init__(self, model_name: str = "x4", device: str = "auto"):
+    def __init__(self, scale: int = 2, device: str = "auto"):
         """
-        Initialize Real-ESRGAN upscaler.
+        Initialize Lanczos upscaler.
 
         Args:
-            model_name: Model variant ('x2', 'x4', 'x4-conservative')
+            scale: Upscale factor (2 or 4)
             device: Device to use ('auto', 'cuda', 'cpu')
         """
         super().__init__(device)
-        self.model_name = model_name
-        self.scale = int(model_name[1]) if model_name.startswith("x") else 4
+        self.scale = scale
 
     def load_model(self) -> bool:
-        """Load Real-ESRGAN model."""
-        try:
-            from realesrgan import RealESRGANer
-            from basicsr.archs.rrdbnet_arch import RRDBNet
-
-            # Map model names to parameters
-            if self.model_name == "x2":
-                model = RRDBNet(
-                    num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=2
-                )
-                netscale = 2
-                model_path = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth"
-            elif self.model_name == "x4-conservative":
-                model = RRDBNet(
-                    num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4
-                )
-                netscale = 4
-                model_path = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.1/RealESRNet_x4plus.pth"
-            else:  # x4 default
-                model = RRDBNet(
-                    num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4
-                )
-                netscale = 4
-                model_path = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
-
-            # Determine device string for RealESRGANer
-            device_str = "cuda" if self.device == "cuda" and torch.cuda.is_available() else "cpu"
-
-            # Create upsampler
-            self.model = RealESRGANer(
-                scale=netscale,
-                model_path=model_path,
-                model=model,
-                tile=0,  # No tiling (process full image)
-                tile_pad=10,
-                pre_pad=0,
-                half=True if device_str == "cuda" else False,  # FP16 on GPU
-                device=device_str,
-            )
-
-            print(f"Loaded Real-ESRGAN ({self.model_name}) on {device_str}")
-            return True
-
-        except Exception as e:
-            print(f"Error loading Real-ESRGAN: {e}")
-            print("Ensure realesrgan is installed: pip install realesrgan")
-            return False
+        """Lanczos doesn't need model loading."""
+        print(f"Using Lanczos {self.scale}x upscaling (fast, no AI)")
+        print("Note: For AI upscaling, Real-ESRGAN requires compatible dependencies")
+        return True
 
     def upscale_image(self, image: np.ndarray) -> np.ndarray:
         """
-        Upscale a single image (BGR → BGR).
+        Upscale using Lanczos interpolation (BGR → BGR).
 
         Args:
             image: Input image in BGR format
@@ -139,13 +93,9 @@ class RealESRGANUpscaler(ImageUpscaler):
         Returns:
             Upscaled image in BGR format
         """
-        if self.model is None:
-            raise RuntimeError("Model not loaded. Call load_model() first.")
-
-        # RealESRGANer.enhance expects BGR and returns BGR, face_enhance=False
-        output, _ = self.model.enhance(image, outscale=self.scale)
-
-        return output
+        h, w = image.shape[:2]
+        new_size = (w * self.scale, h * self.scale)
+        return cv2.resize(image, new_size, interpolation=cv2.INTER_LANCZOS4)
 
 
 def create_upscaler(model_name: str = "none", device: str = "auto") -> ImageUpscaler | None:
@@ -165,8 +115,11 @@ def create_upscaler(model_name: str = "none", device: str = "auto") -> ImageUpsc
     if model_name == "none":
         return None
 
-    # Real-ESRGAN models
+    # Extract scale factor
     if model_name in ["x2", "x4", "x4-conservative"]:
-        return RealESRGANUpscaler(model_name, device)
+        scale = int(model_name[1])
+        # Currently using Lanczos fallback due to Real-ESRGAN dependency issues
+        # TODO: Implement Real-ESRGAN when compatible wrapper is available
+        return LanczosUpscaler(scale=scale, device=device)
 
     raise ValueError(f"Unknown upscale model: {model_name}")
