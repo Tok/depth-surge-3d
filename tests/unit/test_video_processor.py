@@ -470,6 +470,7 @@ class TestStepLoadFrames:
 class TestStepCreateStereoPairs:
     """Test _step_create_stereo_pairs method."""
 
+    @patch("src.depth_surge_3d.processing.video_processor.mp.Pool")
     @patch("src.depth_surge_3d.processing.video_processor.create_shifted_image")
     @patch("src.depth_surge_3d.processing.video_processor.depth_to_disparity")
     @patch("src.depth_surge_3d.processing.video_processor.resize_image")
@@ -484,8 +485,16 @@ class TestStepCreateStereoPairs:
         mock_resize,
         mock_depth_disp,
         mock_shift,
+        mock_pool,
     ):
         """Test successful stereo pair creation."""
+        # Configure mock pool to use synchronous map (runs in main process)
+        mock_pool_instance = MagicMock()
+        mock_pool_instance.__enter__ = MagicMock(return_value=mock_pool_instance)
+        mock_pool_instance.__exit__ = MagicMock(return_value=False)
+        mock_pool_instance.imap.side_effect = lambda func, args_list: map(func, args_list)
+        mock_pool.return_value = mock_pool_instance
+
         mock_estimator = MagicMock(spec=VideoDepthEstimator)
         processor = VideoProcessor(mock_estimator)
 
