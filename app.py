@@ -4,6 +4,8 @@ Depth Surge 3D Web UI
 Flask application for converting 2D videos to immersive 3D VR format
 """
 
+from __future__ import annotations
+
 import os
 import time
 import uuid
@@ -14,6 +16,7 @@ import sys
 import signal
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 import cv2
 
 # Set PyTorch memory allocator config BEFORE importing torch
@@ -75,13 +78,13 @@ SHUTDOWN_FLAG = False
 ACTIVE_PROCESSES = set()
 
 
-def vprint(*args, **kwargs):
+def vprint(*args: Any, **kwargs: Any) -> None:
     """Print only if verbose mode is enabled"""
     if VERBOSE:
         print(*args, **kwargs)
 
 
-def cleanup_processes():
+def cleanup_processes() -> None:
     """Clean up any active processing threads or subprocesses"""
     global ACTIVE_PROCESSES, SHUTDOWN_FLAG
 
@@ -110,7 +113,7 @@ def cleanup_processes():
     vprint("Process cleanup completed")
 
 
-def signal_handler(signum, frame):
+def signal_handler(signum: int, frame: Any) -> None:
     """Handle shutdown signals"""
     global current_processing
     print(f"\nReceived signal {signum}, shutting down gracefully...")
@@ -144,7 +147,7 @@ socketio = SocketIO(
 
 
 @app.teardown_appcontext
-def cleanup_on_teardown(error):
+def cleanup_on_teardown(error: Exception | None) -> None:
     """Clean up processes when Flask shuts down"""
     if error:
         vprint(f"App teardown due to error: {error}")
@@ -164,12 +167,12 @@ current_processing = {
 }
 
 
-def ensure_directories():
+def ensure_directories() -> None:
     """Ensure output directory exists"""
     Path(app.config["OUTPUT_FOLDER"]).mkdir(exist_ok=True)
 
 
-def get_video_info(video_path):
+def get_video_info(video_path: str | Path) -> dict[str, Any] | None:
     """Extract video information using OpenCV"""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -197,7 +200,7 @@ def get_video_info(video_path):
     }
 
 
-def get_system_info():
+def get_system_info() -> dict[str, Any]:
     """Get system information including GPU details"""
     import torch  # Import here to avoid early CUDA initialization
 
@@ -234,7 +237,7 @@ def get_system_info():
 class ProgressCallback:
     """Enhanced callback class to track processing progress for both serial and batch modes"""
 
-    def __init__(self, session_id, total_frames, processing_mode="serial"):
+    def __init__(self, session_id: str, total_frames: int, processing_mode: str = "serial") -> None:
         self.session_id = session_id
         self.total_frames = total_frames
         self.processing_mode = processing_mode
@@ -264,13 +267,13 @@ class ProgressCallback:
 
     def update_progress(
         self,
-        stage,
-        frame_num=None,
-        phase=None,
-        step_name=None,
-        step_progress=None,
-        step_total=None,
-    ):
+        stage: str,
+        frame_num: int | None = None,
+        phase: str | None = None,
+        step_name: str | None = None,
+        step_progress: int | None = None,
+        step_total: int | None = None,
+    ) -> None:
         global current_processing
         import time
 
@@ -394,7 +397,7 @@ class ProgressCallback:
             print(console_warning(f"Error emitting completion: {e}"))
 
 
-def process_video_async(session_id, video_path, settings, output_dir):
+def process_video_async(session_id: str, video_path: str | Path, settings: dict[str, Any], output_dir: str | Path) -> None:
     """Process video in background thread"""
     global current_processing
     import torch  # Import here to avoid CUDA initialization issues in main thread
@@ -595,7 +598,7 @@ def index():
 
 
 @app.route("/upload", methods=["POST"])
-def upload_video():
+def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     """Handle video upload - saves directly to output directory with audio extraction"""
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
@@ -686,7 +689,7 @@ def upload_video():
 
 
 @app.route("/process", methods=["POST"])
-def start_processing():
+def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     """Start video processing"""
     global current_processing
 
@@ -733,7 +736,7 @@ def start_processing():
 
 
 @app.route("/stop", methods=["POST"])
-def stop_processing():
+def stop_processing() -> dict[str, Any]:
     """Stop current processing"""
     global current_processing
 
