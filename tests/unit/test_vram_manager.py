@@ -140,3 +140,31 @@ class TestGetVRAMInfo:
         assert info["total"] == 0.0
         assert info["used"] == 0.0
         assert info["usage_percent"] == 0.0
+
+    @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.cuda.mem_get_info", side_effect=RuntimeError("CUDA error"))
+    def test_vram_info_exception(self, mock_mem_info, mock_cuda_available):
+        """Test VRAM info handles exceptions gracefully."""
+        info = get_vram_info()
+        assert info["available"] == 0.0
+        assert info["total"] == 0.0
+        assert info["used"] == 0.0
+        assert info["usage_percent"] == 0.0
+
+
+class TestExceptionHandling:
+    """Test exception handling in VRAM functions."""
+
+    @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.cuda.mem_get_info", side_effect=RuntimeError("CUDA error"))
+    def test_get_available_vram_exception(self, mock_mem_info, mock_cuda_available):
+        """Test get_available_vram handles exceptions."""
+        vram = get_available_vram()
+        assert vram == 0.0
+
+    @patch("torch.cuda.is_available", return_value=True)
+    @patch("torch.cuda.mem_get_info", side_effect=RuntimeError("CUDA error"))
+    def test_get_total_vram_exception(self, mock_mem_info, mock_cuda_available):
+        """Test get_total_vram handles exceptions."""
+        vram = get_total_vram()
+        assert vram == 0.0
