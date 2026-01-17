@@ -592,7 +592,10 @@ class TestCleanupIntermediateFiles:
             "src.depth_surge_3d.processing.io_operations._cleanup_directory",
             return_value=10,
         ):
-            with patch("src.depth_surge_3d.processing.io_operations.INTERMEDIATE_DIRS", {"frames": "00_frames"}):
+            with patch(
+                "src.depth_surge_3d.processing.io_operations.INTERMEDIATE_DIRS",
+                {"frames": "00_frames"},
+            ):
                 mock_dir = MagicMock(spec=Path)
                 mock_dir.exists.return_value = True
 
@@ -609,7 +612,10 @@ class TestCleanupIntermediateFiles:
             "src.depth_surge_3d.processing.io_operations._cleanup_directory",
             side_effect=PermissionError("Access denied"),
         ):
-            with patch("src.depth_surge_3d.processing.io_operations.INTERMEDIATE_DIRS", {"frames": "00_frames"}):
+            with patch(
+                "src.depth_surge_3d.processing.io_operations.INTERMEDIATE_DIRS",
+                {"frames": "00_frames"},
+            ):
                 mock_dir = MagicMock(spec=Path)
                 mock_dir.exists.return_value = True
 
@@ -742,9 +748,7 @@ class TestUpdateProcessingStatus:
                         "src.depth_surge_3d.processing.io_operations.format_time_duration",
                         return_value="1h 30m",
                     ):
-                        result = update_processing_status(
-                            Path("/tmp/settings.json"), "completed"
-                        )
+                        result = update_processing_status(Path("/tmp/settings.json"), "completed")
 
         assert result is True
 
