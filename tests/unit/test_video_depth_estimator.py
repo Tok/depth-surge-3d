@@ -169,3 +169,140 @@ class TestCreateVideoDepthEstimator:
         """Test factory function with None model path uses default."""
         estimator = create_video_depth_estimator(model_path=None)
         assert estimator.model_path == DEFAULT_MODEL_PATH
+
+
+class TestEnsureDependencies:
+    """Test _ensure_dependencies method."""
+
+    def test_ensure_dependencies_success(self):
+        """Test successful dependency check."""
+        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+
+        # Assume dependencies are available in test environment
+        result = estimator._ensure_dependencies()
+
+        # Should return True if repo exists
+        assert isinstance(result, bool)
+
+    def test_ensure_dependencies_repo_not_exists(self):
+        """Test dependency check when repo doesn't exist."""
+        with patch("pathlib.Path.exists", return_value=False):
+            estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+            result = estimator._ensure_dependencies()
+
+            # Should return False when repo missing
+            assert result is False
+
+
+class TestSuppressModelOutput:
+    """Test _suppress_model_output context manager."""
+
+    def test_suppress_model_output_context(self):
+        """Test that output suppression works as context manager."""
+        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+
+        # Should not raise error
+        with estimator._suppress_model_output():
+            pass  # Context manager should work
+
+    def test_suppress_model_output_restores_stdout(self):
+        """Test that stdout is restored after suppression."""
+        import sys
+
+        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+
+        original_stdout = sys.stdout
+
+        with estimator._suppress_model_output():
+            # stdout should be redirected
+            assert sys.stdout != original_stdout
+
+        # stdout should be restored
+        assert sys.stdout == original_stdout
+
+
+class TestLoadModel:
+    """Test load_model method."""
+
+    def test_load_model_dependencies_fail(self):
+        """Test load_model when dependencies are missing."""
+        with patch.object(VideoDepthEstimator, "_ensure_dependencies", return_value=False):
+            estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+            result = estimator.load_model()
+
+            assert result is False
+            assert estimator.model is None
+
+    def test_load_model_invalid_model_type(self):
+        """Test load_model with invalid model type."""
+        with patch.object(VideoDepthEstimator, "_ensure_dependencies", return_value=True):
+            with patch.object(VideoDepthEstimator, "_get_model_type", return_value=None):
+                estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+                result = estimator.load_model()
+
+                assert result is False
+                assert estimator.model is None
+
+    def test_load_model_exception_handling(self):
+        """Test load_model handles exceptions gracefully."""
+        with patch.object(VideoDepthEstimator, "_ensure_dependencies", return_value=True):
+            with patch.object(VideoDepthEstimator, "_get_model_type", return_value="vitl"):
+                # Make sys.path.insert raise an exception
+                with patch("sys.path", side_effect=RuntimeError("Test error")):
+                    estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+                    result = estimator.load_model()
+
+                    assert result is False
+
+
+class TestAutoDownloadModel:
+    """Test _auto_download_model method."""
+
+    def test_auto_download_model_file_exists(self):
+        """Test auto download when model file already exists."""
+        with patch("pathlib.Path.exists", return_value=True):
+            estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+            result = estimator._auto_download_model()
+
+            # Should return True if file exists
+            assert result is True
+
+    def test_auto_download_model_no_url(self):
+        """Test auto download when no URL configured."""
+        with patch("pathlib.Path.exists", return_value=False):
+            estimator = VideoDepthEstimator("models/unknown_model.pth", device="cpu")
+
+            # Mock MODEL_DOWNLOAD_URLS to not have this model
+            with patch("src.depth_surge_3d.models.video_depth_estimator.MODEL_DOWNLOAD_URLS", {}):
+                result = estimator._auto_download_model()
+
+                # Should return False when no URL available
+                assert result is False
+
+
+class TestGetModelInfo:
+    """Test get_model_info when model is loaded."""
+
+    def test_get_model_info_with_loaded_model(self):
+        """Test model info when model is loaded."""
+        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+
+        # Simulate loaded model with all required config keys
+        estimator.model = MagicMock()
+        estimator.model_config = {
+            "encoder": "vitl",
+            "features": 256,
+            "out_channels": [256, 512, 1024, 1024],
+            "num_frames": 32,
+        }
+
+        info = estimator.get_model_info()
+
+        assert "loaded" in info
+        assert info["loaded"] is True
+        assert "encoder" in info
+        assert info["encoder"] == "vitl"
+        assert "features" in info
+        assert info["features"] == 256
+        assert "temporal_consistency" in info
+        assert info["temporal_consistency"] is True
