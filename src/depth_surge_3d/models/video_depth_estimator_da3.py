@@ -65,6 +65,21 @@ class VideoDepthEstimatorDA3:
         try:
             import warnings
             import logging
+            import sys
+            import os
+            from contextlib import contextmanager
+
+            # Context manager to suppress stderr output
+            @contextmanager
+            def suppress_stderr():
+                """Temporarily redirect stderr to devnull."""
+                old_stderr = sys.stderr
+                try:
+                    sys.stderr = open(os.devnull, "w")
+                    yield
+                finally:
+                    sys.stderr.close()
+                    sys.stderr = old_stderr
 
             # Suppress gsplat dependency warning (only needed for giant models with 3DGS)
             # DA3 uses loguru logger which prints directly, need to suppress before import
@@ -76,7 +91,6 @@ class VideoDepthEstimatorDA3:
 
             # Suppress loguru logger used by DA3 (if available)
             try:
-                import sys
                 from loguru import logger
 
                 logger.remove()  # Remove default handler
@@ -84,8 +98,9 @@ class VideoDepthEstimatorDA3:
             except ImportError:
                 pass  # loguru not installed or not used
 
-            # Import DA3 API
-            from depth_anything_3.api import DepthAnything3
+            # Import DA3 API with stderr suppressed to hide gsplat warning
+            with suppress_stderr():
+                from depth_anything_3.api import DepthAnything3
 
             # Resolve model name to Hugging Face ID
             if self.model_name in DA3_MODEL_NAMES:
@@ -99,9 +114,10 @@ class VideoDepthEstimatorDA3:
                 hf_model_id = DA3_MODEL_NAMES["large-metric"]
                 print(f"Using metric depth model: {hf_model_id}")
 
-            # Load model from Hugging Face
+            # Load model from Hugging Face (suppress gsplat warning during load)
             print(f"Loading Depth Anything V3 model: {hf_model_id}")
-            self.model = DepthAnything3.from_pretrained(hf_model_id)
+            with suppress_stderr():
+                self.model = DepthAnything3.from_pretrained(hf_model_id)
             self.model = self.model.to(device=self.device)
             self.model.eval()
 
