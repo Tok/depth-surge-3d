@@ -358,3 +358,63 @@ class TestEstimateDepthBatch:
 
         with pytest.raises(RuntimeError, match="Model not loaded"):
             estimator.estimate_depth_batch(frames)
+
+    def test_estimate_depth_batch_success(self):
+        """Test successful depth estimation."""
+        import torch
+
+        estimator = VideoDepthEstimatorDA3(device="cpu", verbose=True)
+        estimator.model = MagicMock()
+
+        frames = np.random.rand(5, 480, 640, 3).astype(np.uint8)
+
+        # Mock model inference
+        mock_prediction = MagicMock()
+        mock_depth_maps = [torch.rand(480, 640) for _ in range(5)]
+        mock_prediction.depth = mock_depth_maps
+        estimator.model.inference.return_value = mock_prediction
+
+        with patch("torch.no_grad"):
+            result = estimator.estimate_depth_batch(frames, input_size=518)
+
+        assert result.shape == (5, 480, 640)
+        estimator.model.inference.assert_called_once()
+
+    def test_estimate_depth_batch_with_resize(self):
+        """Test depth estimation with resizing."""
+        import torch
+        import cv2
+
+        estimator = VideoDepthEstimatorDA3(device="cpu", verbose=False)
+        estimator.model = MagicMock()
+
+        frames = np.random.rand(3, 240, 320, 3).astype(np.uint8)
+
+        # Mock model inference with different size output
+        mock_prediction = MagicMock()
+        # Model returns larger depth maps than input
+        mock_depth_maps = [torch.rand(480, 640) for _ in range(3)]
+        mock_prediction.depth = mock_depth_maps
+        estimator.model.inference.return_value = mock_prediction
+
+        with patch("torch.no_grad"):
+            with patch("cv2.resize") as mock_resize:
+                mock_resize.return_value = np.random.rand(240, 320)
+                result = estimator.estimate_depth_batch(frames)
+
+        # Should resize depth maps to match input
+        assert mock_resize.call_count == 3
+
+    def test_estimate_depth_batch_exception_handling(self):
+        """Test exception handling during inference."""
+        import pytest
+
+        estimator = VideoDepthEstimatorDA3(device="cpu")
+        estimator.model = MagicMock()
+        estimator.model.inference.side_effect = RuntimeError("CUDA OOM")
+
+        frames = np.random.rand(2, 480, 640, 3).astype(np.uint8)
+
+        with patch("torch.no_grad"):
+            with pytest.raises(RuntimeError, match="DA3 depth estimation failed"):
+                estimator.estimate_depth_batch(frames)
