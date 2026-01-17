@@ -80,8 +80,6 @@ class TestLoadSettingsSummary:
 
     def test_load_settings_summary_success(self):
         """Test loading settings summary successfully."""
-        import json
-
         mock_batch_path = MagicMock(spec=Path)
         mock_settings_file = MagicMock(spec=Path)
         mock_batch_path.glob.return_value = [mock_settings_file]

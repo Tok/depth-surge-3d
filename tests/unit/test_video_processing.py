@@ -2,7 +2,7 @@
 
 import numpy as np
 from pathlib import Path
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 import pytest
 
 from src.depth_surge_3d.utils.video_processing import (

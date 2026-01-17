@@ -383,7 +383,6 @@ class TestEstimateDepthBatch:
     def test_estimate_depth_batch_with_resize(self):
         """Test depth estimation with resizing."""
         import torch
-        import cv2
 
         estimator = VideoDepthEstimatorDA3(device="cpu", verbose=False)
         estimator.model = MagicMock()
@@ -400,7 +399,7 @@ class TestEstimateDepthBatch:
         with patch("torch.no_grad"):
             with patch("cv2.resize") as mock_resize:
                 mock_resize.return_value = np.random.rand(240, 320)
-                result = estimator.estimate_depth_batch(frames)
+                estimator.estimate_depth_batch(frames)
 
         # Should resize depth maps to match input
         assert mock_resize.call_count == 3

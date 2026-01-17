@@ -693,7 +693,6 @@ class TestLoadProcessingSettings:
     def test_load_processing_settings_success(self):
         """Test loading processing settings from JSON."""
         from src.depth_surge_3d.processing.io_operations import load_processing_settings
-        import json
 
         settings_data = {"input_video": "test.mp4", "depth_resolution": 1080}
 

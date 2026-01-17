@@ -353,7 +353,7 @@ class TestEstimateDepthBatchDecisionLogic:
 
         with patch.object(estimator, "_estimate_depth_chunked") as mock_chunked:
             mock_chunked.return_value = np.random.rand(70, 2160, 3840)
-            result = estimator.estimate_depth_batch(frames)
+            estimator.estimate_depth_batch(frames)
 
             mock_chunked.assert_called_once()
 
@@ -369,7 +369,7 @@ class TestEstimateDepthBatchDecisionLogic:
 
         with patch.object(estimator, "_estimate_depth_single_batch") as mock_single:
             mock_single.return_value = np.random.rand(50, 480, 640)
-            result = estimator.estimate_depth_batch(frames)
+            estimator.estimate_depth_batch(frames)
 
             mock_single.assert_called_once()
 

@@ -1022,9 +1022,8 @@ class TestProcessImage:
                 )
 
         assert result is True
-        # Verify custom depth resolution was used
-        call_args = mock_estimator.estimate_depth_batch.call_args
-        # Custom depth resolution would be set if higher than image size
+        # Verify custom depth resolution was used (batch estimation called)
+        mock_estimator.estimate_depth_batch.assert_called_once()
 
     @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator")
     @patch("cv2.imread")
