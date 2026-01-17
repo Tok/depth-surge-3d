@@ -78,11 +78,27 @@
   - Cubemap support
 
 ### 🧪 Experimental Features
-- [ ] AI upscaling integration
-  - **Goal**: Style-preserving upscaling without altering video aesthetics
-  - **Avoid**: Diffusion models (tend to change style/add artifacts)
-  - **Research needed**: ESRGAN alternatives (check if still SOTA)
-  - **Requirements**: Fast, deterministic, no style changes
+- [ ] AI upscaling integration (researched 2026-01-17)
+  - **Primary choice: BasicVSR++**
+    - State-of-the-art for video upscaling with temporal consistency
+    - Already integrated in VapourSynth ecosystem
+    - GAN-based but processes video as sequence (not frame-by-frame)
+    - Better than Real-ESRGAN for video due to temporal awareness
+  - **Fallback: Real-ESRGAN**
+    - Still open-source gold standard (quality: 9.2/10)
+    - Frame-by-frame processing, fast (~6s/frame GPU)
+    - Trained on real-world degraded images
+    - Python package: `pip install realesrgan`
+  - **Alternative: SwinIR**
+    - Most deterministic (transformer-based, not GAN)
+    - Best quality in comparisons, no hallucinated details
+    - Good if BasicVSR++ proves too complex
+  - **Implementation notes:**
+    - Optional step after fisheye distortion (Step 5.5)
+    - Apply to left/right frames before final assembly
+    - Add `--upscale-model {basicvsrpp,realesrgan,swinir,none}` flag
+    - Target: 2x upscaling (1080p → 4K, 720p → 1440p)
+    - VRAM considerations: +2-4GB overhead
 
 ### 📊 Analysis & Debugging
 - [ ] Depth map quality metrics
