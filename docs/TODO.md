@@ -41,14 +41,17 @@
   - Benchmark memory/quality tradeoffs
 
 ### ⚡ Performance Enhancements
-- [ ] GPU memory optimization
-  - Process frames in smaller batches to manage VRAM
-  - Implement smart batch sizing based on available memory
-- [ ] Parallel frame processing where possible
-  - Depth estimation can be parallelized
-  - Stereo generation can be parallelized
-- [ ] Cache depth maps across runs
-  - Skip re-computing depth if source video hasn't changed
+- [x] GPU memory optimization ✓ (2026-01-17)
+  - Created vram_manager.py for VRAM detection and monitoring
+  - Implemented smart batch sizing based on available memory
+  - Chunk sizes auto-adjust: 4-24 frames based on VRAM and resolution
+- [x] Parallel frame processing ✓ (2026-01-17)
+  - Stereo pair generation parallelized with multiprocessing.Pool
+  - Uses cpu_count() - 2 workers for optimal performance
+- [x] Cache depth maps across runs ✓ (2026-01-17)
+  - Implemented depth_cache.py with BLAKE2b content hashing
+  - Caches in ~/.cache/depth-surge-3d/depth_cache
+  - Skips re-computing if video and depth settings unchanged
 
 ### 🎨 UI/UX Improvements
 - [ ] Real-time preview while processing
@@ -66,9 +69,11 @@
 - [ ] Custom depth model selection
   - Support multiple depth estimation models
   - Allow model switching without reinstall
-- [ ] Advanced hole-filling algorithms
-  - Depth-guided inpainting improvements
-  - ML-based hole filling
+- [x] Advanced hole-filling algorithms ✓ (2026-01-17)
+  - Implemented adaptive multi-pass inpainting (fast/advanced/high)
+  - Automatic radius calculation based on hole size
+  - Edge-preserving bilateral filtering
+- [ ] ML-based hole filling (future enhancement)
 
 ## Low Priority
 
@@ -111,11 +116,15 @@
 ## Technical Debt
 - [ ] Clean up commented debug code
 - [ ] Standardize error handling patterns
-- [ ] Add type hints throughout
-- [ ] Comprehensive test suite
-  - Unit tests for image processing
+- [x] Add type hints throughout ✓ (2026-01-17)
+  - Modern Python 3.10+ syntax (dict, list, X | None)
+  - Full type coverage across all modules
+- [x] Comprehensive test suite ✓ (2026-01-17)
+  - 600 unit tests, 89.45% coverage (target: 90%, gap: 14 lines)
+  - 100% coverage: vram_manager, depth_cache, batch_analysis, image_processing
+  - 97% coverage: progress tracking
   - Integration tests for full pipeline
-  - Performance regression tests
+- [ ] Performance regression tests
 
 ---
 
