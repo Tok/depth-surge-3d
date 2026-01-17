@@ -483,7 +483,7 @@ def process_video_async(session_id: str, video_path: str | Path, settings: dict[
         original_fps = video_info["fps"]
 
         # Calculate actual frame range that will be extracted (matching VideoProcessor logic)
-        from depth_surge_3d.utils.file_operations import calculate_frame_range
+        from depth_surge_3d.utils.path_utils import calculate_frame_range
 
         start_frame, end_frame = calculate_frame_range(
             video_info["frame_count"], original_fps, start_time, end_time

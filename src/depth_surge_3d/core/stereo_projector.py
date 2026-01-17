@@ -19,7 +19,7 @@ from ..utils.resolution import (
     validate_resolution_settings,
     auto_detect_resolution,
 )
-from ..utils.file_operations import (
+from ..processing.io_operations import (
     validate_video_file,
     get_video_properties,
 )
@@ -375,7 +375,7 @@ class StereoProjector:
         Returns:
             List of extracted frame file paths
         """
-        from ..utils.file_operations import get_video_properties
+        from ..processing.io_operations import get_video_properties
 
         # Get video properties
         video_props = get_video_properties(video_path)

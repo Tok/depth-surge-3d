@@ -2,13 +2,15 @@
 
 import tempfile
 import os
-from src.depth_surge_3d.utils.file_operations import (
+from src.depth_surge_3d.utils.path_utils import (
     parse_time_string,
     calculate_frame_range,
     generate_frame_filename,
     generate_output_filename,
     sanitize_filename,
     format_file_size,
+)
+from src.depth_surge_3d.processing.io_operations import (
     validate_video_file,
     validate_image_file,
 )

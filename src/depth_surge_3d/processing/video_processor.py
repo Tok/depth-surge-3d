@@ -17,11 +17,13 @@ import torch
 
 from ..models.video_depth_estimator import VideoDepthEstimator
 from ..utils.progress import create_progress_tracker
-from ..utils.file_operations import (
-    create_output_directories,
-    get_frame_files,
+from ..utils.path_utils import (
     calculate_frame_range,
     generate_output_filename,
+)
+from ..processing.io_operations import (
+    create_output_directories,
+    get_frame_files,
     verify_ffmpeg_installation,
     save_processing_settings,
     update_processing_status,
