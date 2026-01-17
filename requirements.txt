@@ -16,6 +16,6 @@ easydict>=1.9
 # Install DA3 from GitHub (not yet on PyPI)
 git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
 
-# AI Upscaling (optional - only needed if using --upscale-model)
-# Currently uses Lanczos interpolation (fast, no external dependencies)
-# TODO: Add Real-ESRGAN when compatible with torch 2.9+ / torchvision 0.24+
+# AI Upscaling: Real-ESRGAN with standalone RRDB network (no extra dependencies)
+# Uses vendored architecture from ai-forever/Real-ESRGAN
+# Model weights auto-download to ~/.cache/depth-surge-3d/realesrgan/
