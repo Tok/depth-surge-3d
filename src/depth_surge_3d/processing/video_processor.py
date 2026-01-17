@@ -5,11 +5,13 @@ This module implements video processing using Video-Depth-Anything
 for temporal consistency across video frames.
 """
 
+from __future__ import annotations
+
 import cv2
 import subprocess
 import numpy as np
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 import time
 import torch
 
@@ -115,9 +117,9 @@ class VideoProcessor:
         self,
         video_path: str,
         output_dir: str,
-        settings: Dict[str, Any],
-        video_properties: Dict[str, Any],
-    ) -> tuple[Path, Dict[str, Path], Optional[Path]]:
+        settings: dict[str, Any],
+        video_properties: dict[str, Any],
+    ) -> tuple[Path, dict[str, Path], Path | None]:
         """Setup processing directories and settings file."""
         output_path = Path(output_dir)
         directories = create_output_directories(output_path, settings["keep_intermediates"])
@@ -138,7 +140,7 @@ class VideoProcessor:
         success: bool,
         output_path: Path,
         video_path: str,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         num_frames: int,
     ) -> None:
         """Finalize processing and update settings file."""
@@ -166,11 +168,11 @@ class VideoProcessor:
     def _step_extract_frames(
         self,
         video_path: str,
-        directories: Dict[str, Path],
-        video_properties: Dict[str, Any],
-        settings: Dict[str, Any],
+        directories: dict[str, Path],
+        video_properties: dict[str, Any],
+        settings: dict[str, Any],
         progress_callback,
-    ) -> Optional[List[Path]]:
+    ) -> list[Path] | None:
         """Execute Step 1: Extract frames from video."""
         # Check if frames already exist (resume functionality)
         frames_dir = directories.get("frames")
@@ -214,11 +216,11 @@ class VideoProcessor:
 
     def _step_generate_depth_maps(
         self,
-        frame_files: List[Path],
-        settings: Dict[str, Any],
-        directories: Dict[str, Path],
+        frame_files: list[Path],
+        settings: dict[str, Any],
+        directories: dict[str, Path],
         progress_tracker,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Execute Step 2: Generate depth maps."""
         # Check if depth maps already exist (only if keep_intermediates is enabled)
         if settings.get("keep_intermediates") and "depth_maps" in directories:
@@ -278,8 +280,8 @@ class VideoProcessor:
         return depth_maps
 
     def _step_load_frames(
-        self, frame_files: List[Path], settings: Dict[str, Any], progress_tracker
-    ) -> Optional[np.ndarray]:
+        self, frame_files: list[Path], settings: dict[str, Any], progress_tracker
+    ) -> np.ndarray | None:
         """Execute Step 3: Load frames for stereo processing."""
         print("Step 3/7: Loading frames for stereo processing...")
         progress_tracker.update_progress(
@@ -309,9 +311,9 @@ class VideoProcessor:
         self,
         frames: np.ndarray,
         depth_maps: np.ndarray,
-        frame_files: List[Path],
-        directories: Dict[str, Path],
-        settings: Dict[str, Any],
+        frame_files: list[Path],
+        directories: dict[str, Path],
+        settings: dict[str, Any],
         progress_tracker,
     ) -> bool:
         """Execute Step 4: Create stereo pairs."""
@@ -375,7 +377,7 @@ class VideoProcessor:
         return True
 
     def _step_apply_distortion(
-        self, directories: Dict[str, Path], settings: Dict[str, Any], progress_tracker
+        self, directories: dict[str, Path], settings: dict[str, Any], progress_tracker
     ) -> bool:
         """Execute Step 5: Apply fisheye distortion (if enabled)."""
         if not settings["apply_distortion"]:
@@ -460,8 +462,8 @@ class VideoProcessor:
 
     def _step_create_vr_frames(
         self,
-        directories: Dict[str, Path],
-        settings: Dict[str, Any],
+        directories: dict[str, Path],
+        settings: dict[str, Any],
         progress_tracker,
         num_frames: int,
     ) -> bool:
@@ -505,10 +507,10 @@ class VideoProcessor:
 
     def _step_create_final_video(
         self,
-        directories: Dict[str, Path],
+        directories: dict[str, Path],
         output_path: Path,
         video_path: str,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         progress_tracker,
         progress_callback,
     ) -> bool:
@@ -545,8 +547,8 @@ class VideoProcessor:
         self,
         video_path: str,
         output_dir: str,
-        video_properties: Dict[str, Any],
-        settings: Dict[str, Any],
+        video_properties: dict[str, Any],
+        settings: dict[str, Any],
         progress_callback=None,
     ) -> bool:
         """
@@ -634,10 +636,10 @@ class VideoProcessor:
     def _extract_frames(
         self,
         video_path: str,
-        directories: Dict[str, Path],
-        video_properties: Dict[str, Any],
-        settings: Dict[str, Any],
-    ) -> List[Path]:
+        directories: dict[str, Path],
+        video_properties: dict[str, Any],
+        settings: dict[str, Any],
+    ) -> list[Path]:
         """Extract frames from video."""
         frames_dir = directories.get("frames")
         if not frames_dir:
@@ -704,8 +706,8 @@ class VideoProcessor:
         return get_frame_files(frames_dir)
 
     def _load_frames(
-        self, frame_files: List[Path], settings: Dict[str, Any], progress_tracker
-    ) -> Optional[np.ndarray]:
+        self, frame_files: list[Path], settings: dict[str, Any], progress_tracker
+    ) -> np.ndarray | None:
         """Load all frames into memory as numpy array."""
         frames_list = []
 
@@ -814,8 +816,8 @@ class VideoProcessor:
             print(f"  GPU memory freed: {mem_free:.2f} GB available")
 
     def _load_chunk_frames(
-        self, chunk_files: List[Path], settings: Dict[str, Any]
-    ) -> Optional[List]:
+        self, chunk_files: list[Path], settings: dict[str, Any]
+    ) -> list | None:
         """Load and optionally supersample frames for a chunk."""
         chunk_frames = []
         for frame_file in chunk_files:
@@ -836,12 +838,12 @@ class VideoProcessor:
 
     def _process_chunk_depth(
         self,
-        chunk_frames: List,
-        chunk_files: List[Path],
-        settings: Dict[str, Any],
-        directories: Dict[str, Path],
+        chunk_frames: list,
+        chunk_files: list[Path],
+        settings: dict[str, Any],
+        directories: dict[str, Path],
         input_size: int,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """Process depth for a chunk and optionally save results."""
         # Normalize target_fps
         target_fps = settings.get("target_fps", DEFAULT_FALLBACK_FPS)
@@ -862,11 +864,11 @@ class VideoProcessor:
 
     def _generate_depth_maps_chunked(
         self,
-        frame_files: List[Path],
-        settings: Dict[str, Any],
-        directories: Dict[str, Path],
+        frame_files: list[Path],
+        settings: dict[str, Any],
+        directories: dict[str, Path],
         progress_tracker,
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """
         Generate depth maps in memory-efficient chunks.
 
@@ -931,8 +933,8 @@ class VideoProcessor:
         return np.array(all_depth_maps)
 
     def _generate_depth_maps_batch(
-        self, frames: np.ndarray, settings: Dict[str, Any], progress_tracker
-    ) -> Optional[np.ndarray]:
+        self, frames: np.ndarray, settings: dict[str, Any], progress_tracker
+    ) -> np.ndarray | None:
         """Generate depth maps for all frames with temporal consistency."""
         try:
             # Use Video-Depth-Anything for temporal consistency
@@ -961,7 +963,7 @@ class VideoProcessor:
             return None
 
     def _save_depth_maps(
-        self, depth_maps: np.ndarray, frame_files: List[Path], depth_dir: Path
+        self, depth_maps: np.ndarray, frame_files: list[Path], depth_dir: Path
     ) -> None:
         """Save depth maps to disk."""
         for i, (depth_map, frame_file) in enumerate(zip(depth_maps, frame_files)):
@@ -973,9 +975,9 @@ class VideoProcessor:
         self,
         frames: np.ndarray,
         depth_maps: np.ndarray,
-        frame_files: List[Path],
-        directories: Dict[str, Path],
-        settings: Dict[str, Any],
+        frame_files: list[Path],
+        directories: dict[str, Path],
+        settings: dict[str, Any],
         progress_tracker,
     ) -> bool:
         """Create stereo pairs from frames and depth maps."""
@@ -1030,10 +1032,10 @@ class VideoProcessor:
 
     def _apply_distortion(
         self,
-        left_files: List[Path],
-        right_files: List[Path],
-        directories: Dict[str, Path],
-        settings: Dict[str, Any],
+        left_files: list[Path],
+        right_files: list[Path],
+        directories: dict[str, Path],
+        settings: dict[str, Any],
         progress_tracker,
     ) -> bool:
         """Apply fisheye distortion to stereo pairs."""
@@ -1087,8 +1089,8 @@ class VideoProcessor:
             return False
 
     def _get_stereo_source_dirs(
-        self, directories: Dict[str, Path], settings: Dict[str, Any]
-    ) -> Optional[tuple[Path, Path]]:
+        self, directories: dict[str, Path], settings: dict[str, Any]
+    ) -> tuple[Path, Path] | None:
         """Determine source directories for stereo frames."""
         if settings["apply_distortion"] and "left_distorted" in directories:
             return directories["left_distorted"], directories["right_distorted"]
@@ -1098,7 +1100,7 @@ class VideoProcessor:
             print("Error: No stereo frames found")
             return None
 
-    def _process_fisheye_frame_pair(self, left_img, right_img, settings: Dict[str, Any]) -> tuple:
+    def _process_fisheye_frame_pair(self, left_img, right_img, settings: dict[str, Any]) -> tuple:
         """Process frame pair with fisheye distortion applied."""
         fisheye_crop_factor = max(0.5, min(2.0, float(settings.get("fisheye_crop_factor", 0.7))))
 
@@ -1124,7 +1126,7 @@ class VideoProcessor:
 
         return left_cropped, right_cropped, left_final, right_final
 
-    def _process_regular_frame_pair(self, left_img, right_img, settings: Dict[str, Any]) -> tuple:
+    def _process_regular_frame_pair(self, left_img, right_img, settings: dict[str, Any]) -> tuple:
         """Process frame pair without fisheye distortion."""
         crop_factor = max(0.5, min(1.0, float(settings.get("crop_factor", 1.0))))
 
@@ -1142,7 +1144,7 @@ class VideoProcessor:
 
     def _save_vr_intermediate_frames(
         self,
-        directories: Dict[str, Path],
+        directories: dict[str, Path],
         frame_name: str,
         left_cropped,
         right_cropped,
@@ -1163,8 +1165,8 @@ class VideoProcessor:
         self,
         left_file: Path,
         right_file: Path,
-        directories: Dict[str, Path],
-        settings: Dict[str, Any],
+        directories: dict[str, Path],
+        settings: dict[str, Any],
     ) -> bool:
         """Process a single VR frame pair."""
         # Load images
@@ -1206,8 +1208,8 @@ class VideoProcessor:
 
     def _create_vr_frames(
         self,
-        directories: Dict[str, Path],
-        settings: Dict[str, Any],
+        directories: dict[str, Path],
+        settings: dict[str, Any],
         progress_tracker,
         total_frames: int,
     ) -> bool:
@@ -1319,7 +1321,7 @@ class VideoProcessor:
         vr_frames_dir: Path,
         output_dir: Path,
         original_video: str,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
     ) -> bool:
         """Create final output video with audio."""
 

@@ -5,11 +5,13 @@ This module contains pure functions for file handling, validation,
 and path operations without side effects.
 """
 
+from __future__ import annotations
+
 import os
 import json
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any
 import time
 import cv2
 
@@ -56,7 +58,7 @@ def validate_image_file(image_path: str) -> bool:
     return file_ext in SUPPORTED_IMAGE_FORMATS
 
 
-def get_video_properties(video_path: str) -> Dict[str, Any]:
+def get_video_properties(video_path: str) -> dict[str, Any]:
     """
     Get video properties using OpenCV.
 
@@ -66,7 +68,7 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
     Returns:
         Dictionary with video properties
     """
-    properties: Dict[str, Any] = {}
+    properties: dict[str, Any] = {}
 
     try:
         cap = cv2.VideoCapture(video_path)
@@ -103,7 +105,7 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
     return properties
 
 
-def get_video_info_ffprobe(video_path: str) -> Dict[str, Any]:
+def get_video_info_ffprobe(video_path: str) -> dict[str, Any]:
     """
     Get detailed video information using ffprobe.
 
@@ -141,9 +143,9 @@ def get_video_info_ffprobe(video_path: str) -> Dict[str, Any]:
 def calculate_frame_range(
     total_frames: int,
     fps: float,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
-) -> Tuple[int, int]:
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> tuple[int, int]:
     """
     Calculate frame range from time specifications.
 
@@ -176,7 +178,7 @@ def calculate_frame_range(
     return start_frame, end_frame
 
 
-def parse_time_string(time_str: str) -> Optional[float]:
+def parse_time_string(time_str: str) -> float | None:
     """
     Parse time string into seconds.
 
@@ -202,7 +204,7 @@ def parse_time_string(time_str: str) -> Optional[float]:
     return None
 
 
-def create_output_directories(base_path: Path, keep_intermediates: bool = True) -> Dict[str, Path]:
+def create_output_directories(base_path: Path, keep_intermediates: bool = True) -> dict[str, Path]:
     """
     Create output directory structure.
 
@@ -227,7 +229,7 @@ def create_output_directories(base_path: Path, keep_intermediates: bool = True) 
     return directories
 
 
-def get_frame_files(frames_dir: Path) -> List[Path]:
+def get_frame_files(frames_dir: Path) -> list[Path]:
     """
     Get sorted list of frame files from directory.
 
@@ -240,7 +242,7 @@ def get_frame_files(frames_dir: Path) -> List[Path]:
     if not frames_dir.exists():
         return []
 
-    frame_files: List[Path] = []
+    frame_files: list[Path] = []
     for ext in SUPPORTED_IMAGE_FORMATS:
         frame_files.extend(frames_dir.glob(f"*{ext}"))
 
@@ -277,7 +279,7 @@ def generate_output_filename(
     base_name: str,
     vr_format: str,
     vr_resolution: str,
-    processing_mode: Optional[str] = None,  # Deprecated, kept for backwards compatibility
+    processing_mode: str | None = None,  # Deprecated, kept for backwards compatibility
 ) -> str:
     """
     Generate output filename with metadata.
@@ -384,7 +386,7 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size:.1f} {units[unit_index]}"
 
 
-def _should_keep_file(file_path: Path, keep_patterns: List[str]) -> bool:
+def _should_keep_file(file_path: Path, keep_patterns: list[str]) -> bool:
     """
     Check if file should be kept based on pattern matching.
 
@@ -418,7 +420,7 @@ def _remove_file_safe(file_path: Path) -> bool:
         return False
 
 
-def _cleanup_directory(directory: Path, keep_patterns: List[str]) -> int:
+def _cleanup_directory(directory: Path, keep_patterns: list[str]) -> int:
     """
     Clean up files in a single directory.
 
@@ -440,7 +442,7 @@ def _cleanup_directory(directory: Path, keep_patterns: List[str]) -> int:
     return removed_count
 
 
-def cleanup_intermediate_files(base_path: Path, keep_patterns: Optional[List[str]] = None) -> int:
+def cleanup_intermediate_files(base_path: Path, keep_patterns: list[str] | None = None) -> int:
     """
     Clean up intermediate files, optionally keeping certain patterns.
 
@@ -506,7 +508,7 @@ def get_available_space(directory: Path) -> int:
 
 def estimate_output_size(
     frame_count: int, vr_width: int, vr_height: int, keep_intermediates: bool = True
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """
     Estimate storage requirements for processing.
 
@@ -551,8 +553,8 @@ def estimate_output_size(
 def save_processing_settings(
     output_dir: Path,
     batch_name: str,
-    settings: Dict[str, Any],
-    video_properties: Dict[str, Any],
+    settings: dict[str, Any],
+    video_properties: dict[str, Any],
     source_video_path: str,
 ) -> Path:
     """
@@ -619,7 +621,7 @@ def save_processing_settings(
         return settings_file
 
 
-def load_processing_settings(settings_file: Path) -> Optional[Dict[str, Any]]:
+def load_processing_settings(settings_file: Path) -> dict[str, Any] | None:
     """
     Load processing settings from a JSON file.
 
@@ -646,7 +648,7 @@ def load_processing_settings(settings_file: Path) -> Optional[Dict[str, Any]]:
 
 
 def update_processing_status(
-    settings_file: Path, status: str, additional_info: Optional[Dict[str, Any]] = None
+    settings_file: Path, status: str, additional_info: dict[str, Any] | None = None
 ) -> bool:
     """
     Update the processing status in the settings file.
@@ -698,7 +700,7 @@ def update_processing_status(
         return False
 
 
-def find_settings_file(output_dir: Path, batch_name: Optional[str] = None) -> Optional[Path]:
+def find_settings_file(output_dir: Path, batch_name: str | None = None) -> Path | None:
     """
     Find a settings file in the output directory.
 
@@ -726,7 +728,7 @@ def find_settings_file(output_dir: Path, batch_name: Optional[str] = None) -> Op
         return None
 
 
-def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
+def can_resume_processing(output_dir: Path) -> dict[str, Any]:
     """
     Check if processing can be resumed from the given directory.
 
@@ -789,7 +791,7 @@ def can_resume_processing(output_dir: Path) -> Dict[str, Any]:
         return result
 
 
-def analyze_processing_progress(output_dir: Path, settings_data: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_processing_progress(output_dir: Path, settings_data: dict[str, Any]) -> dict[str, Any]:
     """
     Analyze how much processing has been completed.
 
