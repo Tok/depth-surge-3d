@@ -9,6 +9,8 @@ from src.depth_surge_3d.utils.path_utils import (
     generate_output_filename,
     sanitize_filename,
     format_file_size,
+    estimate_output_size,
+    format_time_duration,
 )
 from src.depth_surge_3d.processing.io_operations import (
     validate_video_file,
@@ -362,6 +364,100 @@ class TestFormatFileSize:
         assert "1.5" in format_file_size(1536)
         # 2.7 MB
         assert format_file_size(int(2.7 * 1024 * 1024)).startswith("2.")
+
+
+class TestEstimateOutputSize:
+    """Test output size estimation function."""
+
+    def test_estimate_side_by_side(self):
+        """Test estimation for side-by-side format."""
+        result = estimate_output_size(
+            frame_count=100, width=1920, height=1080, vr_format="side_by_side", target_fps=60
+        )
+        assert "video" in result
+        assert "audio" in result
+        assert "total" in result
+        assert "frames" in result
+        assert result["frames"] == 100
+        assert result["total"] == result["video"] + result["audio"]
+        # Side-by-side should double the width
+        # 100 frames * (1920*2) * 1080 * 0.1 bytes/pixel
+        expected_video = int(100 * 1920 * 2 * 1080 * 0.1)
+        assert result["video"] == expected_video
+
+    def test_estimate_over_under(self):
+        """Test estimation for over-under format."""
+        result = estimate_output_size(
+            frame_count=100, width=1920, height=1080, vr_format="over_under", target_fps=60
+        )
+        # Over-under should double the height
+        # 100 frames * 1920 * (1080*2) * 0.1 bytes/pixel
+        expected_video = int(100 * 1920 * 1080 * 2 * 0.1)
+        assert result["video"] == expected_video
+
+    def test_estimate_audio_size(self):
+        """Test audio size estimation."""
+        result = estimate_output_size(frame_count=120, width=1920, height=1080, target_fps=60)
+        # 120 frames at 60fps = 2 seconds
+        # ~4KB per second of audio = 8KB total
+        expected_audio = int(120 * 4000 / 60)
+        assert result["audio"] == expected_audio
+
+    def test_estimate_zero_frames(self):
+        """Test estimation with zero frames."""
+        result = estimate_output_size(frame_count=0, width=1920, height=1080)
+        assert result["video"] == 0
+        assert result["frames"] == 0
+
+    def test_estimate_different_fps(self):
+        """Test estimation with different FPS values."""
+        result_30fps = estimate_output_size(frame_count=60, width=1920, height=1080, target_fps=30)
+        result_60fps = estimate_output_size(frame_count=60, width=1920, height=1080, target_fps=60)
+        # Same frame count but different FPS affects audio estimation
+        # 60 frames at 30fps = 2 seconds, 60 frames at 60fps = 1 second
+        assert result_30fps["audio"] == int(60 * 4000 / 30)
+        assert result_60fps["audio"] == int(60 * 4000 / 60)
+
+
+class TestFormatTimeDuration:
+    """Test time duration formatting function."""
+
+    def test_format_seconds_only(self):
+        """Test formatting duration with seconds only."""
+        assert format_time_duration(30) == "00:00:30"
+        assert format_time_duration(59) == "00:00:59"
+
+    def test_format_minutes_and_seconds(self):
+        """Test formatting duration with minutes and seconds."""
+        assert format_time_duration(90) == "00:01:30"
+        assert format_time_duration(90.5) == "00:01:30"  # Fractional seconds truncated
+        assert format_time_duration(125) == "00:02:05"
+
+    def test_format_hours_minutes_seconds(self):
+        """Test formatting duration with hours, minutes, and seconds."""
+        assert format_time_duration(3661) == "01:01:01"
+        assert format_time_duration(7265) == "02:01:05"
+        assert format_time_duration(86400) == "24:00:00"
+
+    def test_format_zero_duration(self):
+        """Test formatting zero duration."""
+        assert format_time_duration(0) == "00:00:00"
+
+    def test_format_fractional_seconds(self):
+        """Test that fractional seconds are truncated to integers."""
+        assert format_time_duration(30.9) == "00:00:30"
+        assert format_time_duration(90.1) == "00:01:30"
+        assert format_time_duration(3661.7) == "01:01:01"
+
+    def test_format_large_duration(self):
+        """Test formatting very large durations."""
+        # 100 hours
+        assert format_time_duration(360000) == "100:00:00"
+
+    def test_format_edge_cases(self):
+        """Test edge cases in formatting."""
+        assert format_time_duration(3599) == "00:59:59"  # Just under 1 hour
+        assert format_time_duration(3600) == "01:00:00"  # Exactly 1 hour
 
 
 class TestValidateVideoFile:
