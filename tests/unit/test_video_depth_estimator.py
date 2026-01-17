@@ -202,6 +202,7 @@ class TestEnsureDependencies:
             result = estimator._ensure_dependencies()
 
             # Should return False when repo missing
+            assert result is False
 
     def test_ensure_dependencies_model_not_found_auto_download_fails(self):
         """Test when model file doesn't exist and auto-download fails."""
