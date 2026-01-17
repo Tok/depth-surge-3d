@@ -5,12 +5,14 @@ This module contains pure functions for resolution parsing, validation,
 and auto-detection based on source content.
 """
 
-from typing import Tuple, Optional, Dict, Any, List
+from __future__ import annotations
+
+from typing import Any
 
 from ..core.constants import VR_RESOLUTIONS
 
 
-def parse_custom_resolution(resolution_string: str) -> Optional[Tuple[int, int]]:
+def parse_custom_resolution(resolution_string: str) -> tuple[int, int | None]:
     """
     Parse custom resolution string into width and height.
 
@@ -39,7 +41,7 @@ def parse_custom_resolution(resolution_string: str) -> Optional[Tuple[int, int]]
         return None
 
 
-def get_resolution_dimensions(vr_resolution: str) -> Tuple[int, int]:
+def get_resolution_dimensions(vr_resolution: str) -> tuple[int, int]:
     """
     Get resolution dimensions for a given VR resolution setting.
 
@@ -64,7 +66,7 @@ def get_resolution_dimensions(vr_resolution: str) -> Tuple[int, int]:
 
 def calculate_vr_output_dimensions(
     per_eye_width: int, per_eye_height: int, vr_format: str
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Calculate final VR output dimensions based on per-eye dimensions and format.
 
@@ -177,7 +179,7 @@ def get_format_recommendation(aspect_ratio: float) -> str:
 
 def validate_resolution_settings(
     vr_resolution: str, vr_format: str, source_width: int, source_height: int
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate resolution settings and provide recommendations.
 
@@ -224,14 +226,14 @@ def validate_resolution_settings(
     return result
 
 
-def get_available_resolutions() -> Dict[str, List[Dict[str, Any]]]:
+def get_available_resolutions() -> dict[str, list[dict[str, Any]]]:
     """
     Get categorized list of available resolutions.
 
     Returns:
         Dictionary with resolution categories and their options
     """
-    categorized: Dict[str, List[Dict[str, Any]]] = {
+    categorized: dict[str, list[dict[str, Any]]] = {
         "square": [],
         "16x9": [],
         "wide": [],

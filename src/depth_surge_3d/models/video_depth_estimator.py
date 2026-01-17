@@ -1,4 +1,6 @@
 """
+
+from __future__ import annotations
 Video depth estimation model management using Video-Depth-Anything.
 
 This module handles loading and interfacing with the Video-Depth-Anything model,
@@ -9,7 +11,7 @@ import os
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 import torch
 import numpy as np
 
@@ -146,7 +148,7 @@ class VideoDepthEstimator:
             print(f"Please download manually from: {download_url}")
             return False
 
-    def _get_model_type(self, model_path: str) -> Optional[str]:
+    def _get_model_type(self, model_path: str) -> str | None:
         """Determine model type from file path."""
         path_str = str(model_path).lower()
 
@@ -362,7 +364,7 @@ class VideoDepthEstimator:
             normalized_depths.append(np.clip(normalized, 0.0, 1.0))
         return np.array(normalized_depths)
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
         if not self.model_config:
             return {}
@@ -391,7 +393,7 @@ class VideoDepthEstimator:
 
 
 def create_video_depth_estimator(
-    model_path: Optional[str] = None, device: str = "auto", metric: bool = False
+    model_path: str | None = None, device: str = "auto", metric: bool = False
 ) -> VideoDepthEstimator:
     """
     Factory function to create a video depth estimator.

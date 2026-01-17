@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
+
+from __future__ import annotations
 Video Processing Utilities
 Extracted from app.py to keep it under 500 LOC
 """
 
 import numpy as np
 from pathlib import Path
-from typing import Callable, Dict, List
+from collections.abc import Callable
 from ..core.constants import INTERMEDIATE_DIRS
 
 
@@ -24,7 +26,7 @@ def _get_cv2():
 
 
 def process_video_serial(
-    projector, callback: Callable, frame_files: List[Path], output_path: Path, **kwargs
+    projector, callback: Callable, frame_files: list[Path], output_path: Path, **kwargs
 ) -> bool:
     """
     Process video in serial mode (frame-by-frame, complete pipeline per frame).
@@ -100,7 +102,7 @@ def process_video_serial(
 
 
 def process_video_batch(
-    projector, callback: Callable, frame_files: List[Path], output_path: Path, **kwargs
+    projector, callback: Callable, frame_files: list[Path], output_path: Path, **kwargs
 ) -> bool:
     """
     Process video in batch mode (phase-by-phase, all frames per phase).
@@ -180,7 +182,7 @@ def process_video_batch(
     return True
 
 
-def _create_intermediate_directories(output_path: Path, **kwargs) -> Dict[str, Path]:
+def _create_intermediate_directories(output_path: Path, **kwargs) -> dict[str, Path]:
     """Create intermediate directories and return mapping."""
     directories = {}
 

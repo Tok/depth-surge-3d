@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+
+from __future__ import annotations
 Batch Analysis Utilities
 Extracted from app.py for batch directory analysis and video creation
 """
@@ -7,7 +9,7 @@ Extracted from app.py for batch directory analysis and video creation
 import json
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 from datetime import datetime
 
 from ..core.constants import INTERMEDIATE_DIRS
@@ -26,7 +28,7 @@ def _get_cv2():
         )
 
 
-def analyze_batch_directory(batch_path: Path) -> Dict[str, Any]:
+def analyze_batch_directory(batch_path: Path) -> dict[str, Any]:
     """
     Analyze batch directory to determine available processing stages and settings.
 
@@ -76,7 +78,7 @@ def analyze_batch_directory(batch_path: Path) -> Dict[str, Any]:
     }
 
 
-def create_video_from_batch(batch_path: Path, settings: Dict[str, Any]) -> Optional[Path]:
+def create_video_from_batch(batch_path: Path, settings: dict[str, Any]) -> Path | None:
     """
     Create video from batch frames using FFmpeg.
 
@@ -171,7 +173,7 @@ def _get_stage_number(stage_dir: str) -> int:
         return 0
 
 
-def _detect_highest_stage(batch_path: Path, stages: Dict[str, str]) -> tuple[int, str, int]:
+def _detect_highest_stage(batch_path: Path, stages: dict[str, str]) -> tuple[int, str, int]:
     """
     Detect the highest processing stage and frame count.
 
@@ -266,7 +268,7 @@ def _detect_audio_availability(batch_path: Path) -> bool:
     return False
 
 
-def _summarize_settings(settings: Dict[str, Any]) -> str:
+def _summarize_settings(settings: dict[str, Any]) -> str:
     """Create a human-readable summary of settings."""
     summary_parts = []
 

@@ -1,4 +1,6 @@
 """
+
+from __future__ import annotations
 Video depth estimation using Depth Anything V3.
 
 This module provides a wrapper around Depth Anything V3 for improved
@@ -7,7 +9,7 @@ memory efficiency and performance compared to Video-Depth-Anything V2.
 
 import torch
 import numpy as np
-from typing import Optional, Dict, Any
+from typing import Any
 
 from ..core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
 
@@ -227,7 +229,7 @@ class VideoDepthEstimatorDA3:
             normalized_depths.append(np.clip(normalized, 0.0, 1.0))
         return np.array(normalized_depths)
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
         return {
             "model_name": self.model_name,
@@ -251,7 +253,7 @@ class VideoDepthEstimatorDA3:
 
 
 def create_video_depth_estimator_da3(
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
     device: str = "auto",
     metric: bool = False,
 ) -> VideoDepthEstimatorDA3:

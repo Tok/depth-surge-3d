@@ -5,8 +5,10 @@ This module provides progress tracking classes and utilities with minimal
 side effects and clear separation of concerns.
 """
 
+from __future__ import annotations
+
 import time
-from typing import Optional, Callable
+from collections.abc import Callable
 from abc import ABC, abstractmethod
 
 try:
@@ -120,7 +122,7 @@ class ProgressTracker:
         self,
         total_frames: int,
         processing_mode: str = "serial",
-        reporter: Optional[ProgressReporter] = None,
+        reporter: ProgressReporter | None = None,
     ):
         self.total_frames = total_frames
         self.processing_mode = processing_mode
@@ -148,7 +150,7 @@ class ProgressTracker:
         self.step_total = total
         self._display_batch()
 
-    def update_batch_progress(self, progress: int, total: Optional[int] = None) -> None:
+    def update_batch_progress(self, progress: int, total: int | None = None) -> None:
         """Update progress within current batch step."""
         self.step_progress = progress
         if total is not None:
@@ -181,11 +183,11 @@ class ProgressTracker:
     def update_progress(
         self,
         stage: str,
-        frame_num: Optional[int] = None,
-        phase: Optional[str] = None,
-        step_name: Optional[str] = None,
-        step_progress: Optional[int] = None,
-        step_total: Optional[int] = None,
+        frame_num: int | None = None,
+        phase: str | None = None,
+        step_name: str | None = None,
+        step_progress: int | None = None,
+        step_total: int | None = None,
     ) -> None:
         """Update progress for video processing."""
         if step_name:
@@ -206,7 +208,7 @@ class ProgressCallback:
         session_id: str,
         total_frames: int,
         processing_mode: str = "serial",
-        callback_func: Optional[Callable] = None,
+        callback_func: Callable | None = None,
     ):
         self.session_id = session_id
         self.total_frames = total_frames
@@ -224,11 +226,11 @@ class ProgressCallback:
     def update_progress(
         self,
         stage: str,
-        frame_num: Optional[int] = None,
-        phase: Optional[str] = None,
-        step_name: Optional[str] = None,
-        step_progress: Optional[int] = None,
-        step_total: Optional[int] = None,
+        frame_num: int | None = None,
+        phase: str | None = None,
+        step_name: str | None = None,
+        step_progress: int | None = None,
+        step_total: int | None = None,
     ) -> None:
         """Update progress with callback notification."""
         current_time = time.time()
@@ -257,9 +259,9 @@ class ProgressCallback:
 
     def _calculate_batch_progress(
         self,
-        step_name: Optional[str],
-        step_progress: Optional[int],
-        step_total: Optional[int],
+        step_name: str | None,
+        step_progress: int | None,
+        step_total: int | None,
     ) -> float:
         """Calculate batch mode progress percentage."""
         if step_name and step_name in self.steps:
@@ -276,7 +278,7 @@ class ProgressCallback:
 
         return round(overall_progress, PROGRESS_DECIMAL_PLACES)
 
-    def _calculate_serial_progress(self, frame_num: Optional[int]) -> float:
+    def _calculate_serial_progress(self, frame_num: int | None) -> float:
         """Calculate serial mode progress percentage."""
         if frame_num is None:
             return 0.0
@@ -293,7 +295,7 @@ class ProgressCallback:
             return 0.0
 
     def _create_batch_progress_data(
-        self, stage: str, step_name: Optional[str], progress: float
+        self, stage: str, step_name: str | None, progress: float
     ) -> dict:
         """Create progress data dictionary for batch mode."""
         return {
@@ -315,7 +317,7 @@ class ProgressCallback:
         }
 
     def _create_serial_progress_data(
-        self, stage: str, frame_num: Optional[int], progress: float
+        self, stage: str, frame_num: int | None, progress: float
     ) -> dict:
         """Create progress data dictionary for serial mode."""
         return {

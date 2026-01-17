@@ -5,7 +5,7 @@ This module contains all default settings, magic numbers, and configuration
 values used throughout the application.
 """
 
-from typing import Dict, Tuple
+from __future__ import annotations
 
 # Version and project info
 PROJECT_NAME = "Depth Surge 3D"
@@ -64,7 +64,7 @@ DEFAULT_SETTINGS = {
 }
 
 # VR resolution configurations (per eye)
-VR_RESOLUTIONS: Dict[str, Tuple[int, int]] = {
+VR_RESOLUTIONS: dict[str, tuple[int, int]] = {
     # Square formats (optimized for VR headsets)
     "square-480": (480, 480),
     "square-720": (720, 720),
