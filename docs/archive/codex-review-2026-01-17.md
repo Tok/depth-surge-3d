@@ -1,71 +1,98 @@
-# Codex Review Findings
+# Codex Review Findings (Coding Guide Compliance)
 
-Reviewed: 2026-01-16
+Reviewed: 2026-01-17
 
 ## Scope
-- Core processing pipeline (`VideoProcessor`, `StereoProjector`)
-- Video I/O and FFmpeg usage
-- Utility helpers related to video/audio handling
+- Coding standards in `docs/CODING_GUIDE.md`
+- Core orchestration (`StereoProjector`, `VideoProcessor`)
+- Web UI orchestration and state handling (`app.py`)
+- Utility modules (`utils/`)
 
 ## Findings
 
-### High: FFmpeg frame extraction uses an invalid CUDA flag token
-**Location:** `src/depth_surge_3d/core/stereo_projector.py`
+### High: Missing type hints across public functions
+**Location:** `app.py`
 
-**What:** `extract_frames` builds the FFmpeg command with `"-hwaccel cuda"` as a
-single argument. FFmpeg expects `-hwaccel` and `cuda` as separate arguments. In
-practice, this results in `Unrecognized option 'hwaccel cuda'`, so frame
-extraction fails before any processing begins.
+**What:** Many public functions and methods lack type annotations despite the
+guide requiring complete type hints on all functions. Examples: `get_video_info`,
+`get_system_info`, `upload_video`, `start_processing`, `stop_processing`, and
+`ProgressCallback.update_progress`.
 
-**Why it matters:** CLI and test flows that rely on `StereoProjector` will fail
-on first use, even on CUDA-capable systems.
+**Why it matters:** Violates strict standards, reduces IDE/static checking, and
+makes refactoring riskier.
 
-**Suggested fix:** Split the flag into separate list items, and consider a CPU
-fallback if CUDA is unavailable.
-
----
-
-### High: NVENC-only output without fallback or proper option ordering
-**Location:** `src/depth_surge_3d/core/stereo_projector.py`
-
-**What:** `create_output_video` always uses `hevc_nvenc` and places `-c` before
-the input image sequence. That ordering applies the codec option to the next
-*input*, which can cause FFmpeg to error out. On machines without NVENC,
-encoding fails outright because there is no software fallback.
-
-**Why it matters:** CLI processing fails on CPUs or GPUs without NVENC support,
-and can fail even on NVENC-capable machines due to option ordering.
-
-**Suggested fix:** Move codec options after the input sequence and add a
-software fallback (e.g. `libx264`) when NVENC is not available.
+**Suggested fix:** Add full annotations, using modern built-in generics
+(`list[...]`, `dict[...]`, `str | None`).
 
 ---
 
-### Medium: CUDA-only frame extraction in the temporal pipeline
-**Location:** `src/depth_surge_3d/processing/video_processor.py`
+### Medium: Global mutable state used as shared control plane
+**Location:** `app.py`
 
-**What:** `_extract_frames` always injects `-hwaccel cuda` for FFmpeg. If CUDA
-or NVDEC is not available, extraction returns an error and the pipeline halts
-without retrying on CPU.
+**What:** `current_processing` is a global dict mutated across threads and
+callbacks. This violates “immutable by default” and makes side effects hard to
+reason about and test.
 
-**Why it matters:** Web UI processing fails on non-NVIDIA machines or when
-FFmpeg lacks CUDA support, even though CPU extraction would work.
+**Why it matters:** Data races, fragile state transitions, and harder unit tests.
 
-**Suggested fix:** Detect CUDA availability and fall back to CPU decode when
-`ffmpeg` fails with CUDA flags.
+**Suggested fix:** Introduce a `@dataclass(frozen=True)` state model, and update
+via `replace()` through a dedicated state manager (or at least encapsulate
+mutations behind methods).
 
 ---
 
-### Low: `get_video_properties` can return empty data on zero FPS
+### Medium: “Pure utils” module performs side effects
 **Location:** `src/depth_surge_3d/utils/file_operations.py`
 
-**What:** `duration` is computed as `frame_count / fps` without guarding for
-`fps == 0`. Some videos return `0` FPS via OpenCV; this triggers a `ZeroDivisionError`,
-and the function returns an empty dict.
+**What:** Module docstring claims “pure functions without side effects,” but
+functions run `subprocess`, access the filesystem, and create directories.
 
-**Why it matters:** Downstream code treats an empty dict as “invalid video” and
-aborts processing, even when the file is readable by FFmpeg.
+**Why it matters:** Breaks the “pure functions live in utils” policy and makes
+testing/mocking harder.
 
-**Suggested fix:** Guard against zero FPS and set duration to `0` or compute
-duration via FFprobe as a fallback.
+**Suggested fix:** Split into `utils/video_utils.py` (pure helpers) and
+`processing/io.py` (side-effectful operations), and update imports.
+
+---
+
+### Medium: Overlong functions and mixed responsibilities
+**Location:** `src/depth_surge_3d/processing/video_processor.py`,
+`app.py`
+
+**What:** Several functions exceed the 20-line limit and mix orchestration,
+logging, progress updates, and data transformation. Examples:
+`_generate_depth_maps_chunked`, `_determine_chunk_params`,
+`ProgressCallback.update_progress`.
+
+**Why it matters:** Increases complexity and violates the small/pure function
+guideline.
+
+**Suggested fix:** Extract pure helpers (e.g., chunk parameter selection,
+progress calculation) and keep orchestration minimal.
+
+---
+
+### Medium: Magic numbers remain inline
+**Location:** `src/depth_surge_3d/processing/video_processor.py`
+
+**What:** Resolution thresholds and chunk sizes are inline literals
+(e.g., `2160`, `1440`, `8.0`, `4`, `6`, `12`).
+
+**Why it matters:** Violates “no magic numbers,” complicates testing and tuning.
+
+**Suggested fix:** Move thresholds and chunk sizes into
+`src/depth_surge_3d/core/constants.py` with descriptive names.
+
+---
+
+### Low: Legacy `typing` imports are still used
+**Location:** `src/depth_surge_3d/processing/video_processor.py`,
+`src/depth_surge_3d/utils/file_operations.py`
+
+**What:** `List`, `Dict`, `Optional` are still used in places instead of modern
+built-in generics.
+
+**Why it matters:** Non-compliant with the guide and adds unnecessary verbosity.
+
+**Suggested fix:** Replace with `list`, `dict`, `tuple`, `str | None`.
 
