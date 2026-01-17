@@ -72,11 +72,20 @@ python depth_surge_3d.py input_video.mp4 -s 01:30 -e 03:45 -f over_under --resol
 
 ## Documentation
 
+**User Guides:**
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions and troubleshooting
 - **[Usage Guide](docs/USAGE.md)** - Complete usage examples and workflows
 - **[Parameters Reference](docs/PARAMETERS.md)** - All command-line options and settings explained
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and performance tips
+
+**Technical Documentation:**
 - **[Architecture](docs/ARCHITECTURE.md)** - Technical details and processing pipeline
+- **[Contributing Guide](docs/CONTRIBUTING.md)** - Development workflow and CI/CD setup
+- **[Coding Standards](docs/CODING_GUIDE.md)** - Code quality requirements and best practices
+
+**Development:**
+- **[Development Notes](docs/CLAUDE.md)** - Quick reference for development
+- **[Project Roadmap](docs/TODO.md)** - Planned features and improvements
 
 ## Output Structure
 

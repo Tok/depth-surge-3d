@@ -34,13 +34,13 @@ The project includes flexible model management:
 
 ```bash
 # Download specific models
-./download_models.sh large          # Large model (best quality)
-./download_models.sh small          # Small model (fastest)
-./download_models.sh small base     # Multiple models
-./download_models.sh all            # All models
+./scripts/download_models.sh large          # Large model (best quality)
+./scripts/download_models.sh small          # Small model (fastest)
+./scripts/download_models.sh small base     # Multiple models
+./scripts/download_models.sh all            # All models
 
 # Check model status
-./download_models.sh                # Shows current status
+./scripts/download_models.sh                # Shows current status
 
 # Models are automatically downloaded if missing
 python depth_surge_3d.py input.mp4  # Auto-downloads if needed
@@ -101,7 +101,7 @@ pip install -r requirements.txt
 
 **Option A: Automatic download (recommended)**
 ```bash
-./download_models.sh large
+./scripts/download_models.sh large
 ```
 
 **Option B: Manual download**
