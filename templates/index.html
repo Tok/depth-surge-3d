@@ -929,6 +929,33 @@
                                 <i class="fas fa-brain"></i> Trained on Virtual KITTI and IRS datasets
                             </small>
                         </div>
+                        <!-- Experimental: Temporal Window Settings (V2 only) -->
+                        <div class="mb-3" id="temporalWindowSettings" style="display: none;">
+                            <div class="alert alert-warning" style="background-color: rgba(255, 193, 7, 0.1); border-color: var(--accent-yellow); color: var(--accent-yellow);">
+                                <i class="fas fa-flask"></i> <strong>Experimental:</strong> Temporal Window Tuning
+                            </div>
+                            <label class="form-label">Window Size (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Number of frames processed together for temporal consistency. Default: 32. Higher = more context but more VRAM. Lower = less VRAM but may reduce smoothness."></i></label>
+                            <input type="range" class="form-range" id="temporalWindowSize" min="16" max="64" step="8" value="32">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">16 (Low VRAM)</small>
+                                <small><strong id="temporalWindowSizeValue">32</strong> frames</small>
+                                <small class="text-muted">64 (High VRAM)</small>
+                            </div>
+                            <small class="form-text text-muted" style="margin-top: 0.5rem; display: block;">
+                                <i class="fas fa-memory"></i> Default (32): Balanced temporal consistency & VRAM<br>
+                                <i class="fas fa-exclamation-triangle"></i> Changing from 32 may affect quality (model trained on 32)
+                            </small>
+                            <label class="form-label" style="margin-top: 1rem;">Overlap (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Number of frames shared between consecutive windows. Default: 10. Higher = smoother transitions but slower."></i></label>
+                            <input type="range" class="form-range" id="temporalWindowOverlap" min="4" max="20" step="2" value="10">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">4 (Fast)</small>
+                                <small><strong id="temporalWindowOverlapValue">10</strong> frames</small>
+                                <small class="text-muted">20 (Smooth)</small>
+                            </div>
+                            <small class="form-text text-muted" style="margin-top: 0.5rem; display: block;">
+                                <i class="fas fa-arrows-alt-h"></i> Default (10): Good balance of speed & smoothness
+                            </small>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">Processing Device</label>
                             <select class="form-select" id="device">
@@ -1856,6 +1883,8 @@
                 depth_model_version: document.getElementById('depthModelVersion').value,
                 depth_resolution: document.getElementById('depthResolution').value,
                 use_metric_depth: document.getElementById('depthModelType').value === 'metric',
+                temporal_window_size: parseInt(document.getElementById('temporalWindowSize').value),
+                temporal_window_overlap: parseInt(document.getElementById('temporalWindowOverlap').value),
                 super_sample: document.getElementById('superSample').value,
                 apply_distortion: document.getElementById('applyDistortion').checked,
                 fisheye_projection: document.getElementById('fisheyeProjection').value,
@@ -2745,6 +2774,22 @@
             setTimeout(() => resumeField.classList.remove('bg-warning'), 2000);
         }
 
+        // Toggle temporal window settings visibility based on depth model version
+        document.getElementById('depthModelVersion').addEventListener('change', function() {
+            const isV2 = this.value === 'v2';
+            document.getElementById('temporalWindowSettings').style.display = isV2 ? 'block' : 'none';
+        });
+
+        // Update temporal window size value display
+        document.getElementById('temporalWindowSize').addEventListener('input', function() {
+            document.getElementById('temporalWindowSizeValue').textContent = this.value;
+        });
+
+        // Update temporal window overlap value display
+        document.getElementById('temporalWindowOverlap').addEventListener('input', function() {
+            document.getElementById('temporalWindowOverlapValue').textContent = this.value;
+        });
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             initSocket();
@@ -2755,6 +2800,10 @@
 
             // Update system info every 5 seconds
             setInterval(updateSystemInfo, 5000);
+
+            // Initialize temporal window settings visibility
+            const isV2 = document.getElementById('depthModelVersion').value === 'v2';
+            document.getElementById('temporalWindowSettings').style.display = isV2 ? 'block' : 'none';
         });
     </script>
 </body>

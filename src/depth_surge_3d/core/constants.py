@@ -17,7 +17,8 @@ VIDEO_DEPTH_ANYTHING_REPO_DIR = "video_depth_anything_repo"
 
 # Depth estimation model parameters
 DEPTH_MODEL_INPUT_SIZE = 518  # Input resolution for depth estimation model
-DEPTH_MODEL_CHUNK_SIZE = 32  # Number of frames to process in one batch
+DEPTH_MODEL_CHUNK_SIZE = 32  # Number of frames to process in one batch (temporal window)
+DEPTH_MODEL_CHUNK_OVERLAP = 10  # Number of frames to overlap between chunks
 DEPTH_MODEL_DEFAULT_FPS = 30  # Default FPS for depth estimation when original cannot be determined
 
 # Video model configurations
@@ -61,6 +62,8 @@ DEFAULT_SETTINGS = {
     "apply_distortion": True,
     "output_dir": "./output",
     "experimental_frame_interpolation": False,  # Experimental feature with quality warnings
+    "temporal_window_size": DEPTH_MODEL_CHUNK_SIZE,  # V2 only: frames per temporal window
+    "temporal_window_overlap": DEPTH_MODEL_CHUNK_OVERLAP,  # V2 only: frame overlap between windows
 }
 
 # VR resolution configurations (per eye)
