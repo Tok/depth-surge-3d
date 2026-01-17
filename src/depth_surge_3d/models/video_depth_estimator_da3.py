@@ -69,17 +69,21 @@ class VideoDepthEstimatorDA3:
             import os
             from contextlib import contextmanager
 
-            # Context manager to suppress stderr output
+            # Context manager to suppress both stdout and stderr
             @contextmanager
-            def suppress_stderr():
-                """Temporarily redirect stderr to devnull."""
+            def suppress_output():
+                """Temporarily redirect stdout and stderr to devnull."""
+                old_stdout = sys.stdout
                 old_stderr = sys.stderr
                 try:
-                    sys.stderr = open(os.devnull, "w")
+                    devnull = open(os.devnull, "w")
+                    sys.stdout = devnull
+                    sys.stderr = devnull
                     yield
                 finally:
-                    sys.stderr.close()
+                    sys.stdout = old_stdout
                     sys.stderr = old_stderr
+                    devnull.close()
 
             # Suppress gsplat dependency warning (only needed for giant models with 3DGS)
             # DA3 uses loguru logger which prints directly, need to suppress before import
@@ -89,7 +93,7 @@ class VideoDepthEstimatorDA3:
             # Suppress all depth_anything_3 logging including loguru output
             logging.getLogger("depth_anything_3").setLevel(logging.CRITICAL)
 
-            # Suppress loguru logger used by DA3 (if available)
+            # Suppress loguru logger used by DA3 BEFORE importing the module
             try:
                 from loguru import logger
 
@@ -98,8 +102,8 @@ class VideoDepthEstimatorDA3:
             except ImportError:
                 pass  # loguru not installed or not used
 
-            # Import DA3 API with stderr suppressed to hide gsplat warning
-            with suppress_stderr():
+            # Import DA3 API with output suppressed to hide gsplat warning
+            with suppress_output():
                 from depth_anything_3.api import DepthAnything3
 
             # Resolve model name to Hugging Face ID
@@ -114,12 +118,12 @@ class VideoDepthEstimatorDA3:
                 hf_model_id = DA3_MODEL_NAMES["large-metric"]
                 print(f"Using metric depth model: {hf_model_id}")
 
-            # Load model from Hugging Face (suppress gsplat warning during load)
+            # Load model from Hugging Face (suppress all library output including gsplat warnings)
             print(f"Loading Depth Anything V3 model: {hf_model_id}")
-            with suppress_stderr():
+            with suppress_output():
                 self.model = DepthAnything3.from_pretrained(hf_model_id)
-            self.model = self.model.to(device=self.device)
-            self.model.eval()
+                self.model = self.model.to(device=self.device)
+                self.model.eval()
 
             model_variant = "Metric-" if self.metric else ""
             print(f"Loaded {model_variant}Depth-Anything-V3 ({self.model_name}) on {self.device}")
