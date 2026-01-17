@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 import time
 import torch
+import multiprocessing as mp
+from functools import partial
 
 from ..models.video_depth_estimator import VideoDepthEstimator
 from ..utils.progress import create_progress_tracker
@@ -72,6 +74,40 @@ from ..utils.console import (
     title_bar,
     success as console_success,
 )
+
+
+def _process_single_stereo_pair(
+    args: tuple[np.ndarray, np.ndarray, str, str | None, str | None, dict[str, Any]],
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """
+    Worker function to process a single stereo pair in parallel.
+
+    Args:
+        args: Tuple of (frame, depth_map, frame_name, left_path, right_path, settings)
+
+    Returns:
+        Tuple of (left_img, right_img, frame_name)
+    """
+    frame, depth_map, frame_name, left_path, right_path, settings = args
+
+    # Create stereo pair
+    disparity_map = depth_to_disparity(depth_map, settings["baseline"], settings["focal_length"])
+
+    left_img = create_shifted_image(frame, disparity_map, "left")
+    right_img = create_shifted_image(frame, disparity_map, "right")
+
+    # Apply hole filling
+    if settings["hole_fill_quality"] in ["fast", "advanced"]:
+        left_img = hole_fill_image(left_img, method=settings["hole_fill_quality"])
+        right_img = hole_fill_image(right_img, method=settings["hole_fill_quality"])
+
+    # Save if paths provided
+    if left_path:
+        cv2.imwrite(left_path, left_img)
+    if right_path:
+        cv2.imwrite(right_path, right_img)
+
+    return left_img, right_img, frame_name
 
 
 class VideoProcessor:
@@ -1061,54 +1097,56 @@ class VideoProcessor:
         settings: dict[str, Any],
         progress_tracker,
     ) -> bool:
-        """Create stereo pairs from frames and depth maps."""
+        """Create stereo pairs from frames and depth maps using parallel processing."""
         try:
-            for i, (frame, depth_map, frame_file) in enumerate(
-                zip(frames, depth_maps, frame_files)
-            ):
+            # Determine number of worker processes (leave 1-2 cores for system)
+            num_workers = max(1, mp.cpu_count() - 2)
+            print(f"  Using {num_workers} parallel workers for stereo generation...")
+
+            # Prepare arguments for parallel processing
+            args_list = []
+            for frame, depth_map, frame_file in zip(frames, depth_maps, frame_files):
                 frame_name = frame_file.stem
 
-                # Create stereo pair
-                disparity_map = depth_to_disparity(
-                    depth_map, settings["baseline"], settings["focal_length"]
+                # Determine save paths
+                left_path = (
+                    str(directories["left_frames"] / f"{frame_name}.png")
+                    if settings["keep_intermediates"] and "left_frames" in directories
+                    else None
+                )
+                right_path = (
+                    str(directories["right_frames"] / f"{frame_name}.png")
+                    if settings["keep_intermediates"] and "right_frames" in directories
+                    else None
                 )
 
-                left_img = create_shifted_image(frame, disparity_map, "left")
-                right_img = create_shifted_image(frame, disparity_map, "right")
+                args_list.append((frame, depth_map, frame_name, left_path, right_path, settings))
 
-                # Apply hole filling
-                if settings["hole_fill_quality"] in ["fast", "advanced"]:
-                    left_img = hole_fill_image(left_img, method=settings["hole_fill_quality"])
-                    right_img = hole_fill_image(right_img, method=settings["hole_fill_quality"])
+            # Process stereo pairs in parallel
+            with mp.Pool(processes=num_workers) as pool:
+                # Use imap for progress tracking (processes in order, yields results as ready)
+                results = []
+                for i, result in enumerate(pool.imap(_process_single_stereo_pair, args_list)):
+                    results.append(result)
 
-                # Save stereo pair if keeping intermediates
-                if settings["keep_intermediates"]:
-                    if "left_frames" in directories:
-                        cv2.imwrite(
-                            str(directories["left_frames"] / f"{frame_name}.png"),
-                            left_img,
+                    # Update progress
+                    if i % 5 == 0 or i == len(args_list) - 1:
+                        progress_tracker.update_progress(
+                            "Creating stereo pairs",
+                            phase="stereo_generation",
+                            frame_num=i + 1,
+                            step_name="Stereo Pair Creation",
+                            step_progress=i + 1,
+                            step_total=len(frames),
                         )
-                    if "right_frames" in directories:
-                        cv2.imwrite(
-                            str(directories["right_frames"] / f"{frame_name}.png"),
-                            right_img,
-                        )
-
-                # Update progress
-                if i % 5 == 0 or i == len(frames) - 1:
-                    progress_tracker.update_progress(
-                        "Creating stereo pairs",
-                        phase="stereo_generation",
-                        frame_num=i + 1,
-                        step_name="Stereo Pair Creation",
-                        step_progress=i + 1,
-                        step_total=len(frames),
-                    )
 
             return True
 
         except Exception as e:
             print(f"Error creating stereo pairs: {e}")
+            import traceback
+
+            traceback.print_exc()
             return False
 
     def _apply_distortion(
