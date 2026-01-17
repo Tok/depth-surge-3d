@@ -419,3 +419,283 @@ class TestCalculateDirectorySize:
 
         # Should handle permission errors gracefully
         assert result == 0
+
+
+class TestGetVideoProperties:
+    """Test get_video_properties function."""
+
+    def test_get_video_properties_success(self):
+        """Test getting video properties with cv2."""
+        from src.depth_surge_3d.processing.io_operations import get_video_properties
+
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        # Order: fps, frame_count, width, height, codec
+        mock_cap.get.side_effect = [30.0, 900, 1920, 1080, 1196444237]
+
+        with patch("cv2.VideoCapture", return_value=mock_cap):
+            result = get_video_properties("test.mp4")
+
+        assert result["width"] == 1920
+        assert result["height"] == 1080
+        assert result["fps"] == 30.0
+        assert result["frame_count"] == 900
+        assert result["duration"] == 30.0  # 900 / 30
+        mock_cap.release.assert_called_once()
+
+    def test_get_video_properties_not_opened(self):
+        """Test video properties when video cannot be opened."""
+        from src.depth_surge_3d.processing.io_operations import get_video_properties
+
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = False
+
+        with patch("cv2.VideoCapture", return_value=mock_cap):
+            result = get_video_properties("invalid.mp4")
+
+        assert result == {}
+
+    def test_get_video_properties_zero_fps(self):
+        """Test video properties with zero FPS."""
+        from src.depth_surge_3d.processing.io_operations import get_video_properties
+
+        mock_cap = MagicMock()
+        mock_cap.isOpened.return_value = True
+        # Order: fps, frame_count, width, height, codec
+        mock_cap.get.side_effect = [0.0, 0, 1920, 1080, 0]  # fps=0
+
+        with patch("cv2.VideoCapture", return_value=mock_cap):
+            result = get_video_properties("test.mp4")
+
+        assert result["duration"] == 0.0
+
+    def test_get_video_properties_exception(self):
+        """Test video properties with exception."""
+        from src.depth_surge_3d.processing.io_operations import get_video_properties
+
+        with patch("cv2.VideoCapture", side_effect=Exception("OpenCV error")):
+            result = get_video_properties("test.mp4")
+
+        assert result == {}
+
+
+class TestGetVideoInfoFFprobe:
+    """Test get_video_info_ffprobe function."""
+
+    def test_get_video_info_ffprobe_success(self):
+        """Test getting video info with ffprobe."""
+        from src.depth_surge_3d.processing.io_operations import get_video_info_ffprobe
+        import json
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps({"format": {"duration": "30.0"}, "streams": []})
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = get_video_info_ffprobe("test.mp4")
+
+        assert "format" in result
+        assert result["format"]["duration"] == "30.0"
+
+    def test_get_video_info_ffprobe_failure(self):
+        """Test ffprobe with non-zero return code."""
+        from src.depth_surge_3d.processing.io_operations import get_video_info_ffprobe
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+
+        with patch("subprocess.run", return_value=mock_result):
+            result = get_video_info_ffprobe("test.mp4")
+
+        assert result == {}
+
+    def test_get_video_info_ffprobe_exception(self):
+        """Test ffprobe with exception."""
+        from src.depth_surge_3d.processing.io_operations import get_video_info_ffprobe
+
+        with patch("subprocess.run", side_effect=Exception("ffprobe not found")):
+            result = get_video_info_ffprobe("test.mp4")
+
+        assert result == {}
+
+
+class TestCleanupDirectory:
+    """Test _cleanup_directory function."""
+
+    def test_cleanup_directory_with_keep_patterns(self):
+        """Test cleanup directory with keep patterns."""
+        from src.depth_surge_3d.processing.io_operations import _cleanup_directory
+
+        # Create MagicMock files
+        mock_file1 = MagicMock(spec=Path)
+        mock_file1.is_file.return_value = True
+        mock_file1.match.return_value = True  # keep this file
+
+        mock_file2 = MagicMock(spec=Path)
+        mock_file2.is_file.return_value = True
+        mock_file2.match.return_value = False  # remove this file
+        mock_file2.unlink.return_value = None
+
+        mock_dir = MagicMock(spec=Path)
+        mock_dir.exists.return_value = True
+        mock_dir.rglob.return_value = [mock_file1, mock_file2]
+
+        keep_patterns = ["*.png", "*.jpg"]
+
+        result = _cleanup_directory(mock_dir, keep_patterns)
+
+        # Should delete the file that doesn't match
+        assert result >= 0
+        mock_file2.unlink.assert_called()
+
+    def test_cleanup_directory_nonexistent(self):
+        """Test cleanup of non-existent directory."""
+        from src.depth_surge_3d.processing.io_operations import _cleanup_directory
+
+        mock_dir = MagicMock(spec=Path)
+        mock_dir.exists.return_value = False
+
+        result = _cleanup_directory(mock_dir, [])
+
+        assert result == 0
+
+
+class TestSaveProcessingSettings:
+    """Test save_processing_settings function."""
+
+    def test_save_processing_settings_success(self):
+        """Test saving processing settings to JSON."""
+        from src.depth_surge_3d.processing.io_operations import save_processing_settings
+
+        settings_data = {
+            "depth_resolution": 1080,
+            "vr_format": "side_by_side",
+            "vr_resolution": "1080p",
+        }
+        video_properties = {"width": 1920, "height": 1080}
+
+        with patch("builtins.open", MagicMock()):
+            with patch("json.dump"):
+                with patch(
+                    "src.depth_surge_3d.processing.io_operations.generate_output_filename",
+                    return_value="output.mp4",
+                ):
+                    result = save_processing_settings(
+                        Path("/tmp"),
+                        "batch1",
+                        settings_data,
+                        video_properties,
+                        "test.mp4",
+                    )
+
+        assert result == Path("/tmp/batch1-settings.json")
+
+    def test_save_processing_settings_exception_with_fallback(self):
+        """Test save settings with exception and fallback."""
+        from src.depth_surge_3d.processing.io_operations import save_processing_settings
+
+        settings_data = {
+            "depth_resolution": 1080,
+            "vr_format": "side_by_side",
+            "vr_resolution": "1080p",
+        }
+        video_properties = {"width": 1920, "height": 1080}
+
+        # First open() fails, second open() for fallback succeeds
+        mock_open_context = MagicMock()
+        with patch("builtins.open", side_effect=[OSError("Write error"), mock_open_context]):
+            with patch("json.dump"):
+                with patch(
+                    "src.depth_surge_3d.processing.io_operations.generate_output_filename",
+                    return_value="output.mp4",
+                ):
+                    result = save_processing_settings(
+                        Path("/tmp"),
+                        "batch1",
+                        settings_data,
+                        video_properties,
+                        "test.mp4",
+                    )
+
+        # Should still return the path even if initial save failed
+        assert result == Path("/tmp/batch1-settings.json")
+
+
+class TestLoadProcessingSettings:
+    """Test load_processing_settings function."""
+
+    def test_load_processing_settings_success(self):
+        """Test loading processing settings from JSON."""
+        from src.depth_surge_3d.processing.io_operations import load_processing_settings
+        import json
+
+        settings_data = {"input_video": "test.mp4", "depth_resolution": 1080}
+
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("builtins.open", MagicMock()):
+                with patch("json.load", return_value=settings_data):
+                    result = load_processing_settings(Path("/tmp/settings.json"))
+
+        assert result == settings_data
+
+    def test_load_processing_settings_file_not_exists(self):
+        """Test loading settings when file doesn't exist."""
+        from src.depth_surge_3d.processing.io_operations import load_processing_settings
+
+        with patch("pathlib.Path.exists", return_value=False):
+            result = load_processing_settings(Path("/tmp/settings.json"))
+
+        assert result is None
+
+    def test_load_processing_settings_exception(self):
+        """Test loading settings with exception."""
+        from src.depth_surge_3d.processing.io_operations import load_processing_settings
+
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("builtins.open", side_effect=OSError("Read error")):
+                result = load_processing_settings(Path("/tmp/settings.json"))
+
+        assert result is None
+
+
+class TestUpdateProcessingStatus:
+    """Test update_processing_status function."""
+
+    def test_update_processing_status_success(self):
+        """Test updating processing status."""
+        from src.depth_surge_3d.processing.io_operations import update_processing_status
+
+        existing_settings = {
+            "metadata": {
+                "processing_status": "in_progress",
+                "created_timestamp": 1000.0,
+            }
+        }
+
+        with patch(
+            "src.depth_surge_3d.processing.io_operations.load_processing_settings",
+            return_value=existing_settings,
+        ):
+            with patch("builtins.open", MagicMock()):
+                with patch("json.dump"):
+                    with patch(
+                        "src.depth_surge_3d.processing.io_operations.format_time_duration",
+                        return_value="1h 30m",
+                    ):
+                        result = update_processing_status(
+                            Path("/tmp/settings.json"), "completed"
+                        )
+
+        assert result is True
+
+    def test_update_processing_status_load_failure(self):
+        """Test update status when loading fails."""
+        from src.depth_surge_3d.processing.io_operations import update_processing_status
+
+        with patch(
+            "src.depth_surge_3d.processing.io_operations.load_processing_settings",
+            return_value=None,
+        ):
+            result = update_processing_status(Path("/tmp/settings.json"), "completed")
+
+        assert result is False
