@@ -2572,7 +2572,8 @@
                 cropFactor: document.getElementById('cropFactor').value,
                 fisheyeCropFactor: document.getElementById('fisheyeCropFactor').value,
                 holeFillQuality: document.getElementById('holeFillQuality').value,
-                
+                upscaleModel: document.getElementById('upscaleModel').value,
+
                 // Experimental features
                 experimentalFrameInterpolation: document.getElementById('experimentalFrameInterpolation').checked
             };
@@ -2641,7 +2642,8 @@
                 fisheyeFov: '180',
                 cropFactor: '1.0',
                 fisheyeCropFactor: '0.7',
-                holeFillQuality: 'fast'
+                holeFillQuality: 'fast',
+                upscaleModel: 'none'
             };
             
             Object.keys(defaults).forEach(key => {
@@ -2670,7 +2672,7 @@
                 'startTime', 'endTime', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
                 'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'depthResolution', 'videoEncoder',
                 'preserveAudio', 'keepIntermediates', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
-                'fisheyeCropFactor', 'holeFillQuality', 'experimentalFrameInterpolation'
+                'fisheyeCropFactor', 'holeFillQuality', 'upscaleModel', 'experimentalFrameInterpolation'
             ];
             
             settingsElements.forEach(id => {

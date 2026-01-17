@@ -15,3 +15,7 @@ easydict>=1.9
 # xformers>=0.0.26
 # Install DA3 from GitHub (not yet on PyPI)
 git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
+
+# AI Upscaling (optional - only needed if using --upscale-model)
+# Provides Real-ESRGAN for style-preserving video enhancement
+py-real-esrgan>=0.3.0
