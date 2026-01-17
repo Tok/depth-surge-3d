@@ -161,6 +161,37 @@ class TestGetFrameFiles:
         assert len(result) == 0
         assert isinstance(result, list)
 
+    def test_get_frame_files_invalid_stem_exception_handling(self):
+        """Test frame files with stems that cause ValueError/IndexError."""
+        mock_frames_dir = MagicMock(spec=Path)
+        mock_frames_dir.exists.return_value = True
+
+        # Create mock Path objects with stems that will trigger exceptions
+        mock_file1 = MagicMock(spec=Path)
+        mock_file1.stem = "invalid_text"  # No digits, will cause ValueError
+        mock_file1.suffix = ".png"
+
+        mock_file2 = MagicMock(spec=Path)
+        mock_file2.stem = "frame_"  # Empty after split, IndexError
+        mock_file2.suffix = ".png"
+
+        mock_file3 = MagicMock(spec=Path)
+        mock_file3.stem = ""  # Empty stem
+        mock_file3.suffix = ".png"
+
+        def glob_side_effect(pattern):
+            if pattern == "*.png":
+                return iter([mock_file1, mock_file2, mock_file3])
+            else:
+                return iter([])
+
+        mock_frames_dir.glob.side_effect = glob_side_effect
+
+        # Should not raise exception, should fall back to 0 for sort key
+        result = get_frame_files(mock_frames_dir)
+
+        assert len(result) == 3
+
 
 class TestCreateOutputDirectories:
     """Test create_output_directories function."""
@@ -686,6 +717,31 @@ class TestSaveProcessingSettings:
         # Should still return the path even if initial save failed
         assert result == Path("/tmp/batch1-settings.json")
 
+    def test_save_processing_settings_both_saves_fail(self):
+        """Test save settings when both initial and fallback saves fail."""
+        from src.depth_surge_3d.processing.io_operations import save_processing_settings
+
+        settings_data = {
+            "depth_resolution": 1080,
+            "vr_format": "side_by_side",
+            "vr_resolution": "1080p",
+        }
+        video_properties = {"width": 1920, "height": 1080}
+
+        # Both open() calls fail
+        with patch("builtins.open", side_effect=[OSError("Write error"), OSError("Write error")]):
+            with patch("json.dump", side_effect=Exception("JSON error")):
+                with patch(
+                    "src.depth_surge_3d.processing.io_operations.generate_output_filename",
+                    return_value="output.mp4",
+                ):
+                    result = save_processing_settings(
+                        Path("/tmp"), "batch1", settings_data, video_properties, "test.mp4"
+                    )
+
+        # Should still return the path despite both failures
+        assert result == Path("/tmp/batch1-settings.json")
+
 
 class TestLoadProcessingSettings:
     """Test load_processing_settings function."""
@@ -758,6 +814,42 @@ class TestUpdateProcessingStatus:
         with patch(
             "src.depth_surge_3d.processing.io_operations.load_processing_settings",
             return_value=None,
+        ):
+            result = update_processing_status(Path("/tmp/settings.json"), "completed")
+
+        assert result is False
+
+    def test_update_processing_status_with_additional_info(self):
+        """Test update status with additional runtime info."""
+        from src.depth_surge_3d.processing.io_operations import update_processing_status
+
+        existing_settings = {"metadata": {"processing_status": "in_progress"}}
+
+        with patch(
+            "src.depth_surge_3d.processing.io_operations.load_processing_settings",
+            return_value=existing_settings,
+        ):
+            with patch("builtins.open", MagicMock()):
+                with patch("json.dump") as mock_dump:
+                    result = update_processing_status(
+                        Path("/tmp/settings.json"),
+                        "in_progress",
+                        additional_info={"gpu_used": "RTX 4090", "frames_processed": 100},
+                    )
+
+        assert result is True
+        # Verify runtime_info was added
+        call_args = mock_dump.call_args[0][0]
+        assert "runtime_info" in call_args
+        assert call_args["runtime_info"]["gpu_used"] == "RTX 4090"
+
+    def test_update_processing_status_exception_handling(self):
+        """Test update status handles exceptions gracefully."""
+        from src.depth_surge_3d.processing.io_operations import update_processing_status
+
+        with patch(
+            "src.depth_surge_3d.processing.io_operations.load_processing_settings",
+            side_effect=Exception("File read error"),
         ):
             result = update_processing_status(Path("/tmp/settings.json"), "completed")
 
@@ -890,6 +982,46 @@ class TestCanResumeProcessing:
         assert result["can_resume"] is False
         assert "Error checking resume" in result["recommendations"][0]
 
+    def test_can_resume_processing_settings_load_fails(self):
+        """Test resume when settings file can't be loaded."""
+        from src.depth_surge_3d.processing.io_operations import can_resume_processing
+
+        with patch(
+            "src.depth_surge_3d.processing.io_operations.find_settings_file",
+            return_value=Path("/tmp/settings.json"),
+        ):
+            with patch(
+                "src.depth_surge_3d.processing.io_operations.load_processing_settings",
+                return_value=None,
+            ):
+                result = can_resume_processing(Path("/tmp"))
+
+        assert result["can_resume"] is False
+        assert "Could not load settings file" in result["recommendations"][0]
+
+    def test_can_resume_processing_no_frames_processed(self):
+        """Test resume when no frames have been processed."""
+        from src.depth_surge_3d.processing.io_operations import can_resume_processing
+
+        settings_data = {"metadata": {"processing_status": "in_progress"}}
+        progress_info = {"frames_processed": 0}
+
+        with patch(
+            "src.depth_surge_3d.processing.io_operations.find_settings_file",
+            return_value=Path("/tmp/settings.json"),
+        ):
+            with patch(
+                "src.depth_surge_3d.processing.io_operations.load_processing_settings",
+                return_value=settings_data,
+            ):
+                with patch(
+                    "src.depth_surge_3d.processing.io_operations.analyze_processing_progress",
+                    return_value=progress_info,
+                ):
+                    result = can_resume_processing(Path("/tmp"))
+
+        assert "No processed frames found" in result["recommendations"][0]
+
 
 class TestAnalyzeProcessingProgress:
     """Test analyze_processing_progress function."""
@@ -926,3 +1058,54 @@ class TestAnalyzeProcessingProgress:
 
         assert "frames_processed" in result
         assert result["frames_processed"] == 50
+
+    def test_analyze_processing_progress_depth_maps_only(self):
+        """Test analyzing progress when only depth maps exist (no VR frames)."""
+        from src.depth_surge_3d.processing.io_operations import analyze_processing_progress
+
+        settings_data = {
+            "output_info": {"output_directory": "/tmp"},
+            "video_properties": {"frame_count": 100},
+        }
+
+        # Mock: no VR frames, but depth maps exist
+        mock_vr_dir = MagicMock(spec=Path)
+        mock_vr_dir.exists.return_value = True
+        mock_vr_dir.glob.return_value = []  # No VR frames
+
+        mock_depth_dir = MagicMock(spec=Path)
+        mock_depth_dir.exists.return_value = True
+        mock_depth_dir.glob.return_value = [Path(f"/tmp/depth/frame_{i}.png") for i in range(30)]
+
+        def truediv_side_effect(dir_name):
+            if "99_vr_frames" in str(dir_name):
+                return mock_vr_dir
+            elif "02_depth_maps" in str(dir_name):
+                return mock_depth_dir
+            else:
+                mock_other = MagicMock(spec=Path)
+                mock_other.exists.return_value = False
+                return mock_other
+
+        with patch("pathlib.Path.__truediv__", side_effect=truediv_side_effect):
+            result = analyze_processing_progress(Path("/tmp"), settings_data)
+
+        assert result["frames_processed"] == 30
+        assert result["can_resume_from_intermediates"] is True
+
+    def test_analyze_processing_progress_exception_handling(self):
+        """Test analyze progress handles exceptions gracefully."""
+        from src.depth_surge_3d.processing.io_operations import analyze_processing_progress
+
+        settings_data = {
+            "output_info": {"output_directory": "/tmp"},
+            "video_properties": {"frame_count": 100},
+        }
+
+        # Trigger exception during directory traversal
+        with patch("pathlib.Path.__truediv__", side_effect=Exception("Path error")):
+            result = analyze_processing_progress(Path("/tmp"), settings_data)
+
+        # Should return default progress dict despite exception
+        assert "frames_processed" in result
+        assert result["frames_processed"] == 0
