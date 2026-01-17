@@ -39,7 +39,7 @@ pytest tests/unit -v
 - Type hints (modern Python 3.10+ syntax: `dict`, `list`, `X | None`)
 - Max complexity: 10 (enforced by flake8)
 - Pure functions, immutability, composition
-- Current coverage: 89% (target: 85%+)
+- Current coverage: 88% (target: 90%)
 
 **Git Commit Format:**
 ```

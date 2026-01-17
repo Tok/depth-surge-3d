@@ -609,3 +609,15 @@ class TestHoleFillImage:
         filled = hole_fill_image(image, mask=mask, method="fast")
 
         assert filled.shape == image.shape
+
+    def test_fill_with_high_method(self):
+        """Test hole filling with high quality method."""
+        image = np.random.randint(1, 255, (100, 100, 3), dtype=np.uint8)
+        # Create some holes
+        image[40:60, 40:60] = 0
+
+        filled = hole_fill_image(image, method="high")
+
+        assert filled.shape == image.shape
+        # Holes should be filled (no longer all black)
+        assert not np.all(filled[40:60, 40:60] == 0)
