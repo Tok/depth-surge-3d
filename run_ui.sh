@@ -48,6 +48,9 @@ fi
 # Install additional Flask dependencies if needed (quietly)
 python -m pip install flask flask-socketio > /dev/null 2>&1
 
+# Install optional AI upscaling dependency if not present (quietly)
+python -m pip install py-real-esrgan > /dev/null 2>&1
+
 # Create upload and output directories
 mkdir -p uploads output
 
