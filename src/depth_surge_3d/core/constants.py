@@ -184,9 +184,13 @@ SIGNAL_SHUTDOWN_TIMEOUT = 5  # seconds - timeout for graceful shutdown
 
 # Image processing constants
 DEFAULT_INTERPOLATION = "cv2.INTER_CUBIC"
-DEPTH_MAP_SCALE = 255
+DEPTH_MAP_SCALE = 255  # Scale factor for converting float depth [0-1] to uint8 [0-255]
+DEPTH_MAP_SCALE_FLOAT = 255.0  # Float version for division operations
 MIN_DEPTH_VALUE = 0.0
 MAX_DEPTH_VALUE = 1.0
+
+# Progress reporting
+PROGRESS_UPDATE_INTERVAL = 10  # Update progress every N frames processed
 
 # Fisheye projection constants
 FISHEYE_PROJECTIONS = ["equidistant", "stereographic", "equisolid", "orthogonal"]

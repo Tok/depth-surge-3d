@@ -34,7 +34,13 @@ from ..utils.image_processing import (
     create_vr_frame,
     hole_fill_image,
 )
-from ..core.constants import INTERMEDIATE_DIRS
+from ..core.constants import (
+    INTERMEDIATE_DIRS,
+    DEPTH_MAP_SCALE,
+    DEPTH_MAP_SCALE_FLOAT,
+    PROGRESS_UPDATE_INTERVAL,
+    DEFAULT_FALLBACK_FPS,
+)
 from ..utils.console import (
     step_complete,
     saved_to,
@@ -213,7 +219,7 @@ class VideoProcessor:
                     for depth_file in existing_depth_maps[: len(frame_files)]:
                         depth_img = cv2.imread(str(depth_file), cv2.IMREAD_GRAYSCALE)
                         if depth_img is not None:
-                            depth_maps.append(depth_img.astype(float) / 255.0)
+                            depth_maps.append(depth_img.astype(float) / DEPTH_MAP_SCALE_FLOAT)
                     if len(depth_maps) == len(frame_files):
                         if progress_tracker:
                             progress_tracker.update_progress(
@@ -704,7 +710,7 @@ class VideoProcessor:
                 frames_list.append(image)
 
                 # Update progress
-                if i % 10 == 0 or i == len(frame_files) - 1:
+                if i % PROGRESS_UPDATE_INTERVAL == 0 or i == len(frame_files) - 1:
                     progress_tracker.update_progress(
                         "Loading frames",
                         phase="depth_estimation",
@@ -823,7 +829,7 @@ class VideoProcessor:
     ) -> Optional[np.ndarray]:
         """Process depth for a chunk and optionally save results."""
         # Normalize target_fps
-        target_fps = settings.get("target_fps", 30)
+        target_fps = settings.get("target_fps", DEFAULT_FALLBACK_FPS)
         if target_fps is None or str(target_fps) == "None" or target_fps == "original":
             target_fps = 30
 
@@ -915,7 +921,7 @@ class VideoProcessor:
         """Generate depth maps for all frames with temporal consistency."""
         try:
             # Use Video-Depth-Anything for temporal consistency
-            target_fps = settings.get("target_fps", 30)
+            target_fps = settings.get("target_fps", DEFAULT_FALLBACK_FPS)
             if target_fps is None or str(target_fps) == "None" or target_fps == "original":
                 target_fps = 30
 
@@ -944,7 +950,7 @@ class VideoProcessor:
     ) -> None:
         """Save depth maps to disk."""
         for i, (depth_map, frame_file) in enumerate(zip(depth_maps, frame_files)):
-            depth_vis = (depth_map * 255).astype("uint8")
+            depth_vis = (depth_map * DEPTH_MAP_SCALE).astype("uint8")
             frame_name = frame_file.stem
             cv2.imwrite(str(depth_dir / f"{frame_name}.png"), depth_vis)
 
@@ -1313,7 +1319,7 @@ class VideoProcessor:
         output_path = output_dir / output_filename
 
         # Build base FFmpeg command
-        base_fps = settings.get("target_fps", 30)
+        base_fps = settings.get("target_fps", DEFAULT_FALLBACK_FPS)
         if base_fps is None or str(base_fps) == "None" or base_fps == "original":
             base_fps = 30
 

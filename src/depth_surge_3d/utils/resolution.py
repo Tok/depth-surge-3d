@@ -5,7 +5,7 @@ This module contains pure functions for resolution parsing, validation,
 and auto-detection based on source content.
 """
 
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, List
 
 from ..core.constants import VR_RESOLUTIONS
 
@@ -224,14 +224,20 @@ def validate_resolution_settings(
     return result
 
 
-def get_available_resolutions() -> Dict[str, Dict[str, list]]:
+def get_available_resolutions() -> Dict[str, List[Dict[str, Any]]]:
     """
     Get categorized list of available resolutions.
 
     Returns:
         Dictionary with resolution categories and their options
     """
-    categorized = {"square": [], "16x9": [], "wide": [], "cinema": [], "legacy": []}
+    categorized: Dict[str, List[Dict[str, Any]]] = {
+        "square": [],
+        "16x9": [],
+        "wide": [],
+        "cinema": [],
+        "legacy": [],
+    }
 
     for res_name, (width, height) in VR_RESOLUTIONS.items():
         if res_name.startswith("square-"):

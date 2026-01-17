@@ -66,7 +66,7 @@ def get_video_properties(video_path: str) -> Dict[str, Any]:
     Returns:
         Dictionary with video properties
     """
-    properties = {}
+    properties: Dict[str, Any] = {}
 
     try:
         cap = cv2.VideoCapture(video_path)
@@ -240,12 +240,12 @@ def get_frame_files(frames_dir: Path) -> List[Path]:
     if not frames_dir.exists():
         return []
 
-    frame_files = []
+    frame_files: List[Path] = []
     for ext in SUPPORTED_IMAGE_FORMATS:
         frame_files.extend(frames_dir.glob(f"*{ext}"))
 
     # Sort numerically by filename
-    def sort_key(path):
+    def sort_key(path: Path) -> int:
         try:
             # Extract number from filename
             stem = path.stem
