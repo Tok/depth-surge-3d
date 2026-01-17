@@ -2135,6 +2135,10 @@
 
             // Reset upload state when modal is dismissed to allow new processing
             document.getElementById('successModal').addEventListener('hidden.bs.modal', function resetAfterComplete() {
+                // Reset uploaded file variables
+                uploadedFilename = null;
+                uploadedOutputDir = null;
+
                 // Reset file input to allow uploading new videos
                 const videoFile = document.getElementById('videoFile');
                 if (videoFile) {
@@ -2150,6 +2154,9 @@
                 // Reset upload button text
                 const uploadBtnText = document.getElementById('uploadBtnText');
                 if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+                // Disable process button until new video is uploaded
+                document.getElementById('processBtn').disabled = true;
 
                 // Remove this event listener to prevent multiple bindings
                 this.removeEventListener('hidden.bs.modal', resetAfterComplete);
@@ -2181,6 +2188,10 @@
 
             // Reset upload state when modal is dismissed to allow new processing
             document.getElementById('errorModal').addEventListener('hidden.bs.modal', function resetAfterError() {
+                // Reset uploaded file variables
+                uploadedFilename = null;
+                uploadedOutputDir = null;
+
                 // Reset file input to allow uploading new videos
                 const videoFile = document.getElementById('videoFile');
                 if (videoFile) {
@@ -2196,6 +2207,9 @@
                 // Reset upload button text
                 const uploadBtnText = document.getElementById('uploadBtnText');
                 if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+                // Disable process button until new video is uploaded
+                document.getElementById('processBtn').disabled = true;
 
                 // Remove this event listener to prevent multiple bindings
                 this.removeEventListener('hidden.bs.modal', resetAfterError);
