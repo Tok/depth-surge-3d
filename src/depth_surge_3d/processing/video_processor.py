@@ -765,65 +765,16 @@ class VideoProcessor:
                 video_path, output_dir, settings, video_properties
             )
 
-            # Step 1: Extract frames
-            frame_files = self._step_extract_frames(
-                video_path, directories, video_properties, settings, progress_callback
-            )
-            if not frame_files:
-                return False
-
-            # Initialize progress tracker
-            progress_tracker = (
-                progress_callback
-                if progress_callback
-                else create_progress_tracker(len(frame_files), "batch")
-            )
-
-            # Step 2: Generate depth maps
-            depth_maps = self._step_generate_depth_maps(
-                frame_files, settings, directories, progress_tracker
-            )
-            if depth_maps is None:
-                return False
-
-            # Step 3: Load frames for stereo processing
-            frames = self._step_load_frames(frame_files, settings, progress_tracker)
-            if frames is None:
-                return False
-
-            # Step 4: Create stereo pairs
-            if not self._step_create_stereo_pairs(
-                frames, depth_maps, frame_files, directories, settings, progress_tracker
-            ):
-                return False
-
-            # Step 5: Apply fisheye distortion (if enabled)
-            if not self._step_apply_distortion(directories, settings, progress_tracker):
-                return False
-
-            # Step 5.5: Apply AI upscaling (if enabled)
-            if not self._step_apply_upscaling(directories, settings, progress_tracker):
-                return False
-
-            # Step 6: Create final VR frames
-            if not self._step_create_vr_frames(
-                directories, settings, progress_tracker, len(frames)
-            ):
-                return False
-
-            # Step 7: Create final video
-            success = self._step_create_final_video(
-                directories,
-                output_path,
+            # Execute processing pipeline
+            success = self._execute_pipeline(
                 video_path,
+                output_path,
+                directories,
+                video_properties,
                 settings,
-                progress_tracker,
                 progress_callback,
             )
 
-            # Finalize and cleanup
-            progress_tracker.finish("Video processing complete")
-            self._finalize_processing(success, output_path, video_path, settings, len(frames))
             return success
 
         except Exception as e:
@@ -831,6 +782,96 @@ class VideoProcessor:
             if self._settings_file:
                 update_processing_status(self._settings_file, "failed", {"error": str(e)})
             return False
+
+    def _execute_pipeline(
+        self,
+        video_path: str,
+        output_path: Path,
+        directories: dict[str, Path],
+        video_properties: dict[str, Any],
+        settings: dict[str, Any],
+        progress_callback,
+    ) -> bool:
+        """Execute the full processing pipeline."""
+        # Step 1: Extract frames
+        frame_files = self._step_extract_frames(
+            video_path, directories, video_properties, settings, progress_callback
+        )
+        if not frame_files:
+            return False
+
+        # Initialize progress tracker
+        progress_tracker = (
+            progress_callback
+            if progress_callback
+            else create_progress_tracker(len(frame_files), "batch")
+        )
+
+        # Step 2: Generate depth maps
+        depth_maps = self._step_generate_depth_maps(
+            frame_files, settings, directories, progress_tracker
+        )
+        if depth_maps is None:
+            return False
+
+        # Step 3: Load frames for stereo processing
+        frames = self._step_load_frames(frame_files, settings, progress_tracker)
+        if frames is None:
+            return False
+
+        # Execute steps 4-7
+        return self._execute_remaining_steps(
+            frames,
+            depth_maps,
+            frame_files,
+            directories,
+            output_path,
+            video_path,
+            settings,
+            progress_tracker,
+            progress_callback,
+        )
+
+    def _execute_remaining_steps(
+        self,
+        frames,
+        depth_maps,
+        frame_files,
+        directories,
+        output_path,
+        video_path,
+        settings,
+        progress_tracker,
+        progress_callback,
+    ) -> bool:
+        """Execute steps 4-7 of the pipeline."""
+        # Step 4: Create stereo pairs
+        if not self._step_create_stereo_pairs(
+            frames, depth_maps, frame_files, directories, settings, progress_tracker
+        ):
+            return False
+
+        # Step 5: Apply fisheye distortion (if enabled)
+        if not self._step_apply_distortion(directories, settings, progress_tracker):
+            return False
+
+        # Step 5.5: Apply AI upscaling (if enabled)
+        if not self._step_apply_upscaling(directories, settings, progress_tracker):
+            return False
+
+        # Step 6: Create final VR frames
+        if not self._step_create_vr_frames(directories, settings, progress_tracker, len(frames)):
+            return False
+
+        # Step 7: Create final video
+        success = self._step_create_final_video(
+            directories, output_path, video_path, settings, progress_tracker, progress_callback
+        )
+
+        # Finalize and cleanup
+        progress_tracker.finish("Video processing complete")
+        self._finalize_processing(success, output_path, video_path, settings, len(frames))
+        return success
 
     def _extract_frames(
         self,
