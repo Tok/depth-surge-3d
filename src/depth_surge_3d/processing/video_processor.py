@@ -15,7 +15,6 @@ from typing import Any
 import time
 import torch
 import multiprocessing as mp
-from functools import partial
 
 from ..models.video_depth_estimator import VideoDepthEstimator
 from ..utils.progress import create_progress_tracker
@@ -62,10 +61,8 @@ from ..core.constants import (
     MEGAPIXELS_720P,
     CHUNK_SIZE_4K,
     CHUNK_SIZE_1440P,
-    CHUNK_SIZE_1080P,
     CHUNK_SIZE_1080P_MANUAL,
     CHUNK_SIZE_720P,
-    CHUNK_SIZE_SD,
     CHUNK_SIZE_SMALL,
 )
 from ..utils.console import (
