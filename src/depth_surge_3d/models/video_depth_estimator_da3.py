@@ -1,17 +1,40 @@
 """
-
-from __future__ import annotations
 Video depth estimation using Depth Anything V3.
 
 This module provides a wrapper around Depth Anything V3 for improved
 memory efficiency and performance compared to Video-Depth-Anything V2.
 """
 
+from __future__ import annotations
+
+import sys
+import os
+import warnings
+import logging
+from contextlib import contextmanager
 import torch
 import numpy as np
 from typing import Any
 
 from ..core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
+
+
+@contextmanager
+def suppress_output():
+    """Temporarily redirect stdout and stderr to devnull."""
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    devnull = None
+    try:
+        devnull = open(os.devnull, "w")
+        sys.stdout = devnull
+        sys.stderr = devnull
+        yield
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        if devnull:
+            devnull.close()
 
 
 class VideoDepthEstimatorDA3:
@@ -55,6 +78,52 @@ class VideoDepthEstimatorDA3:
                 return "cpu"
         return device
 
+    def _setup_logging_suppression(self) -> None:
+        """Configure logging and warning suppression for DA3 library."""
+        # Suppress gsplat dependency warning (only needed for giant models with 3DGS)
+        warnings.filterwarnings("ignore", message=".*gsplat.*")
+        warnings.filterwarnings("ignore", category=UserWarning, module="depth_anything_3")
+
+        # Suppress all depth_anything_3 logging
+        logging.getLogger("depth_anything_3").setLevel(logging.CRITICAL)
+
+        # Suppress loguru logger used by DA3
+        try:
+            from loguru import logger
+
+            logger.remove()  # Remove default handler
+            logger.add(sys.stderr, level="ERROR")  # Re-add with ERROR level only
+        except ImportError:
+            pass  # loguru not installed or not used
+
+    def _resolve_model_id(self) -> str:
+        """Resolve model name to Hugging Face model ID."""
+        if self.model_name in DA3_MODEL_NAMES:
+            hf_model_id = DA3_MODEL_NAMES[self.model_name]
+        else:
+            # Assume it's a direct HF model ID
+            hf_model_id = self.model_name
+
+        # Override with metric model if requested
+        if self.metric and "metric" not in self.model_name.lower():
+            hf_model_id = DA3_MODEL_NAMES["large-metric"]
+            print(f"Using metric depth model: {hf_model_id}")
+
+        return hf_model_id
+
+    def _check_xformers(self) -> None:
+        """Check if xformers is available for optimized attention."""
+        try:
+            import xformers  # noqa: F401
+
+            print("xformers detected - using optimized attention")
+        except Exception:
+            print(
+                "Warning: xformers not available. "
+                "Install with 'pip install xformers' for better performance "
+                "(optional, may fail on some systems)"
+            )
+
     def load_model(self) -> bool:
         """
         Load the Depth Anything V3 model.
@@ -63,62 +132,17 @@ class VideoDepthEstimatorDA3:
             True if model loaded successfully, False otherwise
         """
         try:
-            import warnings
-            import logging
-            import sys
-            import os
-            from contextlib import contextmanager
+            # Setup logging suppression
+            self._setup_logging_suppression()
 
-            # Context manager to suppress both stdout and stderr
-            @contextmanager
-            def suppress_output():
-                """Temporarily redirect stdout and stderr to devnull."""
-                old_stdout = sys.stdout
-                old_stderr = sys.stderr
-                try:
-                    devnull = open(os.devnull, "w")
-                    sys.stdout = devnull
-                    sys.stderr = devnull
-                    yield
-                finally:
-                    sys.stdout = old_stdout
-                    sys.stderr = old_stderr
-                    devnull.close()
-
-            # Suppress gsplat dependency warning (only needed for giant models with 3DGS)
-            # DA3 uses loguru logger which prints directly, need to suppress before import
-            warnings.filterwarnings("ignore", message=".*gsplat.*")
-            warnings.filterwarnings("ignore", category=UserWarning, module="depth_anything_3")
-
-            # Suppress all depth_anything_3 logging including loguru output
-            logging.getLogger("depth_anything_3").setLevel(logging.CRITICAL)
-
-            # Suppress loguru logger used by DA3 BEFORE importing the module
-            try:
-                from loguru import logger
-
-                logger.remove()  # Remove default handler
-                logger.add(sys.stderr, level="ERROR")  # Re-add with ERROR level only
-            except ImportError:
-                pass  # loguru not installed or not used
-
-            # Import DA3 API with output suppressed to hide gsplat warning
+            # Import DA3 API with output suppressed
             with suppress_output():
                 from depth_anything_3.api import DepthAnything3
 
-            # Resolve model name to Hugging Face ID
-            if self.model_name in DA3_MODEL_NAMES:
-                hf_model_id = DA3_MODEL_NAMES[self.model_name]
-            else:
-                # Assume it's a direct HF model ID
-                hf_model_id = self.model_name
+            # Resolve model ID
+            hf_model_id = self._resolve_model_id()
 
-            # Override with metric model if requested
-            if self.metric and "metric" not in self.model_name.lower():
-                hf_model_id = DA3_MODEL_NAMES["large-metric"]
-                print(f"Using metric depth model: {hf_model_id}")
-
-            # Load model from Hugging Face (suppress all library output including gsplat warnings)
+            # Load model (suppress all library output)
             print(f"Loading Depth Anything V3 model: {hf_model_id}")
             with suppress_output():
                 self.model = DepthAnything3.from_pretrained(hf_model_id)
@@ -128,18 +152,8 @@ class VideoDepthEstimatorDA3:
             model_variant = "Metric-" if self.metric else ""
             print(f"Loaded {model_variant}Depth-Anything-V3 ({self.model_name}) on {self.device}")
 
-            # Check if xformers is available (optional optimization)
-            try:
-                import xformers  # noqa: F401
-
-                print("xformers detected - using optimized attention")
-            except Exception:
-                # Catch all exceptions - xformers may fail to import for various reasons
-                print(
-                    "Warning: xformers not available. "
-                    "Install with 'pip install xformers' for better performance "
-                    "(optional, may fail on some systems)"
-                )
+            # Check for optimizations
+            self._check_xformers()
 
             return True
 
