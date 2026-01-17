@@ -1,6 +1,7 @@
 """Unit tests for console utilities."""
 
 from src.depth_surge_3d.utils.console import (
+    Colors,
     success,
     error,
     warning,
@@ -90,3 +91,45 @@ class TestConsoleUtils:
         result = success(multiline)
         assert "Line 1" in result
         assert "Line 2" in result
+
+    def test_colors_disable(self):
+        """Test Colors.disable() method removes all ANSI codes."""
+        # Store original values
+        original_green = Colors.LIME_GREEN
+        original_reset = Colors.RESET
+
+        # Disable colors
+        Colors.disable()
+
+        # Verify all color codes are empty strings
+        assert Colors.LIME_GREEN == ""
+        assert Colors.GREEN == ""
+        assert Colors.ELECTRIC_BLUE == ""
+        assert Colors.RED == ""
+        assert Colors.YELLOW == ""
+        assert Colors.BLUE == ""
+        assert Colors.GRAY == ""
+        assert Colors.BOLD == ""
+        assert Colors.DIM == ""
+        assert Colors.RESET == ""
+
+        # Functions should still work but without ANSI codes
+        result = success("test")
+        assert result == "test"
+
+        # Restore original values for other tests
+        Colors.LIME_GREEN = original_green
+        Colors.RESET = original_reset
+
+    def test_title_bar_non_standard_format(self):
+        """Test title_bar with non-standard format (no === markers)."""
+        result = title_bar("Just a regular title")
+        assert result == "Just a regular title"
+
+    def test_title_bar_partial_markers(self):
+        """Test title_bar with partial === markers."""
+        result = title_bar("=== Title only at start")
+        assert result == "=== Title only at start"
+
+        result = title_bar("Title only at end ===")
+        assert result == "Title only at end ==="
