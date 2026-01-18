@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...inference import VideoDepthEstimator
 from ..frames.depth_processor import DepthMapProcessor
 from ..frames.stereo_generator import StereoPairGenerator
 from ..frames.distortion_processor import DistortionProcessor
