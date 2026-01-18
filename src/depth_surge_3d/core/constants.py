@@ -264,13 +264,13 @@ INTERMEDIATE_DIRS = {
     "right_frames": "04_right_frames",  # Step 4: Stereo pair - right eye
     "left_distorted": "05_left_distorted",  # Step 5: Fisheye distortion - left (optional)
     "right_distorted": "05_right_distorted",  # Step 5: Fisheye distortion - right (optional)
-    "left_upscaled": "05_5_left_upscaled",  # Step 5.5: AI upscaled - left (optional)
-    "right_upscaled": "05_5_right_upscaled",  # Step 5.5: AI upscaled - right (optional)
-    "left_cropped": "06_left_cropped",  # Optional: Center cropped - left
-    "right_cropped": "06_right_cropped",  # Optional: Center cropped - right
-    "left_final": "07_left_final",  # Step 6: Final resized - left
-    "right_final": "07_right_final",  # Step 6: Final resized - right
-    "vr_frames": "99_vr_frames",  # Step 6: Final VR assembled frames (for FFmpeg)
+    "left_cropped": "06_left_cropped",  # Step 6: Center cropped - left
+    "right_cropped": "06_right_cropped",  # Step 6: Center cropped - right
+    "left_upscaled": "07_left_upscaled",  # Step 6.5: AI upscaled - left (optional)
+    "right_upscaled": "07_right_upscaled",  # Step 6.5: AI upscaled - right (optional)
+    "left_final": "08_left_final",  # Step 7: Final resized - left
+    "right_final": "08_right_final",  # Step 7: Final resized - right
+    "vr_frames": "99_vr_frames",  # Step 7: Final VR assembled frames
 }
 
 # Depth Anything V3 model names (Hugging Face IDs)

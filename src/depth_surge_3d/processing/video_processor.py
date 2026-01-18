@@ -119,6 +119,7 @@ class VideoProcessor:
         self.depth_estimator = depth_estimator
         self.verbose = verbose
         self._settings_file = None  # Track settings file for error handling
+        self._total_steps = 7  # Updated dynamically: 7 base + 1 if upscaling enabled
 
     def _update_step_progress(
         self, progress_tracker, message: str, step_name: str, progress: int, total: int
@@ -153,6 +154,13 @@ class VideoProcessor:
         if self._settings_file:
             update_processing_status(self._settings_file, "failed", {"error": error_msg})
         return False
+
+    def _get_total_steps(self, settings: dict[str, Any]) -> int:
+        """Calculate total processing steps based on settings."""
+        total = 7  # Base: Extract, Depth, Load, Stereo, Fisheye, VR, Video
+        if settings.get("upscale_model", "none") != "none":
+            total += 1  # Add Step 6.5: AI Upscaling
+        return total
 
     def _setup_processing(
         self,
@@ -570,11 +578,11 @@ class VideoProcessor:
     def _step_apply_upscaling(
         self, directories: dict[str, Path], settings: dict[str, Any], progress_tracker
     ) -> bool:
-        """Execute Step 5.5: Apply AI upscaling (if enabled)."""
+        """Execute Step 6.5: Apply AI upscaling to cropped VR frames (if enabled)."""
         upscale_model = settings.get("upscale_model", "none")
 
         if upscale_model == "none":
-            print("Step 5.5/7: Skipping upscaling (disabled)\n")
+            print(f"Step 6.5/{self._total_steps}: Skipping upscaling (disabled)\n")
             return True
 
         # Check if upscaled frames already exist (only if keep_intermediates is enabled)
@@ -599,7 +607,9 @@ class VideoProcessor:
                     and len(existing_left) >= len(source_files)
                     and len(existing_right) >= len(source_files)
                 ):
-                    print("Step 5.5/7: Skipping upscaling (upscaled frames already exist)")
+                    print(
+                        f"Step 6.5/{self._total_steps}: Skipping upscaling (upscaled frames already exist)"
+                    )
                     print(
                         f"  Found {len(existing_left):04d} upscaled left and {len(existing_right):04d} upscaled right frames"
                     )
@@ -615,12 +625,14 @@ class VideoProcessor:
                         )
                     return True
 
-        print(f"Step 5.5/7: Applying {upscale_model} upscaling...")
+        print(
+            f"Step 6.5/{self._total_steps}: Applying {upscale_model} AI upscaling to cropped VR frames..."
+        )
 
-        # Get source directories
+        # Get source directories (cropped frames from Step 6)
         source_left, source_right = self._get_upscaling_source_dirs(directories, settings)
         if source_left is None or source_right is None:
-            self._handle_step_error("No source frames for upscaling")
+            self._handle_step_error("No cropped VR frames found for upscaling")
             return False
 
         # Apply upscaling
@@ -642,7 +654,7 @@ class VideoProcessor:
         )
         print(
             step_complete(
-                f"Upscaled {len(left_files):04d} frames with {upscale_model} in {duration:.2f}s"
+                f"Upscaled {len(left_files):04d} cropped VR frames with {upscale_model} in {duration:.2f}s"
             )
         )
         if settings["keep_intermediates"] and "left_upscaled" in directories:
@@ -793,6 +805,9 @@ class VideoProcessor:
         progress_callback,
     ) -> bool:
         """Execute the full processing pipeline."""
+        # Calculate total steps based on settings
+        self._total_steps = self._get_total_steps(settings)
+
         # Step 1: Extract frames
         frame_files = self._step_extract_frames(
             video_path, directories, video_properties, settings, progress_callback
@@ -844,7 +859,7 @@ class VideoProcessor:
         progress_tracker,
         progress_callback,
     ) -> bool:
-        """Execute steps 4-7 of the pipeline."""
+        """Execute steps 4-8 of the pipeline (8 if upscaling enabled)."""
         # Step 4: Create stereo pairs
         if not self._step_create_stereo_pairs(
             frames, depth_maps, frame_files, directories, settings, progress_tracker
@@ -855,12 +870,12 @@ class VideoProcessor:
         if not self._step_apply_distortion(directories, settings, progress_tracker):
             return False
 
-        # Step 5.5: Apply AI upscaling (if enabled)
-        if not self._step_apply_upscaling(directories, settings, progress_tracker):
+        # Step 6: Create final VR frames (with cropping)
+        if not self._step_create_vr_frames(directories, settings, progress_tracker, len(frames)):
             return False
 
-        # Step 6: Create final VR frames
-        if not self._step_create_vr_frames(directories, settings, progress_tracker, len(frames)):
+        # Step 6.5: Apply AI upscaling to cropped VR frames (if enabled)
+        if not self._step_apply_upscaling(directories, settings, progress_tracker):
             return False
 
         # Step 7: Create final video
@@ -1493,26 +1508,27 @@ class VideoProcessor:
     def _get_upscaling_source_dirs(
         self, directories: dict[str, Path], settings: dict[str, Any]
     ) -> tuple[Path, Path] | None:
-        """Get source directories for upscaling based on pipeline state."""
-        if settings.get("apply_distortion") and "left_distorted" in directories:
-            return directories["left_distorted"], directories["right_distorted"]
-        elif "left_frames" in directories:
-            return directories["left_frames"], directories["right_frames"]
+        """Get source directories for upscaling (cropped VR frames from Step 6)."""
+        # Upscaling happens at Step 6.5, after VR assembly/cropping (Step 6)
+        if "left_cropped" in directories and "right_cropped" in directories:
+            return directories["left_cropped"], directories["right_cropped"]
         else:
             return None, None
 
     def _get_stereo_source_dirs(
         self, directories: dict[str, Path], settings: dict[str, Any]
     ) -> tuple[Path, Path] | None:
-        """Determine source directories for stereo frames (prioritizes upscaled frames)."""
-        # Priority: upscaled > distorted > original
+        """Determine source directories for final VR assembly (prioritizes upscaled)."""
+        # Priority: upscaled (Step 6.5) > cropped (Step 6) > distorted (Step 5) > original (Step 4)
         if settings.get("upscale_model") != "none" and "left_upscaled" in directories:
             left_upscaled = directories["left_upscaled"]
             right_upscaled = directories["right_upscaled"]
             if left_upscaled.exists() and right_upscaled.exists():
                 return left_upscaled, right_upscaled
 
-        if settings.get("apply_distortion") and "left_distorted" in directories:
+        if "left_cropped" in directories:
+            return directories["left_cropped"], directories["right_cropped"]
+        elif settings.get("apply_distortion") and "left_distorted" in directories:
             return directories["left_distorted"], directories["right_distorted"]
         elif "left_frames" in directories:
             return directories["left_frames"], directories["right_frames"]
