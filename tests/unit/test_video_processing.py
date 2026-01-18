@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
 
-from src.depth_surge_3d.utils.video_processing import (
+from src.depth_surge_3d.utils.imaging.video_processing import (
     _get_cv2,
     _create_intermediate_directories,
     _process_supersample_frame,
@@ -27,7 +27,9 @@ class TestGetCv2:
         with patch.dict("sys.modules", {"cv2": MagicMock()}):
             import cv2 as mock_cv2
 
-            with patch("src.depth_surge_3d.utils.video_processing._get_cv2", return_value=mock_cv2):
+            with patch(
+                "src.depth_surge_3d.utils.imaging.video_processing._get_cv2", return_value=mock_cv2
+            ):
                 result = _get_cv2()
                 assert result is not None
 
@@ -75,7 +77,7 @@ class TestCreateIntermediateDirectories:
 class TestProcessSupersampleFrame:
     """Test _process_supersample_frame function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_supersample_frame_success(self, mock_get_cv2):
         """Test successful super sampling."""
         mock_cv2 = MagicMock()
@@ -100,7 +102,7 @@ class TestProcessSupersampleFrame:
         mock_projector.apply_super_sampling.assert_called_once_with(mock_image, 3840, 2160)
         mock_cv2.imwrite.assert_called_once()
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_supersample_frame_no_image(self, mock_get_cv2):
         """Test handling of None image."""
         mock_cv2 = MagicMock()
@@ -120,7 +122,7 @@ class TestProcessSupersampleFrame:
 class TestProcessDepthFrame:
     """Test _process_depth_frame function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_depth_frame_with_supersampled(self, mock_get_cv2):
         """Test depth processing with supersampled frame."""
         mock_cv2 = MagicMock()
@@ -150,7 +152,7 @@ class TestProcessDepthFrame:
         mock_projector.generate_depth_map_from_array.assert_called_once_with(mock_image)
         mock_cv2.imwrite.assert_called_once()
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_depth_frame_without_supersampled(self, mock_get_cv2):
         """Test depth processing without supersampled frame."""
         mock_cv2 = MagicMock()
@@ -176,7 +178,7 @@ class TestProcessDepthFrame:
 class TestProcessStereoFrame:
     """Test _process_stereo_frame function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_stereo_frame_success(self, mock_get_cv2):
         """Test successful stereo pair creation."""
         mock_cv2 = MagicMock()
@@ -217,7 +219,7 @@ class TestProcessStereoFrame:
 class TestProcessFisheyeFrame:
     """Test _process_fisheye_frame function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_fisheye_frame_success(self, mock_get_cv2):
         """Test successful fisheye distortion."""
         mock_cv2 = MagicMock()
@@ -261,7 +263,7 @@ class TestProcessFisheyeFrame:
         # Should write both distorted frames
         assert mock_cv2.imwrite.call_count == 2
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_fisheye_frame_missing_frames(self, mock_get_cv2):
         """Test handling of missing stereo frames."""
         mock_cv2 = MagicMock()
@@ -290,7 +292,7 @@ class TestProcessFisheyeFrame:
 class TestProcessVRAssemblyFrame:
     """Test _process_vr_assembly_frame function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_vr_assembly_with_distortion(self, mock_get_cv2):
         """Test VR assembly with distorted frames."""
         mock_cv2 = MagicMock()
@@ -324,7 +326,7 @@ class TestProcessVRAssemblyFrame:
         mock_projector.create_vr_format.assert_called_once()
         mock_cv2.imwrite.assert_called_once()
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_vr_assembly_without_distortion(self, mock_get_cv2):
         """Test VR assembly without distortion."""
         mock_cv2 = MagicMock()
@@ -361,7 +363,7 @@ class TestProcessVRAssemblyFrame:
 class TestProcessSingleFrameComplete:
     """Test _process_single_frame_complete function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_single_frame_complete_with_distortion(self, mock_get_cv2):
         """Test complete frame processing with distortion."""
         mock_cv2 = MagicMock()
@@ -410,7 +412,7 @@ class TestProcessSingleFrameComplete:
         assert mock_projector.apply_fisheye_distortion.call_count == 2
         mock_projector.create_vr_format.assert_called_once()
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_single_frame_complete_without_distortion(self, mock_get_cv2):
         """Test complete frame processing without distortion."""
         mock_cv2 = MagicMock()
@@ -453,9 +455,9 @@ class TestProcessSingleFrameComplete:
 class TestProcessVideoSerial:
     """Test process_video_serial function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
-    @patch("src.depth_surge_3d.utils.video_processing._process_single_frame_complete")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_single_frame_complete")
     def test_process_video_serial_success(self, mock_process_frame, mock_get_cv2, mock_create_dirs):
         """Test successful serial video processing."""
         mock_cv2 = MagicMock()
@@ -499,8 +501,8 @@ class TestProcessVideoSerial:
         assert mock_process_frame.call_count == 2
         assert mock_cv2.imwrite.call_count == 2
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_video_serial_skip_existing(self, mock_get_cv2, mock_create_dirs):
         """Test serial processing skips existing frames."""
         mock_cv2 = MagicMock()
@@ -529,9 +531,9 @@ class TestProcessVideoSerial:
         # Should not process frame that already exists
         mock_cv2.imread.assert_not_called()
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
-    @patch("src.depth_surge_3d.utils.video_processing._process_single_frame_complete")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_single_frame_complete")
     def test_process_video_serial_none_image(self, mock_process, mock_get_cv2, mock_create_dirs):
         """Test serial processing handles None image (imread failure)."""
         mock_cv2 = MagicMock()
@@ -562,9 +564,9 @@ class TestProcessVideoSerial:
         # Should not process frame with None image
         mock_process.assert_not_called()
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
-    @patch("src.depth_surge_3d.utils.video_processing._process_single_frame_complete")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_single_frame_complete")
     def test_process_video_serial_exception_handling(
         self, mock_process, mock_get_cv2, mock_create_dirs
     ):
@@ -599,9 +601,9 @@ class TestProcessVideoSerial:
 
         assert result is True
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
-    @patch("src.depth_surge_3d.utils.video_processing._process_single_frame_complete")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_single_frame_complete")
     def test_process_video_serial_with_super_sampling(
         self, mock_process, mock_get_cv2, mock_create_dirs
     ):
@@ -658,11 +660,11 @@ class TestProcessVideoSerial:
 class TestProcessVideoBatch:
     """Test process_video_batch function."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
-    @patch("src.depth_surge_3d.utils.video_processing._process_depth_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_stereo_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_vr_assembly_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_depth_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_stereo_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_vr_assembly_frame")
     def test_process_video_batch_success(
         self,
         mock_vr_assembly,
@@ -696,12 +698,12 @@ class TestProcessVideoBatch:
         assert mock_stereo.call_count == 2
         assert mock_vr_assembly.call_count == 2
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
-    @patch("src.depth_surge_3d.utils.video_processing._process_depth_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_stereo_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_fisheye_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_vr_assembly_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_depth_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_stereo_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_fisheye_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_vr_assembly_frame")
     def test_process_video_batch_with_distortion(
         self,
         mock_vr_assembly,
@@ -733,13 +735,13 @@ class TestProcessVideoBatch:
         # Should include fisheye phase
         mock_fisheye.assert_called_once()
 
-    @patch("src.depth_surge_3d.utils.video_processing._create_intermediate_directories")
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
-    @patch("src.depth_surge_3d.utils.video_processing._process_supersample_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_depth_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_stereo_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_fisheye_frame")
-    @patch("src.depth_surge_3d.utils.video_processing._process_vr_assembly_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._create_intermediate_directories")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_supersample_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_depth_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_stereo_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_fisheye_frame")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._process_vr_assembly_frame")
     def test_process_video_batch_with_super_sampling(
         self,
         mock_vr_assembly,
@@ -787,7 +789,7 @@ class TestProcessVideoBatch:
 class TestProcessSingleFrameCompleteEdgeCases:
     """Test _process_single_frame_complete edge cases."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_single_frame_save_intermediates(self, mock_get_cv2):
         """Test saving intermediate outputs."""
         mock_cv2 = MagicMock()
@@ -836,7 +838,7 @@ class TestProcessSingleFrameCompleteEdgeCases:
         # Should save all intermediates
         assert mock_cv2.imwrite.call_count >= 4
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_single_frame_with_super_sampling(self, mock_get_cv2):
         """Test super sampling with intermediate save."""
         mock_cv2 = MagicMock()
@@ -894,7 +896,7 @@ class TestProcessSingleFrameCompleteEdgeCases:
 class TestProcessDepthFrameEdgeCases:
     """Test _process_depth_frame edge cases."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_depth_frame_none_image(self, mock_get_cv2):
         """Test depth processing with None image."""
         mock_cv2 = MagicMock()
@@ -912,7 +914,7 @@ class TestProcessDepthFrameEdgeCases:
 
         mock_projector.generate_depth_map_from_array.assert_not_called()
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_depth_frame_with_supersampled_missing(self, mock_get_cv2):
         """Test depth processing when supersampled file doesn't exist."""
         mock_cv2 = MagicMock()
@@ -944,7 +946,7 @@ class TestProcessDepthFrameEdgeCases:
 class TestProcessStereoFrameEdgeCases:
     """Test _process_stereo_frame edge cases."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_stereo_frame_none_image(self, mock_get_cv2):
         """Test stereo processing with None image."""
         mock_cv2 = MagicMock()
@@ -962,7 +964,7 @@ class TestProcessStereoFrameEdgeCases:
 
         mock_projector.create_stereo_pair_from_depth.assert_not_called()
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_stereo_frame_with_supersampled_exists(self, mock_get_cv2):
         """Test stereo processing when supersampled file exists."""
         mock_cv2 = MagicMock()
@@ -999,7 +1001,7 @@ class TestProcessStereoFrameEdgeCases:
 
         mock_projector.create_stereo_pair_from_depth.assert_called_once()
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_stereo_frame_with_supersampled_missing(self, mock_get_cv2):
         """Test stereo processing when supersampled file doesn't exist."""
         mock_cv2 = MagicMock()
@@ -1040,7 +1042,7 @@ class TestProcessStereoFrameEdgeCases:
 class TestProcessVRAssemblyEdgeCases:
     """Test _process_vr_assembly_frame edge cases."""
 
-    @patch("src.depth_surge_3d.utils.video_processing._get_cv2")
+    @patch("src.depth_surge_3d.utils.imaging.video_processing._get_cv2")
     def test_process_vr_assembly_none_images(self, mock_get_cv2):
         """Test VR assembly with None images."""
         mock_cv2 = MagicMock()

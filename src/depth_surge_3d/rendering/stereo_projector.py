@@ -13,19 +13,18 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..models.video_depth_estimator import create_video_depth_estimator
-from ..models.video_depth_estimator_da3 import create_video_depth_estimator_da3
-from ..utils.resolution import (
+from ..inference import create_video_depth_estimator, create_video_depth_estimator_da3
+from ..utils import (
     get_resolution_dimensions,
     calculate_vr_output_dimensions,
     validate_resolution_settings,
     auto_detect_resolution,
 )
-from ..processing.io_operations import (
+from ..io.operations import (
     validate_video_file,
     get_video_properties,
 )
-from ..processing.video_processor import VideoProcessor
+from ..processing import VideoProcessor
 from ..core.constants import DEFAULT_SETTINGS
 
 
@@ -42,6 +41,7 @@ class StereoProjector:
         device: str = "auto",
         metric: bool = False,
         depth_model_version: str = "v2",
+        temporal_window_overlap: int = 10,
     ):
         """
         Initialize StereoProjector.
@@ -51,6 +51,7 @@ class StereoProjector:
             device: Processing device ('auto', 'cuda', 'cpu')
             metric: Use metric depth model (true depth values)
             depth_model_version: Depth model version ('v2' or 'v3', default: 'v2')
+            temporal_window_overlap: Frame overlap for V2 temporal windows (default: 10)
         """
         self.depth_model_version = depth_model_version
 
@@ -60,7 +61,9 @@ class StereoProjector:
             self.depth_estimator = create_video_depth_estimator_da3(model_name, device, metric)
         else:
             # Use Video-Depth-Anything V2 (default)
-            self.depth_estimator = create_video_depth_estimator(model_path, device, metric)
+            self.depth_estimator = create_video_depth_estimator(
+                model_path, device, metric, temporal_window_overlap
+            )
 
         self._model_loaded = False
 
@@ -200,7 +203,7 @@ class StereoProjector:
             depth_map = depth_maps[0]
 
             # Process using simplified pipeline
-            from ..utils.image_processing import (
+            from ..utils import (
                 resize_image,
                 depth_to_disparity,
                 create_shifted_image,
@@ -377,7 +380,7 @@ class StereoProjector:
         Returns:
             List of extracted frame file paths
         """
-        from ..processing.io_operations import get_video_properties
+        from ..io.operations import get_video_properties
 
         # Get video properties
         video_props = get_video_properties(video_path)
@@ -487,7 +490,7 @@ class StereoProjector:
         Returns:
             Tuple of (width, height) for VR output
         """
-        from ..utils.resolution import (
+        from ..utils import (
             get_resolution_dimensions,
             calculate_vr_output_dimensions,
         )

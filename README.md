@@ -14,6 +14,7 @@ Depth Surge 3D transforms flat videos into stereoscopic 3D for VR headsets using
 - **Dual Depth Models**:
   - **Depth Anything V3** (default): 50% lower VRAM, faster processing, optimized for modern GPUs
   - **Video-Depth-Anything V2**: Superior temporal consistency with 32-frame sliding windows
+- **AI Upscaling**: Optional Real-ESRGAN enhancement (2x/4x) for higher output resolution
 - **CUDA Hardware Acceleration**: NVENC H.265 encoding and GPU-accelerated frame decoding
 - **Configurable Depth Quality**: Adjustable depth map resolution (518px to 4K) for quality vs. speed
 - **Multiple VR Formats**: Side-by-side and over-under stereoscopic formats
@@ -53,6 +54,19 @@ python depth_surge_3d.py input_video.mp4
 
 # Process specific time range with custom settings
 python depth_surge_3d.py input_video.mp4 -s 01:30 -e 03:45 -f over_under --resolution 4k
+```
+
+**UV Command Line**
+
+In WSL required to export a UV variable
+
+```bash
+export UV_LINK_MODE=copy
+```
+
+```bash
+# Basic usage
+uv run python depth_surge_3d.py input_video.mp4
 ```
 
 **Quick Start Script:**

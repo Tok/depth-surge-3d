@@ -172,6 +172,13 @@ class TestAnalyzeBatchDirectory:
 class TestGetCv2:
     """Test _get_cv2 function."""
 
+    def test_get_cv2_success(self):
+        """Test successful cv2 import."""
+        import cv2
+
+        result = _get_cv2()
+        assert result is cv2
+
     def test_get_cv2_import_error(self):
         """Test cv2 import error handling."""
         with patch.dict("sys.modules", {"cv2": None}):

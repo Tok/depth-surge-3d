@@ -1,209 +1,193 @@
 # Depth Surge 3D - Development Guide
 
-## Project Overview
-2D to 3D VR video converter using AI depth estimation (Depth-Anything V3 or Video-Depth-Anything V2) with FFmpeg processing for stereo pair generation.
+**Version**: 0.9.0
+**Purpose**: 2D to 3D VR video converter using AI depth estimation (Depth-Anything V3/V2)
 
-**Current Version**: 0.8.1
+---
 
-## Quick Reference
+## Quick Start
 
-### Tech Stack
-- **Backend**: Flask + SocketIO (threading) for real-time progress
-- **AI Models**: Depth-Anything V3 (default, ~50% less VRAM) or Video-Depth-Anything V2 (temporal consistency)
-- **Video**: FFmpeg with CUDA acceleration (NVENC encoding, hardware decoding)
-- **UI**: Dark-themed Bootstrap 5 with live previews
-
-### Development Commands
 ```bash
 ./setup.sh          # Initial setup
 ./run_ui.sh         # Launch web UI (http://localhost:5000)
 ./test.sh           # Verify installation
 
-# CLI examples
+# CLI usage
 python depth_surge_3d.py input.mp4
-python depth_surge_3d.py input.mp4 -s 1:00 -e 2:00 --resolution 1080p
+python depth_surge_3d.py input.mp4 --vr-resolution 16x9-1080p -s 1:00 -e 2:00
 ```
 
-## Code Quality Standards (REQUIRED)
+---
 
-**See [CODING_GUIDE.md](CODING_GUIDE.md) for comprehensive coding standards including:**
-- Functional programming principles
-- Type hints, documentation, and complexity limits
-- Testing requirements and best practices
-- Refactoring guidelines
+## Code Quality (CRITICAL - ALWAYS DO THIS BEFORE COMMIT)
 
-**Quick Pre-Commit Checklist:**
+**MANDATORY pre-commit quality gate:**
+
 ```bash
-black src/ tests/              # Format code (required, no exceptions)
-flake8 src/ tests/             # Lint code (must pass)
-pytest tests/unit -v           # Run unit tests
+# Run ALL checks at once (RECOMMENDED - mirrors CI exactly)
+./scripts/pre-commit-checks.sh          # Linux/macOS
+# OR
+.\scripts\pre-commit-checks.ps1         # Windows
+
+# This runs:
+# 1. Black formatting check (--check mode)
+# 2. Flake8 linting (must have 0 errors)
+# 3. Unit tests with coverage (must be ≥ 85%)
 ```
 
-**Current Coverage: 23% → Target: 70%+**
+**Alternative: Run checks individually**
 
-### Git Workflow
 ```bash
-git status
-git add -A
-git commit -m "type: brief description
+# 1. Format code (required, no exceptions)
+black src/ tests/ app.py
 
-Detailed explanation if needed.
+# 2. Lint code (must pass with 0 errors)
+flake8 src/ tests/ app.py --count --show-source --statistics
 
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+# 3. Run unit tests (MUST pass, no exceptions)
+./scripts/run-unit-tests.sh              # Linux/macOS (includes coverage)
+# OR
+.\scripts\run-unit-tests.ps1             # Windows (includes coverage)
 ```
 
-## Key Features
+**DO NOT commit if pre-commit checks fail. No exceptions.**
 
-### Depth Models
-- **V3** (default): Lower VRAM, faster, frame-by-frame processing
-- **V2**: Better temporal consistency, 32-frame sliding windows, higher VRAM
+**Complete coding standards**: See [CODING_GUIDE.md](CODING_GUIDE.md)
+- Functional programming patterns
+- Type hints (modern Python 3.10+ syntax: `dict`, `list`, `X | None`)
+- Max complexity: 10 (enforced by flake8)
+- Pure functions, immutability, composition
+- Current coverage: 92% (minimum: 85% enforced, goal: 90%+)
 
-Choose V3 for: Limited VRAM (6-8GB), 4K videos, faster processing
-Choose V2 for: Maximum temporal smoothness, ≥12GB VRAM
+**Git Commit Format:**
+```
+type: brief description
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+```
+
+---
+
+## Tech Stack
+
+- **Backend**: Flask + SocketIO (threading)
+- **AI Models**: Depth-Anything V3 (default, lower VRAM) / Video-Depth-Anything V2 (temporal consistency)
+- **Video**: FFmpeg with CUDA acceleration (NVENC encoding, hardware decoding)
+- **UI**: Bootstrap 5 dark theme with real-time progress
+
+---
+
+## Architecture Essentials
 
 ### Processing Pipeline (7 Steps)
 1. Frame Extraction → 2. Depth Maps → 3. Load Frames → 4. Stereo Pairs → 5. Fisheye Distortion → 6. VR Assembly → 7. Audio Integration
 
 Each step has resume capability (skips if intermediate files exist).
 
-### Hardware Acceleration
-- **CUDA frame decoding**: `-hwaccel cuda` for faster frame extraction
-- **NVENC encoding**: H.265 hardware encoding (~10x faster, requires NVIDIA GPU)
-- **Auto-fallback**: Gracefully falls back to software encoding if NVENC unavailable
-
-### UI Settings (Web Interface)
-- Depth Model: V3 (default) vs V2
-- Depth Resolution: Auto (matches source) or manual (518px-4K)
-- Video Encoder: Auto (tries NVENC) / NVENC / libx264 / libx265
-- Model Size: Small (4GB) / Base (8GB) / Large (12GB)
-- VR Format: Side-by-side / Over-under
-- Time Range: Start/end timestamps
-
-## Architecture
-
 ### Output Structure
 ```
-output/
-└── timestamp_videoname/
-    ├── original_video.mp4
-    ├── original_audio.flac
-    ├── frames/              # Extracted frames
-    ├── vr_frames/          # Final VR frames
-    ├── settings.json       # Processing metadata
-    └── videoname_3D_side_by_side.mp4
+output/videoname_timestamp/
+├── 00_original_frames/
+├── 02_depth_maps/
+├── 04_left_frames/ + 04_right_frames/
+├── 99_vr_frames/
+├── settings.json
+└── videoname_3D_side_by_side.mp4
 ```
 
-### Depth Resolution Logic
-**IMPORTANT**: Depth maps should NEVER exceed source frame resolution.
-- 4K video → max 2160px depth
-- 1080p video → max 1080px depth
-- 720p video → max 720px depth
-- Auto mode: matches actual frame dimensions
+### Depth Models
+- **V3** (default): Lower VRAM (~50%), faster, frame-by-frame
+- **V2**: Better temporal consistency, 32-frame windows, higher VRAM
 
 ### Memory Management
-- DA3: Processes in small chunks (4-24 frames) based on resolution
+- Smart VRAM-based chunk sizing (auto-adjusts based on available GPU memory)
+- V3: 4-24 frames/chunk based on resolution
 - V2: 32-frame sliding windows with 10-frame overlap
-- Chunk sizes auto-adjust based on VRAM availability
 
-## Common Issues
+---
 
-### FFmpeg Errors
-- **"Unknown decoder hevc_nvenc"**: Encoder used as decoder (check `-c:v` placement)
-- **NVENC not available**: Auto-falls back to libx264, no action needed
-- **Frame extraction fails**: Check CUDA drivers, falls back to CPU decode
+## Important Rules
 
-### VRAM Issues
-- Use smaller model: Base instead of Large
-- Lower depth resolution: 720p instead of 1080p
-- Use V3 instead of V2: ~50% less VRAM
+1. **Depth resolution**: NEVER exceed source frame resolution
+2. **Type hints**: Use modern syntax (`dict` not `Dict`, `X | None` not `Optional[X]`)
+3. **Complexity**: All functions ≤ 10 McCabe complexity (enforced)
+4. **Black + Flake8**: ALWAYS run before commit (no exceptions)
+5. **Testing**: Write unit tests for all pure functions in `utils/`
 
-### Quality Issues
-- Low depth quality: Check depth resolution setting (should match source)
-- Temporal jitter: Use V2 for better temporal consistency
-- Artifacts: Increase depth resolution if VRAM allows
+---
 
-## Testing
+## Common Commands
 
-### Unit Tests
 ```bash
-pytest tests/unit -v --cov=src/depth_surge_3d
+# Pre-commit quality gate (RECOMMENDED - run before every commit)
+./scripts/pre-commit-checks.sh            # Linux/macOS (all checks at once)
+.\scripts\pre-commit-checks.ps1           # Windows (all checks at once)
+
+# Development
+black src/ tests/ app.py                   # Format code
+flake8 src/ tests/ app.py                  # Lint code
+./scripts/run-unit-tests.sh               # Unit tests with coverage (Linux/macOS)
+.\scripts\run-unit-tests.ps1              # Unit tests with coverage (Windows)
+pytest tests/integration -v -m integration # Integration tests (requires GPU)
+
+# CI checks (what runs in GitHub Actions)
+black --check src/ tests/ app.py           # Check formatting
+flake8 src/ tests/ app.py --count --show-source --statistics
+pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=xml --cov-fail-under=85
+
+# Debugging
+radon cc src/depth_surge_3d/ -a -nc        # Find complex functions (>10)
+vulture src/depth_surge_3d/                # Find dead code
+mypy src/depth_surge_3d/ --ignore-missing-imports
 ```
 
-### Integration Tests
-```bash
-pytest tests/integration -v -m integration
-```
-
-### CI/CD
-- Single Ubuntu VM with Python 3.11
-- Runs: black check, flake8, mypy (continue-on-error), unit + integration tests
-- Coverage uploaded to Codecov
-
-## Performance
-
-### Typical Processing Times (RTX 4070 Ti SUPER)
-- **V3**: ~2-3 seconds/frame
-- **V2**: ~3-4 seconds/frame
-- **1-minute 1080p clip @ 30fps**: ~2-3 hours with V3
-
-### Optimization Tips
-1. Use V3 for better speed
-2. Enable NVENC if available
-3. Lower depth resolution for speed over quality
-4. Process shorter time ranges for testing
+---
 
 ## Documentation Structure
 
 - **README.md**: Quick start, features overview
-- **CODING_GUIDE.md**: Coding standards and refactoring guide
-- **CLAUDE.md**: Development guide (this file)
-- **docs/INSTALLATION.md**: Detailed setup
+- **CODING_GUIDE.md**: Coding standards and refactoring guide (comprehensive)
+- **CLAUDE.md**: Development guide (this file - keep concise!)
+- **docs/INSTALLATION.md**: Detailed setup instructions
 - **docs/USAGE.md**: CLI and web UI examples
 - **docs/PARAMETERS.md**: All options explained
-- **docs/TROUBLESHOOTING.md**: Common issues
+- **docs/TROUBLESHOOTING.md**: Common issues and solutions
 - **docs/ARCHITECTURE.md**: Technical deep dive
-- **docs/CONTRIBUTING.md**: Contribution workflow and CI setup
-
-## Important Notes
-
-1. **Version Bump**: Update version in CLAUDE.md and package files when releasing
-2. **Breaking Changes**: Document in CHANGELOG.md and migration guide
-3. **Dependencies**: Lock versions in requirements.txt, test before merging
-4. **VRAM Limits**: Test on 8GB GPU before recommending settings
-5. **Cross-platform**: Test on Windows, macOS, Linux if changing system calls
-
-## Recent Changes (v0.8.1)
-
-### Quality & Stability Improvements
-- **Modernized type hints**: Migrated to PEP 585 built-in generics (`dict`, `list`, `tuple`) and PEP 604 union syntax (`X | None`)
-- **Fixed UI stuck at 100%**: Added socketio.sleep() to ensure completion messages are sent before thread termination
-- **Fixed video file locks**: Added try/finally blocks to ensure cv2.VideoCapture.release() is always called
-- **Suppressed DA3 library warnings**: Fully suppressed gsplat dependency warnings using stdout/stderr redirection
-- **Reduced code complexity**: Refactored load_model() method to pass flake8 C901 complexity checks
-
-### Testing & Coverage
-- **Coverage: 76% → 89%** (exceeded 85% target by 4 percentage points!)
-- Added comprehensive video_processor tests (25 tests, 51% coverage on main orchestrator)
-- Added io_operations edge case tests (100% coverage)
-- All 541 tests passing with 89% overall coverage
-
-### Code Quality
-- All type hints now use modern Python 3.10+ syntax
-- Fixed invalid type defaults in public APIs
-- Flake8 and black compliant across entire codebase
-
-## Previous Release (v0.8.0)
-
-- Added Depth-Anything V3 support (default)
-- CUDA hardware acceleration (NVENC + hardware decoding)
-- Configurable depth map resolution
-- Video encoder selection (Auto/NVENC/Software)
-- Favicon with distorted grid design
-- Fixed depth resolution capping at source frame size
-- Fixed FFmpeg encoder bug (hevc_nvenc as decoder)
-- Fixed time range selection with CUDA
-- Comprehensive unit tests and CI/CD
+- **docs/CONTRIBUTING.md**: Contribution workflow
 
 ---
 
-**For detailed historical information, see git history or archived CLAUDE.md versions.**
+## Experimental Branches
+
+### ⚠️ `experimental/optical-flow-parked` - DO NOT MERGE
+Complete optical flow implementation (2000+ lines, 35 passing tests) that is **intentionally parked** due to fundamental theoretical limitations. V2 already provides temporal consistency. Kept for reference only.
+
+---
+
+## Performance Benchmarks (RTX 4070 Ti SUPER)
+
+- **V3**: ~2-3 seconds/frame
+- **V2**: ~3-4 seconds/frame
+- **1-minute 1080p @ 30fps**: ~2-3 hours with V3
+
+---
+
+## CI/CD
+
+- **Platform**: Ubuntu (GitHub Actions)
+- **Python**: 3.11
+- **Jobs**: Code Quality (black, flake8), Tests (unit + integration), Coverage (Codecov)
+- **Required**: All flake8 checks must pass (0 errors)
+
+---
+
+## Keeping This File Compact
+
+**IMPORTANT**: Keep CLAUDE.md concise (100-150 lines target).
+
+- Remove historical information (use git history instead)
+- Focus on essential commands and current architecture
+- Point to comprehensive docs (CODING_GUIDE.md, etc.) instead of duplicating
+- Update when architecture/workflow changes
+- Delete outdated sections immediately
+- Keep code quality reminders prominent

@@ -9,7 +9,7 @@ Extracted from app.py to keep it under 500 LOC
 import numpy as np
 from pathlib import Path
 from collections.abc import Callable
-from ..core.constants import INTERMEDIATE_DIRS
+from ...core.constants import INTERMEDIATE_DIRS
 
 
 # Lazy import cv2 to avoid blocking module loading when cv2 is not available

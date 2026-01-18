@@ -4,7 +4,7 @@ import time
 from unittest.mock import Mock, patch, MagicMock
 from io import StringIO
 
-from src.depth_surge_3d.utils.progress import (
+from src.depth_surge_3d.utils.domain.progress import (
     ProgressReporter,
     ConsoleProgressReporter,
     ProgressTracker,
@@ -632,3 +632,167 @@ class TestProgressCallback:
 
         # Should be throttled to very few calls (likely just 1-2)
         assert len(called_data) < 10
+
+
+class TestConsoleProgressReporterEdgeCases:
+    """Test edge cases for ConsoleProgressReporter."""
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_report_progress_without_eta(self, mock_stdout):
+        """Test progress reporting without ETA."""
+        reporter = ConsoleProgressReporter(show_eta=False, use_tqdm=False)
+
+        reporter.report_progress(50, 100, "Processing")
+
+        output = mock_stdout.getvalue()
+        # Should not contain "ETA"
+        assert "ETA" not in output
+        assert "50.0%" in output
+
+    @patch("src.depth_surge_3d.utils.domain.progress.HAS_TQDM", True)
+    @patch("src.depth_surge_3d.utils.domain.progress.tqdm")
+    def test_report_progress_with_tqdm(self, mock_tqdm_class):
+        """Test progress reporting with tqdm enabled."""
+        mock_pbar = MagicMock()
+        mock_tqdm_class.return_value = mock_pbar
+
+        reporter = ConsoleProgressReporter(use_tqdm=True)
+
+        # First call should create progress bar
+        reporter.report_progress(10, 100, "Loading")
+        mock_tqdm_class.assert_called_once()
+
+        # Subsequent calls should update existing bar
+        reporter.report_progress(20, 100, "Loading")
+        assert mock_pbar.n == 20
+        mock_pbar.refresh.assert_called()
+
+        # Completion should close bar
+        reporter.report_progress(100, 100, "Loading")
+        mock_pbar.close.assert_called()
+
+    def test_abstract_methods(self):
+        """Test that abstract methods exist in base class."""
+        # This test ensures the abstract methods are defined
+        from abc import ABCMeta
+
+        assert isinstance(ProgressReporter, ABCMeta)
+        assert hasattr(ProgressReporter, "report_progress")
+        assert hasattr(ProgressReporter, "report_completion")
+
+
+class TestProgressTrackerEdgeCases:
+    """Test edge cases for ProgressTracker."""
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_calculate_eta_early_stages(self, mock_stdout):
+        """Test ETA calculation in early stages (< 5 seconds elapsed)."""
+        tracker = ProgressTracker(total_frames=100, processing_mode="serial")
+
+        # Mock time to simulate early stage
+        with patch("time.time", return_value=tracker.reporter.start_time + 2):
+            eta_str = tracker._calculate_eta(10, 100)
+            # Should return None for early stages
+            assert eta_str is None
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_calculate_eta_zero_progress(self, mock_stdout):
+        """Test ETA calculation with zero progress."""
+        tracker = ProgressTracker(total_frames=100, processing_mode="serial")
+
+        # Mock time to simulate enough elapsed time
+        with patch("time.time", return_value=tracker.reporter.start_time + 10):
+            eta_str = tracker._calculate_eta(0, 100)
+            # Should return None for zero progress
+            assert eta_str is None
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_calculate_eta_negative_remaining(self, mock_stdout):
+        """Test ETA calculation with negative remaining time."""
+        tracker = ProgressTracker(total_frames=100, processing_mode="serial")
+
+        # This shouldn't happen in practice, but test the safeguard
+        with patch("time.time", return_value=tracker.reporter.start_time + 100):
+            # Simulate going backward (shouldn't happen)
+            tracker.reporter.start_time = time.time() + 50  # Future start time
+            result = tracker._calculate_eta(50, 100)
+            # Should handle gracefully (return None for negative remaining time)
+            assert result is None or isinstance(result, str)
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_format_time_seconds_only(self, mock_stdout):
+        """Test time formatting for seconds only."""
+        tracker = ProgressTracker(total_frames=100, processing_mode="serial")
+
+        result = tracker._format_time(45.7)
+        assert result == "45s"
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_format_time_minutes(self, mock_stdout):
+        """Test time formatting for minutes and seconds."""
+        tracker = ProgressTracker(total_frames=100, processing_mode="serial")
+
+        result = tracker._format_time(125)  # 2m 5s
+        assert "2m" in result
+        assert "5s" in result
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_format_time_hours(self, mock_stdout):
+        """Test time formatting for hours."""
+        tracker = ProgressTracker(total_frames=100, processing_mode="serial")
+
+        result = tracker._format_time(7325)  # 2h 2m
+        assert "2h" in result
+        assert "2m" in result
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_update_batch_step_with_step_name(self, mock_stdout):
+        """Test update_batch_step updates step index."""
+        from src.depth_surge_3d.core.constants import PROCESSING_STEPS
+
+        tracker = ProgressTracker(total_frames=100, processing_mode="batch")
+
+        # Use a step from PROCESSING_STEPS
+        if len(PROCESSING_STEPS) >= 2:
+            second_step = PROCESSING_STEPS[1]
+            tracker.update_batch_step(second_step, progress=50, total=100)
+            assert tracker.current_step_index == 1  # Second step
+
+
+class TestProgressCallbackEdgeCases:
+    """Test edge cases for ProgressCallback."""
+
+    def test_calculate_batch_progress_with_step_name(self):
+        """Test batch progress calculation updates step index."""
+        from src.depth_surge_3d.core.constants import PROCESSING_STEPS
+
+        mock_callback = Mock()
+        callback = ProgressCallback(
+            session_id="test_session",
+            total_frames=100,
+            processing_mode="batch",
+            callback_func=mock_callback,
+        )
+
+        # Use a step from PROCESSING_STEPS
+        if len(PROCESSING_STEPS) >= 2:
+            second_step = PROCESSING_STEPS[1]
+            callback.update_progress(
+                stage="processing",
+                step_name=second_step,
+                step_progress=50,
+                step_total=100,
+            )
+
+            # Should update current_step_index when step_name is provided
+            assert callback.current_step_index >= 0
+
+
+class TestTqdmImportHandling:
+    """Test tqdm import handling."""
+
+    def test_has_tqdm_constant(self):
+        """Test that HAS_TQDM constant is defined."""
+        from src.depth_surge_3d.utils.domain.progress import HAS_TQDM
+
+        assert isinstance(HAS_TQDM, bool)

@@ -178,11 +178,21 @@ def create_output_directories(base_path: Path, keep_intermediates: bool = True) 
     # Always create base directory
     base_path.mkdir(parents=True, exist_ok=True)
 
-    if keep_intermediates:
-        for dir_name, dir_path in INTERMEDIATE_DIRS.items():
-            full_path = base_path / dir_path
+    # Always create directories needed for pipeline steps (cropped frames for upscaling)
+    required_dirs = ["vr_frames", "left_cropped", "right_cropped"]
+    for dir_name in required_dirs:
+        if dir_name in INTERMEDIATE_DIRS:
+            full_path = base_path / INTERMEDIATE_DIRS[dir_name]
             full_path.mkdir(exist_ok=True)
             directories[dir_name] = full_path
+
+    # Create additional intermediate directories if requested
+    if keep_intermediates:
+        for dir_name, dir_path in INTERMEDIATE_DIRS.items():
+            if dir_name not in required_dirs:  # Skip already created dirs
+                full_path = base_path / dir_path
+                full_path.mkdir(exist_ok=True)
+                directories[dir_name] = full_path
 
     return directories
 
@@ -417,7 +427,7 @@ def save_processing_settings(
             "source_video_name": Path(source_video_path).name,
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "created_timestamp": time.time(),
-            "project_version": "0.8.1",
+            "project_version": "0.9.0",
             "processing_status": "in_progress",
         },
         "video_properties": video_properties,

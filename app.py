@@ -14,22 +14,24 @@ import platform
 import argparse
 import sys
 import signal
+import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 import cv2
+import numpy as np
 
 # Set PyTorch memory allocator config BEFORE importing torch
 # This helps prevent memory fragmentation on GPU
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # Suppress warnings from dependencies
-import warnings
+import warnings  # noqa: E402
 
 warnings.filterwarnings("ignore", category=SyntaxWarning)  # moviepy old regex patterns
 
 # Import our constants and utilities
-from src.depth_surge_3d.core.constants import (
+from src.depth_surge_3d.core.constants import (  # noqa: E402
     INTERMEDIATE_DIRS,
     MODEL_PATHS,
     MODEL_PATHS_METRIC,
@@ -47,6 +49,8 @@ from src.depth_surge_3d.core.constants import (
     PROGRESS_UPDATE_INTERVAL,
     PROGRESS_DECIMAL_PLACES,
     PROGRESS_STEP_WEIGHTS,
+    PREVIEW_UPDATE_INTERVAL,
+    PREVIEW_DOWNSCALE_WIDTH,
     FFMPEG_OVERWRITE_FLAG,
     FFMPEG_CRF_HIGH_QUALITY,
     FFMPEG_CRF_MEDIUM_QUALITY,
@@ -59,18 +63,18 @@ from src.depth_surge_3d.core.constants import (
     DEFAULT_SERVER_HOST,
     SIGNAL_SHUTDOWN_TIMEOUT,
 )
-from src.depth_surge_3d.utils.console import warning as console_warning
+from src.depth_surge_3d.utils.system.console import warning as console_warning  # noqa: E402
 
-from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO
+from flask import Flask, render_template, request, jsonify  # noqa: E402
+from flask_socketio import SocketIO  # noqa: E402
 
 # NOTE: torch is imported later (line ~960) to avoid CUDA initialization issues
 
 # Add src to path for package imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from depth_surge_3d.core.stereo_projector import create_stereo_projector
-from depth_surge_3d.processing.video_processor import VideoProcessor
+from depth_surge_3d.rendering import create_stereo_projector  # noqa: E402
+from depth_surge_3d.processing import VideoProcessor  # noqa: E402
 
 # Global flags and state
 VERBOSE = False
@@ -86,7 +90,7 @@ def vprint(*args: Any, **kwargs: Any) -> None:
 
 def cleanup_processes() -> None:
     """Clean up any active processing threads or subprocesses"""
-    global ACTIVE_PROCESSES, SHUTDOWN_FLAG
+    global SHUTDOWN_FLAG
 
     SHUTDOWN_FLAG = True
     vprint("Cleaning up active processes...")
@@ -94,7 +98,7 @@ def cleanup_processes() -> None:
     # Kill any ffmpeg processes related to this app
     try:
         subprocess.run(["pkill", "-f", "ffmpeg.*depth-surge"], check=False, capture_output=True)
-    except:
+    except Exception:
         pass
 
     # Clean up any tracked processes
@@ -104,7 +108,7 @@ def cleanup_processes() -> None:
                 proc.terminate()
             elif hasattr(proc, "kill"):
                 proc.kill()
-        except:
+        except Exception:
             pass
 
     ACTIVE_PROCESSES.clear()
@@ -113,7 +117,6 @@ def cleanup_processes() -> None:
 
 def signal_handler(signum: int, frame: Any) -> None:
     """Handle shutdown signals"""
-    global current_processing
     print(f"\nReceived signal {signum}, shutting down gracefully...")
 
     # Stop any active processing
@@ -131,7 +134,7 @@ def signal_handler(signum: int, frame: Any) -> None:
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "depth-surge-3d-secret"
-app.config["OUTPUT_FOLDER"] = "output"
+app.config["OUTPUT_FOLDER"] = str(Path("output").resolve())
 # Use threading async_mode and disable ping timeout for long-running tasks
 socketio = SocketIO(
     app,
@@ -199,6 +202,29 @@ def get_video_info(video_path: str | Path) -> dict[str, Any] | None:
         cap.release()
 
 
+def find_source_video(directory: Path) -> Path | None:
+    """
+    Find the source video file in an output directory.
+
+    Looks for video files excluding processed outputs (those with _3D_ in name).
+
+    Args:
+        directory: Directory to search
+
+    Returns:
+        Path to source video, or None if not found
+    """
+    video_extensions = [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]
+
+    for ext in video_extensions:
+        for video_file in directory.glob(f"*{ext}"):
+            # Skip processed output files (they contain _3D_)
+            if "_3D_" not in video_file.name:
+                return video_file
+
+    return None
+
+
 def get_system_info() -> dict[str, Any]:
     """Get system information including GPU details"""
     import torch  # Import here to avoid early CUDA initialization
@@ -235,7 +261,14 @@ def get_system_info() -> dict[str, Any]:
 class ProgressCallback:
     """Enhanced callback class to track processing progress for both serial and batch modes"""
 
-    def __init__(self, session_id: str, total_frames: int, processing_mode: str = "serial") -> None:
+    def __init__(
+        self,
+        session_id: str,
+        total_frames: int,
+        processing_mode: str = "serial",
+        enable_live_preview: bool = True,
+        preview_update_interval: float = PREVIEW_UPDATE_INTERVAL,
+    ) -> None:
         self.session_id = session_id
         self.total_frames = total_frames
         self.processing_mode = processing_mode
@@ -244,26 +277,287 @@ class ProgressCallback:
         self.current_phase = "extraction"  # extraction, processing, video
         self.step_start_times = {}  # Track start time for each step
         self.current_step_name = None
+        self.start_time = time.time()  # For ETA calculation
+        self.step_frame_times = []  # Track recent frame times for current step
+        self.step_start_progress = 0  # Track progress when step started
+
+        # Preview tracking
+        self.enable_live_preview = enable_live_preview
+        self.last_preview_time = 0
+        self.preview_interval = preview_update_interval
+        self.preview_downscale_width = PREVIEW_DOWNSCALE_WIDTH
 
         # Step tracking (used for all modes)
         # Note: These must match the step names sent from video_processor.py
         self.steps = [
             "Frame Extraction",  # Step 1: FFmpeg extracts frames
             "Depth Map Generation",  # Step 2: AI generates depth maps
-            "Frame Loading",  # Step 3: Load frames for stereo
-            "Stereo Pair Creation",  # Step 4: Create L/R stereo pairs
-            "Fisheye Distortion",  # Step 5: Apply distortion
-            "Final Processing",  # Step 6: Create VR frames
-            "Video Creation",  # Step 7: FFmpeg creates video
+            "Stereo Pair Creation",  # Step 3: Create L/R stereo pairs (includes frame loading)
+            "Fisheye Distortion",  # Step 4: Apply distortion (optional)
+            "Crop Frames",  # Step 5: Crop frames for VR
+            "AI Upscaling",  # Step 6: AI upscaling (optional)
+            "VR Assembly",  # Step 7: Assemble final VR frames
+            "Video Creation",  # Step 8: FFmpeg creates video
         ]
         # Weighted progress based on actual timing measurements
-        # [1%, 17%, 1%, 31%, 38%, 6%, 7%] = 100%
+        # [2%, 35%, 20%, 8%, 2%, 18%, 8%, 7%] = 100%
         self.step_weights = PROGRESS_STEP_WEIGHTS
         self.current_step_index = 0
         self.step_progress = 0
         self.step_total = 0
 
-    def update_progress(
+    def send_preview_frame(
+        self,
+        frame_path: Path,
+        frame_type: str,
+        frame_number: int,
+    ) -> None:
+        """
+        Send preview frame via websocket.
+
+        Args:
+            frame_path: Path to the frame image file
+            frame_type: Type of frame ("depth_map", "stereo_left", "stereo_right", "vr_frame")
+            frame_number: Frame number being processed
+        """
+        # Check if preview is enabled
+        if not self.enable_live_preview:
+            return
+
+        current_time = time.time()
+
+        # Throttle preview updates
+        if current_time - self.last_preview_time < self.preview_interval:
+            return
+
+        try:
+            # Read frame
+            frame = cv2.imread(str(frame_path))
+            if frame is None:
+                vprint(f"Preview: Failed to read frame {frame_path}")
+                return
+
+            # Validate dimensions
+            height, width = frame.shape[:2]
+            if width <= 0 or height <= 0:
+                vprint(f"Preview: Invalid dimensions {width}x{height} for {frame_path}")
+                return
+
+            # Cap input size to prevent excessive processing
+            MAX_INPUT_DIM = 8192  # Reject frames larger than 8K
+            if width > MAX_INPUT_DIM or height > MAX_INPUT_DIM:
+                vprint(
+                    f"Preview: Frame too large ({width}x{height}), "
+                    f"exceeds max {MAX_INPUT_DIM}px"
+                )
+                return
+
+            # Downscale for transmission
+            scale = self.preview_downscale_width / width
+            new_width = self.preview_downscale_width
+            new_height = int(height * scale)
+            frame_small = cv2.resize(frame, (new_width, new_height))
+
+            # Encode to base64
+            _, buffer = cv2.imencode(".png", frame_small)
+            img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+            # Cap base64 payload size
+            MAX_PAYLOAD_KB = 500
+            payload_size_kb = len(img_base64) / 1024
+            if payload_size_kb > MAX_PAYLOAD_KB:
+                vprint(
+                    f"Preview: Payload too large ({payload_size_kb:.1f}KB), "
+                    f"skipping {frame_type} frame {frame_number}"
+                )
+                return
+
+            # Send via socketio
+            preview_data = {
+                "frame_type": frame_type,
+                "frame_number": frame_number,
+                "image_data": f"data:image/png;base64,{img_base64}",
+                "dimensions": {"width": new_width, "height": new_height},
+            }
+
+            socketio.emit("frame_preview", preview_data, room=self.session_id)
+
+            self.last_preview_time = current_time
+
+        except Exception as e:
+            # Log error but don't interrupt processing
+            vprint(
+                f"Preview: Error sending {frame_type} frame {frame_number}: "
+                f"{type(e).__name__}: {e}"
+            )
+
+    def send_preview_frame_from_array(
+        self,
+        frame_array: np.ndarray,
+        frame_type: str,
+        frame_number: int,
+    ) -> None:
+        """
+        Send preview frame directly from numpy array (no disk I/O).
+
+        Args:
+            frame_array: Frame as numpy array (BGR format)
+            frame_type: Type of frame ("depth_map", "stereo_left", "upscaled_left", etc)
+            frame_number: Frame number being processed
+        """
+        # Check if preview is enabled
+        if not self.enable_live_preview:
+            return
+
+        current_time = time.time()
+
+        # Throttle preview updates
+        if current_time - self.last_preview_time < self.preview_interval:
+            return
+
+        try:
+            # Validate dimensions
+            height, width = frame_array.shape[:2]
+            if width <= 0 or height <= 0:
+                vprint(f"Preview: Invalid dimensions {width}x{height}")
+                return
+
+            # Cap input size
+            MAX_INPUT_DIM = 8192
+            if width > MAX_INPUT_DIM or height > MAX_INPUT_DIM:
+                vprint(
+                    f"Preview: Frame too large ({width}x{height}), "
+                    f"exceeds max {MAX_INPUT_DIM}px"
+                )
+                return
+
+            # Downscale for transmission
+            scale = self.preview_downscale_width / width
+            new_width = self.preview_downscale_width
+            new_height = int(height * scale)
+            frame_small = cv2.resize(frame_array, (new_width, new_height))
+
+            # Encode to base64
+            _, buffer = cv2.imencode(".png", frame_small)
+            img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+            # Cap base64 payload size
+            MAX_PAYLOAD_KB = 500
+            payload_size_kb = len(img_base64) / 1024
+            if payload_size_kb > MAX_PAYLOAD_KB:
+                vprint(
+                    f"Preview: Payload too large ({payload_size_kb:.1f}KB), "
+                    f"skipping {frame_type} frame {frame_number}"
+                )
+                return
+
+            # Send via socketio
+            preview_data = {
+                "frame_type": frame_type,
+                "frame_number": frame_number,
+                "image_data": f"data:image/png;base64,{img_base64}",
+                "dimensions": {"width": new_width, "height": new_height},
+            }
+
+            socketio.emit("frame_preview", preview_data, room=self.session_id)
+
+            self.last_preview_time = current_time
+
+        except Exception as e:
+            # Log error but don't interrupt processing
+            vprint(
+                f"Preview: Error sending {frame_type} frame {frame_number}: "
+                f"{type(e).__name__}: {e}"
+            )
+
+    def _calculate_eta(self, current_progress: float) -> str | None:
+        """
+        Calculate estimated time remaining using adaptive per-step timing.
+
+        This uses actual measured time-per-frame for the current step and
+        weights for remaining steps, providing much more accurate ETAs
+        especially for slow steps like ESRGAN upscaling.
+
+        Args:
+            current_progress: Current progress percentage (0-100)
+
+        Returns:
+            Formatted ETA string (e.g., "5m 23s") or None if not enough data
+        """
+        if current_progress <= 0:
+            return None
+
+        current_time = time.time()
+        elapsed = current_time - self.start_time
+
+        # Need at least 3 seconds of data for reasonable estimate
+        if elapsed < 3:
+            return None
+
+        # Strategy: Estimate remaining time for current step + remaining steps
+        remaining_time = 0
+
+        # 1. Estimate remaining time for current step
+        if self.step_total > 0 and self.step_progress > 0:
+            # Use actual measured rate for current step
+            step_start_time = self.step_start_times.get(self.current_step_name, self.start_time)
+            step_elapsed = current_time - step_start_time
+
+            # Need at least 2 seconds into current step for accurate measurement
+            if step_elapsed >= 2:
+                frames_completed = self.step_progress
+                frames_remaining = self.step_total - self.step_progress
+
+                # Calculate time per frame for this step
+                time_per_frame = step_elapsed / max(frames_completed, 1)
+
+                # Estimate remaining time for this step
+                step_remaining_time = time_per_frame * frames_remaining
+                remaining_time += step_remaining_time
+
+        # 2. Estimate time for remaining steps using weight-based projection
+        # Use the overall rate as a fallback for future steps
+        if self.current_step_index < len(self.steps) - 1:
+            # Estimate time based on overall average rate (fallback for steps we haven't measured)
+            if current_progress > 5:  # Need some progress to estimate
+                avg_time_per_percent = elapsed / current_progress
+                remaining_percent = 100 - current_progress
+                fallback_estimate = avg_time_per_percent * remaining_percent
+
+                # Weight between step-based estimate and fallback
+                # Use step-based more heavily when we have good data
+                if remaining_time > 0:
+                    # We have a step-based estimate, use it primarily
+                    remaining_time = remaining_time * 0.8 + fallback_estimate * 0.2
+                else:
+                    # Fall back to overall rate
+                    remaining_time = fallback_estimate
+
+        # Fallback: use simple overall progress rate if we don't have step data
+        if remaining_time <= 0 and current_progress > 0:
+            progress_ratio = current_progress / 100.0
+            estimated_total_time = elapsed / progress_ratio
+            remaining_time = estimated_total_time - elapsed
+
+        if remaining_time < 0:
+            return None
+
+        return self._format_time(remaining_time)
+
+    def _format_time(self, seconds: float) -> str:
+        """Format seconds as human-readable time (e.g., '5m 23s' or '2h 15m')."""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:  # Less than 1 hour
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes}m {secs}s"
+        else:  # 1 hour or more
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
+
+    def update_progress(  # noqa: C901
         self,
         stage: str,
         frame_num: int | None = None,
@@ -272,7 +566,6 @@ class ProgressCallback:
         step_progress: int | None = None,
         step_total: int | None = None,
     ) -> None:
-        global current_processing
         import time
 
         # Check if stop has been requested
@@ -294,6 +587,8 @@ class ProgressCallback:
             # New step started
             self.current_step_name = step_name
             self.step_start_times[step_name] = current_time
+            self.step_frame_times = []  # Reset frame times for new step
+            self.step_start_progress = 0  # Reset progress for new step
 
             # Update step index
             if step_name in self.steps:
@@ -333,6 +628,9 @@ class ProgressCallback:
         current_processing["step_total"] = self.step_total
         current_processing["step_index"] = self.current_step_index
 
+        # Calculate ETA
+        eta_str = self._calculate_eta(progress)
+
         # Emit progress update (always include step data for UI)
         progress_data = {
             "progress": current_processing["progress"],
@@ -346,16 +644,18 @@ class ProgressCallback:
             "step_total": self.step_total,
             "step_index": self.current_step_index,
             "total_steps": len(self.steps),
+            "eta": eta_str,  # Add ETA
         }
 
         # Console output - show both overall and step progress
         step_percent = (
             (self.step_progress / max(self.step_total, 1)) * 100 if self.step_total > 0 else 0
         )
+        eta_suffix = f" | ETA: {eta_str}" if eta_str else ""
         progress_msg = (
             f"Overall: {progress:05.1f}% | "
             f"Step: {step_percent:03.0f}% ({self.step_progress:04d}/{self.step_total:04d}) | "
-            f"{stage}"
+            f"{stage}{eta_suffix}"
         )
         print(progress_msg)
 
@@ -393,11 +693,10 @@ class ProgressCallback:
             print(console_warning(f"Error emitting completion: {e}"))
 
 
-def process_video_async(
+def process_video_async(  # noqa: C901
     session_id: str, video_path: str | Path, settings: dict[str, Any], output_dir: str | Path
 ) -> None:
     """Process video in background thread"""
-    global current_processing
     import torch  # Import here to avoid CUDA initialization issues in main thread
 
     try:
@@ -487,7 +786,15 @@ def process_video_async(
         expected_frames = end_frame - start_frame
 
         processing_mode = settings.get("processing_mode", "serial")
-        callback = ProgressCallback(session_id, expected_frames, processing_mode)
+        enable_live_preview = settings.get("enable_live_preview", True)
+        preview_update_interval = settings.get("preview_update_interval", PREVIEW_UPDATE_INTERVAL)
+        callback = ProgressCallback(
+            session_id,
+            expected_frames,
+            processing_mode,
+            enable_live_preview,
+            preview_update_interval,
+        )
 
         # Give client time to join the session room before starting processing
         socketio.sleep(INITIAL_PROCESSING_DELAY)
@@ -501,7 +808,7 @@ def process_video_async(
             processor = VideoProcessor(projector.depth_estimator)
 
         # Calculate resolution settings that VideoProcessor expects
-        from depth_surge_3d.utils.resolution import (
+        from depth_surge_3d.utils.domain.resolution import (
             get_resolution_dimensions,
             calculate_vr_output_dimensions,
             auto_detect_resolution,
@@ -600,6 +907,8 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     """Handle video upload - saves directly to output directory with audio extraction"""
+    from src.depth_surge_3d.utils.path_utils import sanitize_filename
+
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
@@ -607,17 +916,20 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
 
-    # Create timestamped output directory
-    original_filename = file.filename
+    # Create timestamped output directory with sanitized filename
+    original_filename = sanitize_filename(file.filename)
     video_name = Path(original_filename).stem
-    file_ext = Path(original_filename).suffix
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(app.config["OUTPUT_FOLDER"]) / f"{int(time.time())}_{video_name}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
+    vprint(f"Created output directory: {output_dir}")
+    vprint(f"  Directory exists: {output_dir.exists()}")
 
-    # Save video to output directory as "original_video.ext"
-    video_path = output_dir / f"original_video{file_ext}"
+    # Save video to output directory preserving original filename
+    video_path = output_dir / original_filename
+    vprint(f"Saving video as: {video_path.name}")
     file.save(video_path)
+    vprint(f"  Video saved: {video_path.exists()}")
 
     # Get video information
     video_info = get_video_info(video_path)
@@ -648,9 +960,11 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 
         if probe_result.stdout.strip() == "audio":
             # Video has audio, extract it
+            print(f"Extracting audio to: {audio_path}")
             result = subprocess.run(
                 [
                     "ffmpeg",
+                    "-y",  # Overwrite existing files
                     "-i",
                     str(video_path),
                     "-vn",  # No video
@@ -667,6 +981,13 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
             if result.returncode != 0:
                 print(f"Warning: Audio extraction failed: {result.stderr}")
                 audio_path = None
+            elif audio_path.exists():
+                print(f"Audio successfully extracted: {audio_path}")
+            else:
+                print(
+                    f"Warning: Audio extraction reported success but file not found at: {audio_path}"
+                )
+                audio_path = None
         else:
             # No audio stream in video
             audio_path = None
@@ -678,7 +999,7 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
         {
             "success": True,
             "filename": video_path.name,
-            "output_dir": str(output_dir),
+            "output_dir": str(output_dir.resolve()),  # Ensure absolute path
             "video_info": video_info,
             "has_audio": audio_path is not None and audio_path.exists(),
         }
@@ -688,8 +1009,6 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 @app.route("/process", methods=["POST"])
 def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     """Start video processing"""
-    global current_processing
-
     if current_processing["active"]:
         return jsonify({"error": "Processing already in progress"}), 400
 
@@ -700,21 +1019,36 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     if not output_dir_str:
         return jsonify({"error": "No output directory provided"}), 400
 
-    output_dir = Path(output_dir_str)
-    if not output_dir.exists():
-        return jsonify({"error": "Output directory not found"}), 404
+    output_dir = Path(output_dir_str).resolve()  # Resolve to absolute path
+    vprint(f"Processing request for output directory: {output_dir}")
 
-    # Find the original video file in output directory
-    video_path = None
-    for ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
-        candidate = output_dir / f"original_video{ext}"
-        if candidate.exists():
-            video_path = candidate
-            break
+    # Security: Ensure output_dir is within OUTPUT_FOLDER (prevent path traversal)
+    allowed_base = Path(app.config["OUTPUT_FOLDER"]).resolve()
+    try:
+        output_dir.relative_to(allowed_base)
+    except ValueError:
+        vprint("ERROR: Path traversal attempt detected!")
+        vprint(f"  Requested path: {output_dir}")
+        vprint(f"  Allowed base: {allowed_base}")
+        return (
+            jsonify({"error": "Invalid output directory: must be within output folder"}),
+            403,
+        )
+
+    if not output_dir.exists():
+        vprint("ERROR: Output directory not found!")
+        vprint(f"  Requested path: {output_dir_str}")
+        vprint(f"  Resolved path: {output_dir}")
+        vprint(f"  Exists: {output_dir.exists()}")
+        vprint(f"  Current working directory: {Path.cwd()}")
+        return jsonify({"error": f"Output directory not found: {output_dir}"}), 404
+
+    # Find the source video file in output directory
+    video_path = find_source_video(output_dir)
 
     if not video_path:
         return (
-            jsonify({"error": "Original video file not found in output directory"}),
+            jsonify({"error": "Source video file not found in output directory"}),
             404,
         )
 
@@ -733,8 +1067,6 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 @app.route("/stop", methods=["POST"])
 def stop_processing() -> dict[str, Any]:
     """Stop current processing"""
-    global current_processing
-
     data = request.json
     session_id = data.get("session_id")
 
@@ -753,8 +1085,6 @@ def stop_processing() -> dict[str, Any]:
 @app.route("/resume", methods=["POST"])
 def resume_processing():
     """Resume processing from a previous interrupted batch"""
-    global current_processing
-
     if current_processing["active"]:
         return jsonify({"error": "Processing already in progress"}), 400
 
@@ -768,19 +1098,12 @@ def resume_processing():
     if not output_path.exists():
         return jsonify({"error": "Output directory does not exist"}), 404
 
-    # Look for original video in the output directory itself
-    original_video = None
-    for ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
-        candidate = output_path / f"original_video{ext}"
-        if candidate.exists():
-            original_video = candidate
-            break
+    # Look for source video in the output directory
+    source_video = find_source_video(output_path)
 
-    if not original_video:
+    if not source_video:
         return (
-            jsonify(
-                {"error": "Could not find original video file in output directory for resuming"}
-            ),
+            jsonify({"error": "Could not find source video file in output directory for resuming"}),
             404,
         )
 
@@ -792,7 +1115,7 @@ def resume_processing():
 
     # Start processing in background using socketio's method for proper context handling
     thread = socketio.start_background_task(
-        process_video_async, session_id, original_video, settings, output_path
+        process_video_async, session_id, source_video, settings, output_path
     )
     current_processing["thread"] = thread
 
@@ -846,6 +1169,55 @@ def get_system_info_endpoint():
     return jsonify(get_system_info())
 
 
+@app.route("/detect_resumable")
+def detect_resumable_jobs():
+    """Detect incomplete processing jobs that can be resumed"""
+    output_folder = Path(app.config["OUTPUT_FOLDER"])
+    if not output_folder.exists():
+        return jsonify({"success": True, "jobs": []})
+
+    resumable_jobs = []
+
+    try:
+        # Scan output directories for incomplete jobs
+        for batch_dir in output_folder.iterdir():
+            if not batch_dir.is_dir():
+                continue
+
+            # Check for source video file
+            source_video = find_source_video(batch_dir)
+
+            if not source_video:
+                continue
+
+            # Check if processing is incomplete (has frames but no final video)
+            has_frames = (batch_dir / INTERMEDIATE_DIRS["frames"]).exists()
+            has_final_video = any(batch_dir.glob("*_3D_*.mp4"))
+
+            if has_frames and not has_final_video:
+                # This is a resumable job
+                analysis = analyze_batch_directory(batch_dir)
+                resumable_jobs.append(
+                    {
+                        "path": str(batch_dir),
+                        "name": batch_dir.name,
+                        "highest_stage": analysis.get("highest_stage", "unknown"),
+                        "frame_count": analysis.get("frame_count", 0),
+                        "vr_format": analysis.get("vr_format", "unknown"),
+                        "resolution": analysis.get("resolution", "unknown"),
+                    }
+                )
+
+        # Sort by modification time (most recent first)
+        resumable_jobs.sort(key=lambda x: Path(x["path"]).stat().st_mtime, reverse=True)
+
+        return jsonify({"success": True, "jobs": resumable_jobs})
+
+    except Exception as e:
+        vprint(f"Error detecting resumable jobs: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+
 @app.route("/open_directory", methods=["POST"])
 def open_directory():
     """Open directory in file explorer"""
@@ -869,7 +1241,7 @@ def open_directory():
         return jsonify({"success": False, "error": str(e)})
 
 
-def analyze_batch_directory(batch_path):
+def analyze_batch_directory(batch_path):  # noqa: C901
     """Analyze batch directory to determine available processing stages and settings"""
     analysis = {
         "frame_count": 0,
@@ -941,16 +1313,15 @@ def analyze_batch_directory(batch_path):
                 except Exception:
                     pass
 
-    # Check for pre-extracted audio file or original video in batch directory
+    # Check for pre-extracted audio file or source video in batch directory
     audio_file = batch_path / "original_audio.flac"
     if audio_file.exists():
         analysis["has_audio"] = True
     else:
-        # Check for original video file
-        for video_ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
-            if (batch_path / f"original_video{video_ext}").exists():
-                analysis["has_audio"] = True
-                break
+        # Check for source video file
+        source_video = find_source_video(batch_path)
+        if source_video:
+            analysis["has_audio"] = True
 
     # Generate settings summary
     if analysis["vr_format"] != "unknown" and analysis["resolution"] != "unknown":
@@ -959,7 +1330,7 @@ def analyze_batch_directory(batch_path):
     return analysis
 
 
-def create_video_from_batch(batch_path, settings):
+def create_video_from_batch(batch_path, settings):  # noqa: C901
     """Create video from batch frames using FFmpeg"""
     frame_source = settings.get("frame_source", "auto")
     quality = settings.get("quality", "medium")
@@ -1033,15 +1404,10 @@ def create_video_from_batch(batch_path, settings):
             cmd.extend(["-i", str(audio_file)])
             cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0"])
         else:
-            # Fallback: look for original video in batch directory
-            video_file = None
-            for ext in [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]:
-                candidate = batch_path / f"original_video{ext}"
-                if candidate.exists():
-                    video_file = candidate
-                    break
-            if video_file:
-                cmd.extend(["-i", str(video_file)])
+            # Fallback: look for source video in batch directory
+            source_video = find_source_video(batch_path)
+            if source_video:
+                cmd.extend(["-i", str(source_video)])
                 cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0"])
 
     cmd.append(str(output_path))
@@ -1104,7 +1470,6 @@ def handle_connect():
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    global current_processing
     vprint(f"Client disconnected: {request.sid}")
 
     # Only stop processing if there are no other connected clients
@@ -1169,8 +1534,6 @@ if __name__ == "__main__":
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-
-    import torch  # Import here to avoid issues during startup
 
     # Only print startup message if not already printed by run_ui.sh
     if not os.environ.get("DEPTH_SURGE_UI_SCRIPT"):

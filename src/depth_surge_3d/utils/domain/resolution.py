@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.constants import VR_RESOLUTIONS
+from ...core.constants import VR_RESOLUTIONS
 
 
 def parse_custom_resolution(resolution_string: str) -> tuple[int, int | None]:

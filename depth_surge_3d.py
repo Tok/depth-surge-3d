@@ -12,21 +12,23 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from depth_surge_3d.core.stereo_projector import create_stereo_projector
-from depth_surge_3d.core.constants import (
+from depth_surge_3d.rendering import create_stereo_projector  # noqa: E402
+from depth_surge_3d.core.constants import (  # noqa: E402
     DEFAULT_SETTINGS,
     VR_RESOLUTIONS,
     FISHEYE_PROJECTIONS,
     HOLE_FILL_METHODS,
     VALIDATION_RANGES,
 )
-from depth_surge_3d.utils.resolution import get_available_resolutions
-from depth_surge_3d.processing.io_operations import (
+from depth_surge_3d.utils import (  # noqa: E402
+    get_available_resolutions,
+    warning as console_warning,
+)
+from depth_surge_3d.io.operations import (  # noqa: E402
     validate_video_file,
     can_resume_processing,
     load_processing_settings,
 )
-from depth_surge_3d.utils.console import warning as console_warning
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -50,11 +52,16 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
     parser.add_argument("input_video", nargs="?", help="Input video file path")
 
     parser.add_argument(
-        "--output-dir", "-o", default=DEFAULT_SETTINGS["output_dir"], help="Output directory (default: %(default)s)"
+        "--output-dir",
+        "-o",
+        default=DEFAULT_SETTINGS["output_dir"],
+        help="Output directory (default: %(default)s)",
     )
 
     # Resume functionality
-    parser.add_argument("--resume", metavar="DIRECTORY", help="Resume processing from an existing output directory")
+    parser.add_argument(
+        "--resume", metavar="DIRECTORY", help="Resume processing from an existing output directory"
+    )
 
     # VR settings
     available_resolutions = list(VR_RESOLUTIONS.keys()) + ["auto", "custom"]
@@ -107,7 +114,9 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         help=f'Fisheye field of view in degrees (default: {DEFAULT_SETTINGS["fisheye_fov"]})',
     )
     parser.add_argument(
-        "--no-distortion", action="store_true", help="Disable fisheye distortion (keeps rectilinear projection)"
+        "--no-distortion",
+        action="store_true",
+        help="Disable fisheye distortion (keeps rectilinear projection)",
     )
 
     # Quality and processing options
@@ -131,7 +140,9 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
     )
 
     # Model and device
-    parser.add_argument("--model", help="Path to model file (V2) or model name (V3, e.g., 'large', 'base', 'small')")
+    parser.add_argument(
+        "--model", help="Path to model file (V2) or model name (V3, e.g., 'large', 'base', 'small')"
+    )
     parser.add_argument(
         "--depth-model-version",
         choices=["v2", "v3"],
@@ -139,15 +150,22 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         help="Depth model version: v2 (Video-Depth-Anything, default) or v3 (Depth-Anything-3, better VRAM efficiency)",
     )
     parser.add_argument(
-        "--device", choices=["auto", "cuda", "cpu"], default="auto", help="Processing device (default: auto)"
+        "--device",
+        choices=["auto", "cuda", "cpu"],
+        default="auto",
+        help="Processing device (default: auto)",
     )
     parser.add_argument(
-        "--metric", action="store_true", help="Use metric depth model (outputs real depth values in meters)"
+        "--metric",
+        action="store_true",
+        help="Use metric depth model (outputs real depth values in meters)",
     )
 
     # Output options
     parser.add_argument("--no-audio", action="store_true", help="Do not preserve audio in output")
-    parser.add_argument("--no-intermediates", action="store_true", help="Do not keep intermediate processing files")
+    parser.add_argument(
+        "--no-intermediates", action="store_true", help="Do not keep intermediate processing files"
+    )
     parser.add_argument("--target-fps", type=int, help="Target output FPS (default: match source)")
 
     # Experimental features
@@ -156,10 +174,22 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         action="store_true",
         help="EXPERIMENTAL: Double FPS using motion interpolation. WARNING: May produce artifacts, wobbling, or poor quality. Recommended for artistic experimentation only.",
     )
+    parser.add_argument(
+        "--upscale-model",
+        choices=["none", "x2", "x4", "x4-conservative"],
+        default="none",
+        help="AI upscaling model (Real-ESRGAN). Options: none (disabled, default), x2 (2x fast), x4 (4x best quality), x4-conservative (4x without GAN artifacts). Significantly increases processing time (+2-3x) and VRAM usage (+2-4GB).",
+    )
 
     # Information and debugging
-    parser.add_argument("--list-resolutions", action="store_true", help="List all available VR resolution options")
+    parser.add_argument(
+        "--list-resolutions", action="store_true", help="List all available VR resolution options"
+    )
     parser.add_argument("--model-info", action="store_true", help="Show model information and exit")
+    parser.add_argument(
+        "--cache-info", action="store_true", help="Show depth map cache statistics and exit"
+    )
+    parser.add_argument("--cache-clear", action="store_true", help="Clear depth map cache and exit")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
 
     return parser
@@ -186,7 +216,10 @@ def validate_arguments(args) -> bool:
         return False
 
     # Validate ranges
-    if args.baseline < VALIDATION_RANGES["baseline"][0] or args.baseline > VALIDATION_RANGES["baseline"][1]:
+    if (
+        args.baseline < VALIDATION_RANGES["baseline"][0]
+        or args.baseline > VALIDATION_RANGES["baseline"][1]
+    ):
         print(
             f"Error: Baseline must be between {VALIDATION_RANGES['baseline'][0]} and {VALIDATION_RANGES['baseline'][1]} meters"
         )
@@ -201,20 +234,27 @@ def validate_arguments(args) -> bool:
         )
         return False
 
-    if args.fisheye_fov < VALIDATION_RANGES["fisheye_fov"][0] or args.fisheye_fov > VALIDATION_RANGES["fisheye_fov"][1]:
+    if (
+        args.fisheye_fov < VALIDATION_RANGES["fisheye_fov"][0]
+        or args.fisheye_fov > VALIDATION_RANGES["fisheye_fov"][1]
+    ):
         print(
             f"Error: FOV must be between {VALIDATION_RANGES['fisheye_fov'][0]} and {VALIDATION_RANGES['fisheye_fov'][1]} degrees"
         )
         return False
 
-    if args.crop_factor < VALIDATION_RANGES["crop_factor"][0] or args.crop_factor > VALIDATION_RANGES["crop_factor"][1]:
+    if (
+        args.crop_factor < VALIDATION_RANGES["crop_factor"][0]
+        or args.crop_factor > VALIDATION_RANGES["crop_factor"][1]
+    ):
         print(
             f"Error: Crop factor must be between {VALIDATION_RANGES['crop_factor'][0]} and {VALIDATION_RANGES['crop_factor'][1]}"
         )
         return False
 
     if args.target_fps and (
-        args.target_fps < VALIDATION_RANGES["target_fps"][0] or args.target_fps > VALIDATION_RANGES["target_fps"][1]
+        args.target_fps < VALIDATION_RANGES["target_fps"][0]
+        or args.target_fps > VALIDATION_RANGES["target_fps"][1]
     ):
         print(
             f"Error: Target FPS must be between {VALIDATION_RANGES['target_fps'][0]} and {VALIDATION_RANGES['target_fps'][1]}"
@@ -237,13 +277,13 @@ def list_available_resolutions():
             for item in items:
                 print(f"  {item['name']:<15} - {item['description']}")
 
-    print(f"\nCustom Resolution:")
-    print(f"  custom:WxH      - Custom resolution (e.g., custom:1920x1080)")
-    print(f"\nAuto Detection:")
-    print(f"  auto            - Automatically detect optimal resolution")
+    print("\nCustom Resolution:")
+    print("  custom:WxH      - Custom resolution (e.g., custom:1920x1080)")
+    print("\nAuto Detection:")
+    print("  auto            - Automatically detect optimal resolution")
 
 
-def main():
+def main():  # noqa: C901
     """Main entry point."""
     parser = create_argument_parser()
     args = parser.parse_args()
@@ -251,6 +291,30 @@ def main():
     # Handle special commands
     if args.list_resolutions:
         list_available_resolutions()
+        return 0
+
+    if args.cache_info:
+        from depth_surge_3d.utils.domain.depth_cache import get_cache_size, get_cache_dir
+
+        cache_entries, cache_size_bytes = get_cache_size()
+        cache_size_mb = cache_size_bytes / (1024 * 1024)
+        cache_dir = get_cache_dir()
+        print("Depth Map Cache Information")
+        print("=" * 40)
+        print(f"Cache directory: {cache_dir}")
+        print(f"Cached videos:   {cache_entries}")
+        print(f"Total size:      {cache_size_mb:.1f} MB")
+        if cache_entries > 0:
+            print(f"\nAverage:         {cache_size_mb / cache_entries:.1f} MB per video")
+        print("\nCache speeds up re-processing with different stereo/VR settings.")
+        print("To clear cache: depth_surge_3d.py --cache-clear")
+        return 0
+
+    if args.cache_clear:
+        from depth_surge_3d.utils.domain.depth_cache import clear_cache
+
+        count = clear_cache()
+        print(f"Cleared {count} cached video(s) from depth map cache")
         return 0
 
     # Handle resume mode
@@ -264,7 +328,7 @@ def main():
                 print(f"  - {rec}")
             return 1
 
-        print(f"Can resume processing:")
+        print("Can resume processing:")
         print(f"  - Batch: {resume_info['batch_name']}")
         print(f"  - Status: {resume_info['status']}")
         if resume_info["progress_info"]:
@@ -287,7 +351,7 @@ def main():
         # Create projector with original model settings
         projector = create_stereo_projector(device=processing_settings.get("device", "auto"))
 
-        print(f"Resuming processing...")
+        print("Resuming processing...")
         print(f"Input: {video_path}")
         print(f"Output: {args.resume}")
 
@@ -295,8 +359,23 @@ def main():
         success = projector.process_video(
             video_path=video_path,
             output_dir=args.resume,
-            **{k: v for k, v in processing_settings.items() if k not in ["output_dir", "device", "per_eye_width", "video_path", "per_eye_height", "vr_output_width", "vr_output_height",
-                                                                         "source_width", "source_height", "source_fps"]},
+            **{
+                k: v
+                for k, v in processing_settings.items()
+                if k
+                not in [
+                    "output_dir",
+                    "device",
+                    "per_eye_width",
+                    "video_path",
+                    "per_eye_height",
+                    "vr_output_width",
+                    "vr_output_height",
+                    "source_width",
+                    "source_height",
+                    "source_fps",
+                ]
+            },
         )
 
         if success:
@@ -328,8 +407,10 @@ def main():
             return 0
 
         # Process video
-        model_name = "Depth-Anything-V3" if args.depth_model_version == "v3" else "Video-Depth-Anything (V2)"
-        print(f"Starting Depth Surge 3D processing...")
+        model_name = (
+            "Depth-Anything-V3" if args.depth_model_version == "v3" else "Video-Depth-Anything (V2)"
+        )
+        print("Starting Depth Surge 3D processing...")
         print(f"Input: {args.input_video}")
         print(f"Output: {args.output_dir} (batch subdirectory will be created)")
         print(f"Model: {model_name}")
@@ -400,7 +481,7 @@ def main():
         try:
             if "projector" in locals():
                 projector.unload_model()
-        except:
+        except Exception:  # noqa: E722
             pass
 
 

@@ -13,11 +13,12 @@ DEFAULT_OUTPUT_DIR = "./output"
 
 # Model configuration (Video-Depth-Anything only)
 DEFAULT_MODEL_PATH = "models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth"
-VIDEO_DEPTH_ANYTHING_REPO_DIR = "video_depth_anything_repo"
+VIDEO_DEPTH_ANYTHING_REPO_DIR = "vendor/Video-Depth-Anything"
 
 # Depth estimation model parameters
 DEPTH_MODEL_INPUT_SIZE = 518  # Input resolution for depth estimation model
-DEPTH_MODEL_CHUNK_SIZE = 32  # Number of frames to process in one batch
+DEPTH_MODEL_CHUNK_SIZE = 32  # Number of frames to process in one batch (temporal window)
+DEPTH_MODEL_CHUNK_OVERLAP = 10  # Number of frames to overlap between chunks
 DEPTH_MODEL_DEFAULT_FPS = 30  # Default FPS for depth estimation when original cannot be determined
 
 # Video model configurations
@@ -61,6 +62,9 @@ DEFAULT_SETTINGS = {
     "apply_distortion": True,
     "output_dir": "./output",
     "experimental_frame_interpolation": False,  # Experimental feature with quality warnings
+    "temporal_window_size": DEPTH_MODEL_CHUNK_SIZE,  # V2 only: frames per temporal window
+    "temporal_window_overlap": DEPTH_MODEL_CHUNK_OVERLAP,  # V2 only: frame overlap between windows
+    "upscale_model": "none",  # AI upscaling: none, x2, x4, x4-conservative
 }
 
 # VR resolution configurations (per eye)
@@ -115,18 +119,65 @@ RESOLUTION_CATEGORIES = {
     ],
 }
 
+# VR Headset Presets (optimized settings for popular headsets)
+VR_HEADSET_PRESETS: dict[str, dict[str, int | float | str]] = {
+    "quest-3": {
+        "name": "Meta Quest 3",
+        "per_eye_width": 2064,
+        "per_eye_height": 2208,
+        "fisheye_fov": 110,  # degrees
+        "description": "Optimized for Meta Quest 3 (2064x2208 per eye, 110° FOV)",
+    },
+    "quest-2": {
+        "name": "Meta Quest 2",
+        "per_eye_width": 1832,
+        "per_eye_height": 1920,
+        "fisheye_fov": 100,  # degrees
+        "description": "Optimized for Meta Quest 2 (1832x1920 per eye, 100° FOV)",
+    },
+    "psvr2": {
+        "name": "PlayStation VR2",
+        "per_eye_width": 2000,
+        "per_eye_height": 2040,
+        "fisheye_fov": 110,  # degrees
+        "description": "Optimized for PSVR2 (2000x2040 per eye, 110° FOV)",
+    },
+    "valve-index": {
+        "name": "Valve Index",
+        "per_eye_width": 1440,
+        "per_eye_height": 1600,
+        "fisheye_fov": 130,  # degrees
+        "description": "Optimized for Valve Index (1440x1600 per eye, 130° FOV)",
+    },
+    "vive-pro-2": {
+        "name": "HTC Vive Pro 2",
+        "per_eye_width": 2448,
+        "per_eye_height": 2448,
+        "fisheye_fov": 120,  # degrees
+        "description": "Optimized for HTC Vive Pro 2 (2448x2448 per eye, 120° FOV)",
+    },
+    "pico-4": {
+        "name": "Pico 4",
+        "per_eye_width": 2160,
+        "per_eye_height": 2160,
+        "fisheye_fov": 105,  # degrees
+        "description": "Optimized for Pico 4 (2160x2160 per eye, 105° FOV)",
+    },
+}
+
 # Progress tracking configuration
 PROGRESS_UPDATE_INTERVAL = 0.1  # seconds - throttle for progress updates (10 updates/sec)
 PROGRESS_DECIMAL_PLACES = 1  # decimal places for progress percentage
 PROGRESS_STEP_WEIGHTS = [
-    0.01,
-    0.17,
-    0.01,
-    0.30,
-    0.38,
-    0.06,
-    0.07,
-]  # Weighted progress distribution
+    0.02,  # Step 1: Frame Extraction (fast)
+    0.35,  # Step 2: Depth Map Generation (slow - AI depth estimation)
+    0.20,  # Step 3: Stereo Pair Creation (moderate - includes warping, hole-filling)
+    0.08,  # Step 4: Fisheye Distortion (fast, optional)
+    0.02,  # Step 5: Crop Frames (fast)
+    0.18,  # Step 6: AI Upscaling (slow, optional)
+    0.08,  # Step 7: VR Assembly (moderate - side-by-side combining)
+    0.07,  # Step 8: Video Creation (moderate - FFmpeg encoding)
+]  # Weighted progress distribution (sums to 1.00)
 PROCESSING_STEPS = [
     "Frame Extraction",
     "Super Sampling",
@@ -198,24 +249,36 @@ MIN_FOV = 75  # degrees
 MAX_FOV = 180  # degrees
 
 # Hole filling methods
-HOLE_FILL_METHODS = ["fast", "advanced"]
+HOLE_FILL_METHODS = ["fast", "advanced", "high"]
+
+# AI upscaling models
+UPSCALE_MODELS = ["none", "x2", "x4", "x4-conservative"]
 
 # Directory names for intermediate files
-# Numbered to match processing steps: 00=input, 01-07=processing, 99=output
-# Optional steps (01, 05, 06) are skipped if not enabled
+# Numbered to match processing steps (6-8 steps total based on optional features):
+# Step 1: Extract Frames (00_original_frames)
+# Step 2: Generate Depth Maps (02_depth_maps)
+# Step 3: Create Stereo Pairs (04_left_frames, 04_right_frames)
+# Step 4: Apply Distortion - OPTIONAL (05_left_distorted, 05_right_distorted)
+# Step 5: Crop Frames (06_left_cropped, 06_right_cropped)
+# Step 6: Upscale Frames - OPTIONAL (07_left_upscaled, 07_right_upscaled)
+# Step 7: Assemble VR Frames (99_vr_frames)
+# Step 8: Create Final Video
 INTERMEDIATE_DIRS = {
     "frames": "00_original_frames",  # Step 1: Extracted input frames
-    "supersampled": "01_supersampled_frames",  # Optional: Super sampling (if enabled)
+    "supersampled": "01_supersampled_frames",  # Legacy: Super sampling (deprecated)
     "depth_maps": "02_depth_maps",  # Step 2: AI-generated depth maps
-    "left_frames": "04_left_frames",  # Step 4: Stereo pair - left eye
-    "right_frames": "04_right_frames",  # Step 4: Stereo pair - right eye
-    "left_distorted": "05_left_distorted",  # Step 5: Fisheye distortion - left (optional)
-    "right_distorted": "05_right_distorted",  # Step 5: Fisheye distortion - right (optional)
-    "left_cropped": "06_left_cropped",  # Optional: Center cropped - left
-    "right_cropped": "06_right_cropped",  # Optional: Center cropped - right
-    "left_final": "07_left_final",  # Step 6: Final resized - left
-    "right_final": "07_right_final",  # Step 6: Final resized - right
-    "vr_frames": "99_vr_frames",  # Step 6: Final VR assembled frames (for FFmpeg)
+    "left_frames": "04_left_frames",  # Step 3: Stereo pair - left eye
+    "right_frames": "04_right_frames",  # Step 3: Stereo pair - right eye
+    "left_distorted": "05_left_distorted",  # Step 4: Fisheye distortion - left (optional)
+    "right_distorted": "05_right_distorted",  # Step 4: Fisheye distortion - right (optional)
+    "left_cropped": "06_left_cropped",  # Step 5: Center cropped - left
+    "right_cropped": "06_right_cropped",  # Step 5: Center cropped - right
+    "left_upscaled": "07_left_upscaled",  # Step 6: AI upscaled - left (optional)
+    "right_upscaled": "07_right_upscaled",  # Step 6: AI upscaled - right (optional)
+    "left_final": "08_left_final",  # Legacy: kept for compatibility
+    "right_final": "08_right_final",  # Legacy: kept for compatibility
+    "vr_frames": "99_vr_frames",  # Step 7: Final VR assembled frames
 }
 
 # Depth Anything V3 model names (Hugging Face IDs)
@@ -325,3 +388,9 @@ CHUNK_SIZE_1080P_MANUAL = 12  # Manual 1080p depth setting
 CHUNK_SIZE_720P = 16  # 720p and manual settings
 CHUNK_SIZE_SD = 24  # Auto mode for SD sources
 CHUNK_SIZE_SMALL = 32  # Very small resolutions
+
+# Preview configuration (real-time frame preview via websocket)
+PREVIEW_UPDATE_INTERVAL = 2.0  # seconds between preview updates
+PREVIEW_FRAME_SAMPLE_RATE = 30  # Send every Nth frame (if time interval allows)
+PREVIEW_DOWNSCALE_WIDTH = 480  # Downscale width for transmission (pixels)
+PREVIEW_JPEG_QUALITY = 85  # JPEG quality (if using JPEG instead of PNG)

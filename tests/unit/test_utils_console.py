@@ -1,6 +1,6 @@
 """Unit tests for console utilities."""
 
-from src.depth_surge_3d.utils.console import (
+from src.depth_surge_3d.utils.system.console import (
     Colors,
     success,
     error,

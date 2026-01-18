@@ -1,7 +1,7 @@
 """Unit tests for image processing utilities."""
 
 import numpy as np
-from src.depth_surge_3d.utils.image_processing import (
+from src.depth_surge_3d.utils.imaging.image_processing import (
     normalize_depth_map,
     depth_to_disparity,
     resize_image,
@@ -609,3 +609,112 @@ class TestHoleFillImage:
         filled = hole_fill_image(image, mask=mask, method="fast")
 
         assert filled.shape == image.shape
+
+    def test_fill_with_high_method(self):
+        """Test hole filling with high quality method."""
+        image = np.random.randint(1, 255, (100, 100, 3), dtype=np.uint8)
+        # Create some holes
+        image[40:60, 40:60] = 0
+
+        filled = hole_fill_image(image, method="high")
+
+        assert filled.shape == image.shape
+        # Holes should be filled (no longer all black)
+        assert not np.all(filled[40:60, 40:60] == 0)
+
+    def test_fill_high_method_multipass(self):
+        """Test high quality method with multiple holes to trigger multi-pass."""
+        image = np.random.randint(1, 255, (200, 200, 3), dtype=np.uint8)
+        # Create multiple scattered holes to trigger residual mask
+        image[20:40, 20:40] = 0
+        image[80:100, 80:100] = 0
+        image[140:160, 140:160] = 0
+
+        filled = hole_fill_image(image, method="high")
+
+        assert filled.shape == image.shape
+        # All holes should be filled
+        assert not np.all(filled[20:40, 20:40] == 0)
+        assert not np.all(filled[80:100, 80:100] == 0)
+        assert not np.all(filled[140:160, 140:160] == 0)
+
+    def test_empty_mask_handling(self):
+        """Test that empty mask is handled correctly."""
+        from src.depth_surge_3d.utils.imaging.image_processing import _create_hole_mask
+
+        # Create image with no black pixels
+        image = np.random.randint(1, 255, (50, 50, 3), dtype=np.uint8)
+        mask = _create_hole_mask(image)
+
+        # Mask should be all zeros
+        assert not np.any(mask)
+
+    def test_adaptive_radius_calculation(self):
+        """Test adaptive radius calculation with various hole sizes."""
+        from src.depth_surge_3d.utils.imaging.image_processing import (
+            _create_hole_mask,
+            _calculate_adaptive_radius,
+        )
+
+        # Small hole
+        image_small = np.ones((100, 100, 3), dtype=np.uint8) * 128
+        image_small[45:55, 45:55] = 0  # 10x10 hole
+        mask_small = _create_hole_mask(image_small)
+        radius_small = _calculate_adaptive_radius(mask_small)
+        assert 3 <= radius_small <= 15
+
+        # Large hole
+        image_large = np.ones((100, 100, 3), dtype=np.uint8) * 128
+        image_large[20:80, 20:80] = 0  # 60x60 hole
+        mask_large = _create_hole_mask(image_large)
+        radius_large = _calculate_adaptive_radius(mask_large)
+        assert 3 <= radius_large <= 15
+        assert radius_large > radius_small  # Larger hole should have larger radius
+
+    def test_adaptive_radius_empty_mask(self):
+        """Test adaptive radius with empty mask (no holes)."""
+        from src.depth_surge_3d.utils.imaging.image_processing import _calculate_adaptive_radius
+
+        # Empty mask (all zeros, only background)
+        empty_mask = np.zeros((100, 100), dtype=np.uint8)
+        radius = _calculate_adaptive_radius(empty_mask)
+
+        # Should return minimum radius of 3
+        assert radius == 3
+
+    def test_high_quality_inpaint_with_residuals(self):
+        """Test high quality inpainting that triggers second pass."""
+        import cv2
+        from unittest.mock import patch
+        from src.depth_surge_3d.utils.imaging.image_processing import (
+            _create_hole_mask,
+            _apply_high_quality_inpaint,
+        )
+
+        # Create image with holes
+        image = np.random.randint(50, 200, (100, 100, 3), dtype=np.uint8)
+        image[40:60, 40:60] = 0
+
+        mask = _create_hole_mask(image)
+
+        # Mock cv2.inpaint to simulate first pass leaving residuals
+        original_inpaint = cv2.inpaint
+
+        def mock_inpaint(img, mask, radius, method):
+            # First call (INPAINT_NS): Leave some black pixels (residuals)
+            if method == cv2.INPAINT_NS:
+                result = original_inpaint(img, mask, radius, method)
+                # Add some black pixels to simulate residuals
+                result[45:47, 45:47] = 0
+                return result
+            # Second call (INPAINT_TELEA): Fill properly
+            else:
+                return original_inpaint(img, mask, radius, method)
+
+        with patch("cv2.inpaint", side_effect=mock_inpaint):
+            filled = _apply_high_quality_inpaint(image, mask, radius=10)
+
+            assert filled.shape == image.shape
+            # Should have filled the holes including residuals
+            # Note: bilateral filter is applied, so values won't be exactly zero
+            # but should be filled

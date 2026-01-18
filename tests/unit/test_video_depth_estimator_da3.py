@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from unittest.mock import patch, MagicMock
 
-from src.depth_surge_3d.models.video_depth_estimator_da3 import (
+from src.depth_surge_3d.inference.depth.video_depth_estimator_da3 import (
     VideoDepthEstimatorDA3,
     create_video_depth_estimator_da3,
 )

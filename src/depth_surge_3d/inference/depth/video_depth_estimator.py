@@ -15,8 +15,8 @@ from typing import Any
 import torch
 import numpy as np
 
-from ..utils.console import success as console_success, error as console_error
-from ..core.constants import (
+from ...utils.system.console import success as console_success, error as console_error
+from ...core.constants import (
     DEFAULT_MODEL_PATH,
     VIDEO_DEPTH_ANYTHING_REPO_DIR,
     MODEL_CONFIGS,
@@ -30,10 +30,17 @@ from ..core.constants import (
 class VideoDepthEstimator:
     """Handles video depth estimation using Video-Depth-Anything models."""
 
-    def __init__(self, model_path: str, device: str = "auto", metric: bool = False):
+    def __init__(
+        self,
+        model_path: str,
+        device: str = "auto",
+        metric: bool = False,
+        temporal_window_overlap: int = 10,
+    ):
         self.model_path = model_path
         self.device = self._determine_device(device)
         self.metric = metric
+        self.temporal_window_overlap = temporal_window_overlap
         self.model = None
         self.model_config = None
 
@@ -114,9 +121,9 @@ class VideoDepthEstimator:
         repo_path = Path(VIDEO_DEPTH_ANYTHING_REPO_DIR)
         if not repo_path.exists():
             print("Video-Depth-Anything repository not found")
-            print("Please ensure the repository is cloned:")
+            print("Please ensure the repository is cloned to the vendor directory:")
             print(
-                f"  git clone https://github.com/DepthAnything/Video-Depth-Anything.git {VIDEO_DEPTH_ANYTHING_REPO_DIR}"
+                f"  mkdir -p vendor && git clone https://github.com/DepthAnything/Video-Depth-Anything.git {VIDEO_DEPTH_ANYTHING_REPO_DIR}"
             )
             return False
 
@@ -249,7 +256,7 @@ class VideoDepthEstimator:
     ) -> np.ndarray:
         """Process frames in overlapping chunks to save memory."""
         chunk_size = DEPTH_MODEL_CHUNK_SIZE
-        overlap = 4  # Overlap frames for smooth transitions
+        overlap = self.temporal_window_overlap  # Overlap frames for smooth transitions
 
         all_depths = []
         num_frames = len(frames)
@@ -393,7 +400,10 @@ class VideoDepthEstimator:
 
 
 def create_video_depth_estimator(
-    model_path: str | None = None, device: str = "auto", metric: bool = False
+    model_path: str | None = None,
+    device: str = "auto",
+    metric: bool = False,
+    temporal_window_overlap: int = 10,
 ) -> VideoDepthEstimator:
     """
     Factory function to create a video depth estimator.
@@ -402,6 +412,7 @@ def create_video_depth_estimator(
         model_path: Path to model file (uses default if None)
         device: Device to use for inference
         metric: Use metric depth model (true depth values)
+        temporal_window_overlap: Number of frames to overlap between chunks (V2 only)
 
     Returns:
         Configured VideoDepthEstimator instance
@@ -409,4 +420,4 @@ def create_video_depth_estimator(
     if model_path is None:
         model_path = DEFAULT_MODEL_PATH
 
-    return VideoDepthEstimator(model_path, device, metric)
+    return VideoDepthEstimator(model_path, device, metric, temporal_window_overlap)

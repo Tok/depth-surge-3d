@@ -16,7 +16,7 @@ import torch
 import numpy as np
 from typing import Any
 
-from ..core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
+from ...core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
 
 
 @contextmanager

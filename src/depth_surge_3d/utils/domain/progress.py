@@ -18,7 +18,7 @@ try:
 except ImportError:
     HAS_TQDM = False
 
-from ..core.constants import (
+from ...core.constants import (
     PROGRESS_UPDATE_INTERVAL,
     PROCESSING_STEPS,
     PROGRESS_DECIMAL_PLACES,
@@ -29,8 +29,9 @@ PROCESSING_PHASES = {
     "extraction": {"weight": 15, "description": "Extracting frames"},
     "super_sampling": {"weight": 10, "description": "Super sampling frames"},
     "depth_estimation": {"weight": 30, "description": "Estimating depth"},
-    "stereo_generation": {"weight": 25, "description": "Creating stereo pairs"},
+    "stereo_generation": {"weight": 20, "description": "Creating stereo pairs"},
     "distortion": {"weight": 10, "description": "Applying fisheye distortion"},
+    "upscaling": {"weight": 5, "description": "Upscaling frames"},
     "vr_assembly": {"weight": 5, "description": "Assembling VR frames"},
     "video_creation": {"weight": 5, "description": "Creating final video"},
 }
@@ -128,18 +129,74 @@ class ProgressTracker:
         self.processing_mode = processing_mode
         self.reporter = reporter or ConsoleProgressReporter()
         self.start_time = time.time()
+        self.step_start_time = time.time()
 
         self.steps = PROCESSING_STEPS.copy()
         self.current_step_index = 0
         self.step_progress = 0
         self.step_total = 0
 
+        # ETA tracking
+        self.last_progress = 0
+        self.last_progress_time = time.time()
+
+    def _calculate_eta(self, current_progress: int, total_progress: int) -> str | None:
+        """
+        Calculate estimated time remaining.
+
+        Args:
+            current_progress: Current progress value
+            total_progress: Total progress value
+
+        Returns:
+            Formatted ETA string (e.g., "5m 23s") or None if not enough data
+        """
+        if current_progress <= 0 or total_progress <= 0:
+            return None
+
+        current_time = time.time()
+        elapsed = current_time - self.start_time
+
+        # Need at least 5 seconds of data for reasonable estimate
+        if elapsed < 5:
+            return None
+
+        # Calculate time per unit
+        progress_ratio = current_progress / total_progress
+        if progress_ratio <= 0:
+            return None
+
+        estimated_total_time = elapsed / progress_ratio
+        remaining_time = estimated_total_time - elapsed
+
+        if remaining_time < 0:
+            return None
+
+        return self._format_time(remaining_time)
+
+    def _format_time(self, seconds: float) -> str:
+        """Format seconds as human-readable time (e.g., '5m 23s' or '2h 15m')."""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:  # Less than 1 hour
+            minutes = int(seconds // 60)
+            secs = int(seconds % 60)
+            return f"{minutes}m {secs}s"
+        else:  # 1 hour or more
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            return f"{hours}h {minutes}m"
+
     def update_serial(self, frame_num: int, step_description: str) -> None:
         """Update progress for serial processing."""
         self.current_frame = frame_num
         self.current_step = step_description
 
-        message = f"[SERIAL] Frame {frame_num}/{self.total_frames} - {step_description}"
+        # Calculate ETA
+        eta_str = self._calculate_eta(frame_num, self.total_frames)
+        eta_suffix = f" (ETA: {eta_str})" if eta_str else ""
+
+        message = f"[SERIAL] Frame {frame_num}/{self.total_frames} - {step_description}{eta_suffix}"
         self.reporter.report_progress(frame_num, self.total_frames, message)
 
     def update_batch_step(self, step_name: str, progress: int = 0, total: int = 0) -> None:
@@ -171,11 +228,21 @@ class ProgressTracker:
         )
         overall_progress = ((self.current_step_index + step_progress_ratio) / len(self.steps)) * 100
 
+        # Calculate ETA based on overall progress
+        eta_str = self._calculate_eta(int(overall_progress), 100)
+        eta_suffix = f" - ETA: {eta_str}" if eta_str else ""
+
         if self.step_total > 0:
             step_percentage = (self.step_progress / self.step_total) * 100
-            message = f"[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: {step_name} ({step_percentage:.1f}%)"
+            message = (
+                f"[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: "
+                f"{step_name} ({step_percentage:.1f}%){eta_suffix}"
+            )
         else:
-            message = f"[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: {step_name}"
+            message = (
+                f"[BATCH] Step {self.current_step_index + 1}/{len(self.steps)}: "
+                f"{step_name}{eta_suffix}"
+            )
 
         # Report as if total progress is 100 (for percentage calculation)
         self.reporter.report_progress(int(overall_progress), 100, message)

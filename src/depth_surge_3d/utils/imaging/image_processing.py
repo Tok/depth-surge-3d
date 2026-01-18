@@ -5,12 +5,13 @@ This module contains pure functions for image manipulation, depth processing,
 and geometric transformations without side effects.
 """
 
+from __future__ import annotations
+
 import cv2
 import numpy as np
-from typing import Tuple, Optional
 import math
 
-from ..core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE
+from ...core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE
 
 
 def resize_image(
@@ -155,7 +156,7 @@ def apply_center_crop(image: np.ndarray, crop_factor: float) -> np.ndarray:
 
 def calculate_fisheye_coordinates(
     width: int, height: int, fov_degrees: float, projection_type: str = "stereographic"
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate coordinate mappings for fisheye projection.
 
@@ -311,38 +312,79 @@ def create_vr_frame(left_image: np.ndarray, right_image: np.ndarray, vr_format: 
         return np.hstack([left_image, right_image])
 
 
+def _create_hole_mask(image: np.ndarray) -> np.ndarray:
+    """Create binary mask for holes (black pixels) in image."""
+    if len(image.shape) == 3:
+        mask = np.all(image == 0, axis=2).astype(np.uint8)
+    else:
+        mask = (image == 0).astype(np.uint8)
+
+    # Dilate mask slightly to catch edge artifacts
+    kernel = np.ones((3, 3), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=1)
+    return mask
+
+
+def _calculate_adaptive_radius(mask: np.ndarray) -> int:
+    """Calculate adaptive inpaint radius based on largest hole size."""
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+
+    if num_labels <= 1:  # Only background
+        return 3
+
+    # Find largest hole (excluding background at index 0)
+    max_area = max(stats[i, cv2.CC_STAT_AREA] for i in range(1, num_labels))
+
+    # Adaptive radius: larger for bigger holes
+    # sqrt gives good scaling: 100px hole -> ~10px radius
+    return max(3, min(int(np.sqrt(max_area) * 0.5), 15))
+
+
+def _apply_high_quality_inpaint(image: np.ndarray, mask: np.ndarray, radius: int) -> np.ndarray:
+    """Apply high quality multi-pass inpainting."""
+    # First pass: Navier-Stokes for structure
+    filled = cv2.inpaint(image, mask, radius, cv2.INPAINT_NS)
+
+    # Second pass: TELEA on remaining artifacts
+    residual_mask = _create_hole_mask(filled)
+    if np.any(residual_mask):
+        filled = cv2.inpaint(filled, residual_mask, radius // 2, cv2.INPAINT_TELEA)
+
+    # Third pass: Bilateral filter to smooth inpainted regions while preserving edges
+    return cv2.bilateralFilter(filled, 5, 50, 50)
+
+
 def hole_fill_image(
-    image: np.ndarray, mask: Optional[np.ndarray] = None, method: str = "fast"
+    image: np.ndarray, mask: np.ndarray | None = None, method: str = "fast"
 ) -> np.ndarray:
     """
-    Fill holes in image using inpainting.
+    Fill holes in image using advanced inpainting with adaptive parameters.
 
     Args:
         image: Input image with holes
         mask: Binary mask of holes (None for auto-detection)
-        method: "fast" or "advanced" hole filling
+        method: "fast", "advanced", or "high" hole filling
 
     Returns:
         Image with filled holes
     """
     if mask is None:
-        # Auto-detect holes (black pixels)
-        if len(image.shape) == 3:
-            mask = np.all(image == 0, axis=2).astype(np.uint8)
-        else:
-            mask = (image == 0).astype(np.uint8)
+        mask = _create_hole_mask(image)
 
     if not np.any(mask):
         return image  # No holes to fill
 
-    if method == "advanced":
-        # Use Navier-Stokes based inpainting (slower but better quality)
-        filled = cv2.inpaint(image, mask, 3, cv2.INPAINT_NS)
-    else:
-        # Use fast marching method (faster)
-        filled = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
+    adaptive_radius = _calculate_adaptive_radius(mask)
 
-    return filled
+    if method == "high":
+        return _apply_high_quality_inpaint(image, mask, adaptive_radius)
+    elif method == "advanced":
+        # Advanced: Navier-Stokes with adaptive radius
+        filled = cv2.inpaint(image, mask, adaptive_radius, cv2.INPAINT_NS)
+        return cv2.bilateralFilter(filled, 3, 30, 30)
+    else:
+        # Fast: TELEA with smaller radius
+        return cv2.inpaint(image, mask, max(adaptive_radius // 2, 3), cv2.INPAINT_TELEA)
 
 
 def validate_image_array(image: np.ndarray) -> bool:

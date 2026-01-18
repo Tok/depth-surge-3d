@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from unittest.mock import patch, MagicMock
 
-from src.depth_surge_3d.models.video_depth_estimator import (
+from src.depth_surge_3d.inference.depth.video_depth_estimator import (
     VideoDepthEstimator,
     create_video_depth_estimator,
 )
@@ -295,7 +295,9 @@ class TestAutoDownloadModel:
             estimator = VideoDepthEstimator("models/unknown_model.pth", device="cpu")
 
             # Mock MODEL_DOWNLOAD_URLS to not have this model
-            with patch("src.depth_surge_3d.models.video_depth_estimator.MODEL_DOWNLOAD_URLS", {}):
+            with patch(
+                "src.depth_surge_3d.inference.depth.video_depth_estimator.MODEL_DOWNLOAD_URLS", {}
+            ):
                 result = estimator._auto_download_model()
 
                 # Should return False when no URL available

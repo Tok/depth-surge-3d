@@ -1,6 +1,6 @@
 [project]
 name = "depth-surge-3d"
-version = "0.8.0"
+version = "0.9.0"
 description = "Convert 2D videos to immersive 3D VR format using advanced AI depth estimation"
 authors = [
     { name = "Zirteq", email = "zirteq111@gmail.com" }

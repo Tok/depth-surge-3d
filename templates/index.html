@@ -30,19 +30,15 @@
             position: relative;
         }
 
-        body::before {
-            content: '';
+        #background-grid {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image:
-                repeating-linear-gradient(0deg, transparent, transparent 16px, rgba(255, 255, 255, 0.08) 16px, rgba(255, 255, 255, 0.08) 17px),
-                repeating-linear-gradient(90deg, transparent, transparent 16px, rgba(255, 255, 255, 0.08) 16px, rgba(255, 255, 255, 0.08) 17px);
+            top: -50px;
+            left: -10px;
+            width: calc(100vw + 20px);
+            height: calc(100vh + 50px);
             pointer-events: none;
             z-index: 0;
-            opacity: 1;
+            opacity: 0.6;
         }
 
 
@@ -110,7 +106,42 @@
             object-fit: contain;
             border-radius: 0;
         }
-        
+
+        /* Drag and Drop Zone Styles */
+        .drop-zone {
+            border: 2px dashed rgba(57, 255, 20, 0.4);
+            border-radius: 8px;
+            padding: 3rem 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: rgba(57, 255, 20, 0.05);
+        }
+
+        .drop-zone:hover {
+            border-color: rgba(57, 255, 20, 0.6);
+            background: rgba(57, 255, 20, 0.08);
+        }
+
+        .drop-zone.dragover {
+            border-color: var(--accent-lime);
+            background: rgba(57, 255, 20, 0.15);
+            border-width: 3px;
+            transform: scale(1.02);
+        }
+
+        .drop-zone.dragover i {
+            opacity: 0.8 !important;
+            transform: translateY(-5px);
+        }
+
+        .drop-zone-content {
+            pointer-events: none;
+        }
+
+        .drop-zone-content > * {
+            pointer-events: auto;
+        }
+
         .preview-images {
             display: flex;
             gap: 15px;
@@ -247,7 +278,22 @@
             height: 8px;
             margin: 8px 0;
         }
-        
+
+        /* Optional step styling (golden ratio smaller, opacity based on enabled state) */
+        .step-optional {
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+
+        .step-optional.step-enabled {
+            opacity: 1;
+        }
+
+        .step-optional .step-number {
+            font-size: 0.618em; /* Golden ratio: 1/1.618 */
+            vertical-align: super;
+        }
+
         .frame-update-indicator {
             position: absolute;
             top: 10px;
@@ -302,6 +348,8 @@
         .progress-bar.bg-success {
             background-color: var(--accent-lime) !important;
             background-image: linear-gradient(45deg, var(--accent-lime) 0%, var(--accent-green) 100%);
+            color: #000 !important;
+            font-weight: bold !important;
         }
 
         .progress-bar.bg-info {
@@ -536,6 +584,8 @@
         .nav-tabs {
             border-bottom: 1px solid var(--bs-border-color);
             margin-bottom: 1.5rem;
+            background-color: #111111;
+            padding: 0;
         }
 
         .nav-tabs .nav-link {
@@ -566,9 +616,59 @@
         .nav-tabs .nav-link i {
             margin-right: 6px;
         }
+
+        /* Live Preview Styles */
+        .preview-item img {
+            display: block;
+            object-fit: contain;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+        }
+
+        /* Hide broken image icon and show placeholder */
+        .preview-item img:not([src]),
+        .preview-item img[src=""] {
+            opacity: 0;
+        }
+
+        /* Placeholder for empty preview images */
+        .preview-item {
+            position: relative;
+        }
+
+        .preview-item img[src=""]::before {
+            content: "Waiting for frames...";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 14px;
+            text-align: center;
+        }
     </style>
 </head>
 <body style="padding-top: 0;">
+    <!-- SVG Grid with gravitational lens distortion -->
+    <svg id="background-grid" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision">
+        <defs>
+            <!-- Grid pattern -->
+            <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
+            </pattern>
+
+            <!-- Create displacement map using turbulence -->
+            <filter id="gravitational-lens" x="-50%" y="-50%" width="200%" height="200%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.003 0.003" numOctaves="4" result="turbulence" seed="5">
+                    <animate attributeName="baseFrequency" values="0.002 0.002;0.004 0.004;0.002 0.002" dur="100s" repeatCount="indefinite"/>
+                </feTurbulence>
+                <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="80" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+        </defs>
+
+        <!-- Apply grid pattern with filter -->
+        <rect width="100%" height="100%" fill="url(#grid)" filter="url(#gravitational-lens)"/>
+    </svg>
+
     <div class="container-fluid" style="margin-top: 0.5rem;">
         <div class="row">
             <div class="col-12">
@@ -653,14 +753,22 @@
                         <h5><i class="fas fa-upload"></i> Upload Video</h5>
                     </div>
                     <div class="card-body">
-                        <label for="videoFile" class="btn btn-success w-100" id="uploadBtn" style="cursor: pointer;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="17 8 12 3 7 8"/>
-                                <line x1="12" y1="3" x2="12" y2="15"/>
-                            </svg>
-                            <span id="uploadBtnText">Upload Video</span>
-                        </label>
+                        <!-- Drag and Drop Zone -->
+                        <div id="dropZone" class="drop-zone">
+                            <div class="drop-zone-content">
+                                <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; opacity: 0.5; margin-bottom: 1rem;"></i>
+                                <p class="mb-2"><strong>Drag and drop video here</strong></p>
+                                <p class="text-muted mb-3" style="font-size: 0.9rem;">or</p>
+                                <label for="videoFile" class="btn btn-success" id="uploadBtn" style="cursor: pointer;">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                    <span id="uploadBtnText">Choose Video File</span>
+                                </label>
+                            </div>
+                        </div>
                         <input type="file" class="form-control d-none" id="videoFile" accept="video/*">
                         
                         <!-- Video Preview -->
@@ -843,7 +951,8 @@
                             </select>
                             <small class="form-text text-muted">
                                 <i class="fas fa-film"></i> V2: 32-frame temporal windows for smooth depth<br>
-                                <i class="fas fa-bolt"></i> V3: Frame-by-frame, ~50% less VRAM, optional xformers optimization
+                                <i class="fas fa-bolt"></i> V3: Frame-by-frame, ~50% less VRAM, optional xformers optimization<br>
+                                <i class="fas fa-link"></i> <a href="https://github.com/ByteDance-Seed/Depth-Anything-3" target="_blank" style="color: var(--accent-lime);">V3 Info</a> | <a href="https://github.com/DepthAnything/Depth-Anything-V2" target="_blank" style="color: var(--accent-lime);">V2 Info</a>
                             </small>
                         </div>
                         <div class="mb-3">
@@ -884,6 +993,33 @@
                                 <i class="fas fa-brain"></i> Trained on Virtual KITTI and IRS datasets
                             </small>
                         </div>
+                        <!-- Experimental: Temporal Window Settings (V2 only) -->
+                        <div class="mb-3" id="temporalWindowSettings" style="display: none;">
+                            <div class="alert alert-warning" style="background-color: rgba(255, 193, 7, 0.1); border-color: var(--accent-yellow); color: var(--accent-yellow);">
+                                <i class="fas fa-flask"></i> <strong>Experimental:</strong> Temporal Window Tuning
+                            </div>
+                            <label class="form-label">Window Size (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Number of frames processed together for temporal consistency. Default: 32. Higher = more context but more VRAM. Lower = less VRAM but may reduce smoothness."></i></label>
+                            <input type="range" class="form-range" id="temporalWindowSize" min="16" max="64" step="8" value="32">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">16 (Low VRAM)</small>
+                                <small><strong id="temporalWindowSizeValue">32</strong> frames</small>
+                                <small class="text-muted">64 (High VRAM)</small>
+                            </div>
+                            <small class="form-text text-muted" style="margin-top: 0.5rem; display: block;">
+                                <i class="fas fa-memory"></i> Default (32): Balanced temporal consistency & VRAM<br>
+                                <i class="fas fa-exclamation-triangle"></i> Changing from 32 may affect quality (model trained on 32)
+                            </small>
+                            <label class="form-label" style="margin-top: 1rem;">Overlap (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Number of frames shared between consecutive windows. Default: 10. Higher = smoother transitions but slower."></i></label>
+                            <input type="range" class="form-range" id="temporalWindowOverlap" min="4" max="20" step="2" value="10">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">4 (Fast)</small>
+                                <small><strong id="temporalWindowOverlapValue">10</strong> frames</small>
+                                <small class="text-muted">20 (Smooth)</small>
+                            </div>
+                            <small class="form-text text-muted" style="margin-top: 0.5rem; display: block;">
+                                <i class="fas fa-arrows-alt-h"></i> Default (10): Good balance of speed & smoothness
+                            </small>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">Processing Device</label>
                             <select class="form-select" id="device">
@@ -892,10 +1028,6 @@
                                 <option value="cpu">Force CPU</option>
                             </select>
                         </div>
-                        <small class="form-text text-muted">
-    <i class="fas fa-cube"></i> Video-Depth-Anything processes in 32-frame chunks with temporal consistency<br>
-    <i class="fas fa-link"></i> <a href="https://github.com/DepthAnything/Depth-Anything-V2" target="_blank" style="color: var(--accent-lime);">Model Info & Documentation</a>
-</small>
                     </div>
 
                     <!-- Step 3: Stereo Pair Generation -->
@@ -928,11 +1060,11 @@
                         <div class="step-indicator">Preview showing [L][R] disparity</div>
                     </div>
 
-                    <!-- Step 4: VR Lens Simulation -->
-                    <div class="pipeline-step">
+                    <!-- Step 4: Fisheye Distortion (Optional) -->
+                    <div class="pipeline-step step-optional step-enabled" id="step4SettingsContainer">
                         <div class="step-header">
                             <span class="step-number">4</span>
-                            <h6 class="step-title">Fisheye Distortion</h6>
+                            <h6 class="step-title">Fisheye Distortion <small class="text-muted">(optional)</small></h6>
                         </div>
                         <div class="mb-3">
                             <div class="form-check">
@@ -961,11 +1093,11 @@
                         <div class="step-indicator">FOV: 180° → hemispherical projection</div>
                     </div>
 
-                    <!-- Step 5: Final Processing -->
+                    <!-- Step 5: Frame Cropping -->
                     <div class="pipeline-step">
                         <div class="step-header">
                             <span class="step-number">5</span>
-                            <h6 class="step-title">Final Processing</h6>
+                            <h6 class="step-title">Frame Cropping</h6>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Crop Factor (Standard) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Applied when fisheye is disabled. Crops from center to remove stereo edge artifacts. 1.0 = no crop, 0.5 = keep center 50%."></i></label>
@@ -984,10 +1116,11 @@
 </small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Hole Filling Quality <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Advanced uses depth-guided multi-stage filling for better quality but slower processing. Fast uses simple inpainting for speed."></i></label>
+                            <label class="form-label">Hole Filling Quality <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Higher quality uses multi-pass inpainting with adaptive parameters and edge preservation for best stereo quality."></i></label>
                             <select class="form-select" id="holeFillQuality">
-                                <option value="fast" selected>Fast (Simple Inpainting)</option>
-                                <option value="advanced">Advanced (Multi-Stage + Depth Guidance)</option>
+                                <option value="fast" selected>Fast (Quick TELEA inpainting)</option>
+                                <option value="advanced">Advanced (Navier-Stokes + bilateral filter)</option>
+                                <option value="high">High (Multi-pass + edge preservation)</option>
                             </select>
                             <small class="form-text text-muted">Balance between processing speed and stereo quality
                             <br><strong>Warning:</strong> Advanced is 3-5x slower with often minimal visual improvement</small>
@@ -995,10 +1128,54 @@
                         <div class="step-indicator">Cropping removes edge artifacts from stereo generation</div>
                     </div>
 
-                    <!-- Step 6: VR Format & Output -->
-                    <div class="pipeline-step">
+                    <!-- Step 6: AI Upscaling (Optional) -->
+                    <div class="pipeline-step step-optional step-disabled" id="step6SettingsContainer">
                         <div class="step-header">
                             <span class="step-number">6</span>
+                            <h6 class="step-title">AI Upscaling <small class="text-muted">(optional)</small></h6>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="applyUpscaling">
+                                <label class="form-check-label" for="applyUpscaling">
+                                    Enable AI Upscaling
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">Enable <a href="https://github.com/xinntao/Real-ESRGAN" target="_blank" style="color: var(--accent-lime);">Real-ESRGAN</a> upscaling after cropping</small>
+                        </div>
+                        <div class="mb-3" id="upscalingOptions">
+                            <label class="form-label">Upscale Factor <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Target resolution multiplier using Real-ESRGAN. WARNING: Very slow - can triple total processing time!"></i></label>
+                            <select class="form-select" id="upscaleModel">
+                                <option value="x2" selected>2x Resolution (+2GB VRAM, 2-3x slower)</option>
+                                <option value="x4">4x Resolution (+4GB VRAM, 3-5x slower)</option>
+                                <option value="x4-conservative">4x Conservative (No artifacts, +4GB VRAM, 3-5x slower)</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-robot"></i> Uses Real-ESRGAN AI super-resolution<br>
+                                <i class="fas fa-exclamation-triangle text-warning"></i> <strong>WARNING:</strong> Very slow - can easily triple total processing time!
+                            </small>
+                        </div>
+                        <div class="step-indicator">
+                            <i class="fas fa-hourglass-half"></i> <strong>Performance impact:</strong> Upscaling adds significant processing time (2-5x slower depending on model)
+                        </div>
+                    </div>
+
+                    <!-- Step 7: VR Assembly -->
+                    <div class="pipeline-step">
+                        <div class="step-header">
+                            <span class="step-number">7</span>
+                            <h6 class="step-title">VR Assembly</h6>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-vr-cardboard"></i> Assembles left and right frames into final VR format (configured in Step 8)
+                        </div>
+                        <div class="step-indicator">Combines upscaled/cropped frames into side-by-side or over-under format</div>
+                    </div>
+
+                    <!-- Step 8: VR Format & Output -->
+                    <div class="pipeline-step">
+                        <div class="step-header">
+                            <span class="step-number">8</span>
                             <h6 class="step-title">VR Format & Output</h6>
                         </div>
                         <div class="mb-3">
@@ -1012,6 +1189,19 @@
                                 <option value="over_under_rl">Over Under RL (Right-Top)</option>
                             </select>
                             <small class="form-text text-muted">Choose format compatible with your VR headset</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">VR Headset Preset <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Select your VR headset for optimized resolution and FOV settings. Choosing a preset will automatically configure resolution and field of view."></i></label>
+                            <select class="form-select" id="headsetPreset">
+                                <option value="none" selected>None (Manual Settings)</option>
+                                <option value="quest-3">Meta Quest 3 (2064×2208 per eye, 110° FOV)</option>
+                                <option value="quest-2">Meta Quest 2 (1832×1920 per eye, 100° FOV)</option>
+                                <option value="psvr2">PlayStation VR2 (2000×2040 per eye, 110° FOV)</option>
+                                <option value="pico-4">Pico 4 (2160×2160 per eye, 105° FOV)</option>
+                                <option value="valve-index">Valve Index (1440×1600 per eye, 130° FOV)</option>
+                                <option value="vive-pro-2">HTC Vive Pro 2 (2448×2448 per eye, 120° FOV)</option>
+                            </select>
+                            <small class="form-text text-muted">Applies optimized settings for your headset</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">VR Resolution per Eye <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Square formats (1:1): Optimized for VR headsets. Example: 1080×1080 per eye = 2160×1080 total (SBS) or 1080×2160 (Over-Under). 16:9 formats: Standard widescreen, preserves original content aspect ratio naturally."></i></label>
@@ -1103,7 +1293,37 @@
                         <div class="step-indicator">Final output: Calculated at runtime</div>
                     </div>
 
-
+                    <!-- Live Preview Settings -->
+                    <div class="pipeline-step" style="border-top: 2px dashed var(--bs-border-color); margin-top: 2rem; padding-top: 1.5rem;">
+                        <div class="step-header">
+                            <span class="step-number"><i class="fas fa-eye"></i></span>
+                            <h6 class="step-title">Live Preview Settings</h6>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="enableLivePreview" checked>
+                                <label class="form-check-label" for="enableLivePreview">
+                                    Enable Live Preview During Processing
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle"></i> Shows real-time depth maps, stereo pairs, and VR frames while processing<br>
+                                <i class="fas fa-network-wired"></i> Bandwidth usage: ~25-100 KB/sec (negligible performance impact)
+                            </small>
+                        </div>
+                        <div class="mb-3" id="previewFrequencySettings">
+                            <label class="form-label">Preview Update Frequency <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="How often preview images update. Lower = more frequent updates but higher bandwidth. Higher = less frequent but smoother processing."></i></label>
+                            <input type="range" class="form-range" id="previewUpdateInterval" min="1" max="5" step="0.5" value="2">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">1s (Fast)</small>
+                                <small><strong id="previewUpdateIntervalValue">2.0</strong> seconds</small>
+                                <small class="text-muted">5s (Slow)</small>
+                            </div>
+                            <small class="form-text text-muted" style="margin-top: 0.5rem; display: block;">
+                                <i class="fas fa-clock"></i> Default (2s): Good balance between freshness and bandwidth
+                            </small>
+                        </div>
+                    </div>
 
                     <!-- Process Button -->
                     <div class="text-center mt-3">
@@ -1135,6 +1355,83 @@
                             </svg>
                             Reset to Defaults
                         </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Preview Panel -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card" id="livePreviewCard" style="display: none;">
+                    <div class="card-header">
+                        <h5><i class="fas fa-eye"></i> Live Preview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Depth Map Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong id="depthMapLabel">Depth Map</strong></div>
+                                    <img id="depthMapPreview"
+                                         src=""
+                                         alt="Depth map preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="depthMapFrame">Frame: --</small>
+                                </div>
+                            </div>
+
+                            <!-- Stereo Left Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong id="stereoLeftLabel">Stereo Pair (Left)</strong></div>
+                                    <img id="stereoLeftPreview"
+                                         src=""
+                                         alt="Left eye preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="stereoLeftFrame">Frame: --</small>
+                                </div>
+                            </div>
+
+                            <!-- VR Frame Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong id="vrFrameLabel">VR Output</strong></div>
+                                    <img id="vrFramePreview"
+                                         src=""
+                                         alt="VR frame preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="vrFrameFrame">Frame: --</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Directory -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card mt-4" id="outputDirectoryCard" style="display: none;">
+                    <div class="card-header">
+                        <h5><i class="fas fa-folder-open"></i> Output Directory</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Processing output saved to:</strong><br>
+                                <code id="outputPath">--</code>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-primary" id="openDirectoryBtn">
+                                    <i class="fas fa-folder-open"></i> Open in File Explorer
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="copyPathBtn">
+                                    <i class="fas fa-copy"></i> Copy Path
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1194,10 +1491,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 3: Load Frames -->
+                                <!-- Step 3: Stereo Pairs -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-image"></i> 3. Load Frames</span>
+                                        <span><i class="fas fa-glasses"></i> 3. Create Stereo Pairs</span>
                                         <span id="step3Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1205,10 +1502,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 4: Stereo Pairs -->
-                                <div class="mb-2">
+                                <!-- Step 4: Fisheye Distortion (Optional) -->
+                                <div class="mb-2 step-optional step-enabled" id="step4Container">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-glasses"></i> 4. Create Stereo Pairs</span>
+                                        <span><i class="fas fa-circle-notch"></i> 4. Apply Distortion <small class="text-muted">(optional)</small></span>
                                         <span id="step4Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1216,10 +1513,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 5: Fisheye Distortion -->
+                                <!-- Step 5: Crop Frames -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-circle-notch"></i> 5. Apply Distortion</span>
+                                        <span><i class="fas fa-crop"></i> 5. Crop Frames</span>
                                         <span id="step5Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1227,10 +1524,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 6: VR Frames -->
-                                <div class="mb-2">
+                                <!-- Step 6: AI Upscaling (Optional) -->
+                                <div class="mb-2 step-optional step-disabled" id="step6Container">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-vr-cardboard"></i> 6. Create VR Frames</span>
+                                        <span><i class="fas fa-expand-arrows-alt"></i> 6. AI Upscaling <small class="text-muted">(optional)</small></span>
                                         <span id="step6Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1238,14 +1535,25 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 7: Final Video -->
+                                <!-- Step 7: Assemble VR Frames -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-video"></i> 7. Create Final Video</span>
+                                        <span><i class="fas fa-vr-cardboard"></i> 7. Assemble VR Frames</span>
                                         <span id="step7Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step7Bar" style="width: 0%;"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 8: Final Video -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
+                                        <span><i class="fas fa-video"></i> 8. Create Final Video</span>
+                                        <span id="step8Progress">0%</span>
+                                    </div>
+                                    <div class="progress sub-progress">
+                                        <div class="progress-bar bg-info" id="step8Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
                             </div>
@@ -1263,33 +1571,6 @@
                                         </button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Output Directory -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card mt-4" id="outputDirectoryCard" style="display: none;">
-                    <div class="card-header">
-                        <h5><i class="fas fa-folder-open"></i> Output Directory</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>Processing output saved to:</strong><br>
-                                <code id="outputPath">--</code>
-                            </div>
-                            <div>
-                                <button type="button" class="btn btn-primary" id="openDirectoryBtn">
-                                    <i class="fas fa-folder-open"></i> Open in File Explorer
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" id="copyPathBtn">
-                                    <i class="fas fa-copy"></i> Copy Path
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -1497,6 +1778,56 @@
             socket.on('processing_stopped', function(data) {
                 handleProcessingStopped(data);
             });
+
+            socket.on('frame_preview', function(data) {
+                handleFramePreview(data);
+            });
+        }
+
+        // Drag and Drop functionality
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('videoFile');
+
+        // Prevent default drag behaviors on the entire document
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropZone.classList.add('dragover');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('dragover');
+        }
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0) {
+                fileInput.files = files;
+                // Trigger the change event to upload the file
+                const event = new Event('change', { bubbles: true });
+                fileInput.dispatchEvent(event);
+            }
         }
 
         // Auto-upload video when file is selected
@@ -1543,6 +1874,100 @@
                 btn.style.pointerEvents = '';  // Re-enable
             });
         });
+
+        // VR Headset Preset selection handler
+        const headsetPresets = {
+            'quest-3': { width: 2064, height: 2208, fov: 110 },
+            'quest-2': { width: 1832, height: 1920, fov: 100 },
+            'psvr2': { width: 2000, height: 2040, fov: 110 },
+            'pico-4': { width: 2160, height: 2160, fov: 105 },
+            'valve-index': { width: 1440, height: 1600, fov: 130 },
+            'vive-pro-2': { width: 2448, height: 2448, fov: 120 }
+        };
+
+        document.getElementById('headsetPreset').addEventListener('change', function() {
+            const preset = this.value;
+
+            if (preset === 'none') {
+                // Reset to auto/default settings
+                document.getElementById('vrResolution').value = 'auto';
+                document.getElementById('fisheyeFov').value = '180';
+                document.getElementById('customResolution').value = '';
+                return;
+            }
+
+            const settings = headsetPresets[preset];
+            if (settings) {
+                // Set custom resolution
+                const customRes = `${settings.width}x${settings.height}`;
+                document.getElementById('customResolution').value = customRes;
+                document.getElementById('vrResolution').value = 'custom';
+
+                // Set FOV
+                document.getElementById('fisheyeFov').value = settings.fov;
+
+                console.log(`Applied ${preset} preset: ${customRes}, ${settings.fov}° FOV`);
+            }
+        });
+
+        // Update optional step styling based on settings
+        function updateOptionalStepStyling() {
+            // Step 4: Fisheye Distortion
+            const distortionEnabled = document.getElementById('applyDistortion').checked;
+            const step4Container = document.getElementById('step4Container');
+            const step4SettingsContainer = document.getElementById('step4SettingsContainer');
+
+            if (distortionEnabled) {
+                step4Container.classList.remove('step-disabled');
+                step4Container.classList.add('step-enabled');
+                if (step4SettingsContainer) {
+                    step4SettingsContainer.classList.remove('step-disabled');
+                    step4SettingsContainer.classList.add('step-enabled');
+                }
+            } else {
+                step4Container.classList.remove('step-enabled');
+                step4Container.classList.add('step-disabled');
+                if (step4SettingsContainer) {
+                    step4SettingsContainer.classList.remove('step-enabled');
+                    step4SettingsContainer.classList.add('step-disabled');
+                }
+            }
+
+            // Step 6: AI Upscaling
+            const upscalingEnabled = document.getElementById('applyUpscaling').checked;
+            const step6Container = document.getElementById('step6Container');
+            const step6SettingsContainer = document.getElementById('step6SettingsContainer');
+            const upscalingOptions = document.getElementById('upscalingOptions');
+
+            if (upscalingEnabled) {
+                step6Container.classList.remove('step-disabled');
+                step6Container.classList.add('step-enabled');
+                if (step6SettingsContainer) {
+                    step6SettingsContainer.classList.remove('step-disabled');
+                    step6SettingsContainer.classList.add('step-enabled');
+                }
+                if (upscalingOptions) {
+                    upscalingOptions.style.display = 'block';
+                }
+            } else {
+                step6Container.classList.remove('step-enabled');
+                step6Container.classList.add('step-disabled');
+                if (step6SettingsContainer) {
+                    step6SettingsContainer.classList.remove('step-enabled');
+                    step6SettingsContainer.classList.add('step-disabled');
+                }
+                if (upscalingOptions) {
+                    upscalingOptions.style.display = 'none';
+                }
+            }
+        }
+
+        // Listen for changes to optional step settings
+        document.getElementById('applyDistortion').addEventListener('change', updateOptionalStepStyling);
+        document.getElementById('applyUpscaling').addEventListener('change', updateOptionalStepStyling);
+
+        // Initialize optional step styling on page load
+        updateOptionalStepStyling();
 
         // Display video info
         function displayVideoInfo(info, file) {
@@ -1681,7 +2106,7 @@
 
         // Start processing
         document.getElementById('processBtn').addEventListener('click', function() {
-            if (!uploadedFilename) {
+            if (!uploadedFilename || !uploadedOutputDir) {
                 alert('Please upload a video first');
                 return;
             }
@@ -1716,6 +2141,8 @@
                 depth_model_version: document.getElementById('depthModelVersion').value,
                 depth_resolution: document.getElementById('depthResolution').value,
                 use_metric_depth: document.getElementById('depthModelType').value === 'metric',
+                temporal_window_size: parseInt(document.getElementById('temporalWindowSize').value),
+                temporal_window_overlap: parseInt(document.getElementById('temporalWindowOverlap').value),
                 super_sample: document.getElementById('superSample').value,
                 apply_distortion: document.getElementById('applyDistortion').checked,
                 fisheye_projection: document.getElementById('fisheyeProjection').value,
@@ -1723,7 +2150,10 @@
                 crop_factor: document.getElementById('cropFactor') ? parseFloat(document.getElementById('cropFactor').value) : 0.7,
                 fisheye_crop_factor: parseFloat(document.getElementById('fisheyeCropFactor').value),
                 hole_fill_quality: document.getElementById('holeFillQuality').value,
-                experimental_frame_interpolation: document.getElementById('experimentalFrameInterpolation').checked
+                upscale_model: document.getElementById('applyUpscaling').checked ? document.getElementById('upscaleModel').value : 'none',
+                experimental_frame_interpolation: document.getElementById('experimentalFrameInterpolation').checked,
+                enable_live_preview: document.getElementById('enableLivePreview').checked,
+                preview_update_interval: parseFloat(document.getElementById('previewUpdateInterval').value)
             };
             
             fetch('/process', {
@@ -1893,6 +2323,11 @@
 
         // Update progress
         function updateProgress(data) {
+            // Ignore progress updates if no active session (prevents stale updates after completion)
+            if (!currentSessionId) {
+                return;
+            }
+
             // Update overall progress bar
             const overallBar = document.getElementById('overallProgressBar');
             const overallText = document.getElementById('overallProgressText');
@@ -1906,7 +2341,8 @@
                 overallText.textContent = data.progress.toFixed(1) + '%';
             }
             if (overallPhase) {
-                overallPhase.textContent = data.stage || 'Processing...';
+                const etaSuffix = data.eta ? ` (ETA: ${data.eta})` : '';
+                overallPhase.textContent = (data.stage || 'Processing...') + etaSuffix;
             }
 
             // Update step-specific progress bars
@@ -1922,7 +2358,7 @@
             const stepPercent = stepTotal > 0 ? (stepProgress / stepTotal) * 100 : 0;
 
             // Mark previous steps as complete (100%)
-            for (let i = 1; i <= 7; i++) {
+            for (let i = 1; i <= 8; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
 
@@ -1969,7 +2405,7 @@
             }
 
             // Mark all steps as complete
-            for (let i = 1; i <= 7; i++) {
+            for (let i = 1; i <= 8; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
                 if (bar && text) {
@@ -1979,40 +2415,86 @@
                 }
             }
 
-            // Hide stop button, show start button
-            hideProgressPanel();
+            // Hide progress panel and clean up session state
+            document.querySelector('.progress-container').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'none';
+            const processBtn = document.getElementById('processBtn');
+            processBtn.style.display = 'inline-block';
+            processBtn.disabled = true;  // Disable until new video is uploaded
+            hideCurrentBatchDirectory();
             currentSessionId = null;
+
+            // Hide preview panel and clear preview images
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard) {
+                previewCard.style.display = 'none';
+            }
+            // Clear preview images
+            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+            // Reset frame counters
+            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+                const label = document.getElementById(id);
+                if (label) label.textContent = 'Frame: --';
+            });
+            // Reset labels to defaults
+            const depthLabel = document.getElementById('depthMapLabel');
+            const stereoLabel = document.getElementById('stereoLeftLabel');
+            const vrLabel = document.getElementById('vrFrameLabel');
+            if (depthLabel) depthLabel.textContent = 'Depth Map';
+            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
+            if (vrLabel) vrLabel.textContent = 'VR Output';
 
             // Show output directory card
             document.getElementById('outputPath').textContent = data.output_dir;
             document.getElementById('outputDirectoryCard').style.display = 'block';
 
-            // Show success modal
+            // Reset upload state immediately (don't wait for modal dismiss)
+            uploadedFilename = null;
+            uploadedOutputDir = null;
+
+            // Reset file input to allow uploading new videos
+            const videoFile = document.getElementById('videoFile');
+            if (videoFile) {
+                videoFile.value = '';
+            }
+
+            // Hide video preview and info
+            const videoPreview = document.getElementById('videoPreview');
+            const videoInfo = document.getElementById('videoInfo');
+            if (videoPreview) videoPreview.style.display = 'none';
+            if (videoInfo) videoInfo.style.display = 'none';
+
+            // Reset upload button text
+            const uploadBtnText = document.getElementById('uploadBtnText');
+            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+            // Disable process button until new video is uploaded
+            if (processBtn) {
+                processBtn.disabled = true;
+            }
+
+            // Show success modal (after all state is reset)
             document.getElementById('successMessage').textContent = data.message;
-            const successModal = new bootstrap.Modal(document.getElementById('successModal'));
-            successModal.show();
+            const successModalEl = document.getElementById('successModal');
+            const successModal = new bootstrap.Modal(successModalEl, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
 
-            // Reset upload state when modal is dismissed to allow new processing
-            document.getElementById('successModal').addEventListener('hidden.bs.modal', function resetAfterComplete() {
-                // Reset file input to allow uploading new videos
-                const videoFile = document.getElementById('videoFile');
-                if (videoFile) {
-                    videoFile.value = '';
-                }
-
-                // Hide video preview and info
-                const videoPreview = document.getElementById('videoPreview');
-                const videoInfo = document.getElementById('videoInfo');
-                if (videoPreview) videoPreview.style.display = 'none';
-                if (videoInfo) videoInfo.style.display = 'none';
-
-                // Reset upload button text
-                const uploadBtnText = document.getElementById('uploadBtnText');
-                if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
-
-                // Remove this event listener to prevent multiple bindings
-                this.removeEventListener('hidden.bs.modal', resetAfterComplete);
+            // Ensure backdrop is removed when modal closes
+            successModalEl.addEventListener('hidden.bs.modal', function () {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
             }, { once: true });
+
+            successModal.show();
         }
 
         // Handle processing error
@@ -2033,32 +2515,74 @@
             hideProgressPanel();
             currentSessionId = null;
 
-            // Show error modal
+            // Hide preview panel and clear preview images
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard) {
+                previewCard.style.display = 'none';
+            }
+            // Clear preview images
+            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+            // Reset frame counters
+            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+                const label = document.getElementById(id);
+                if (label) label.textContent = 'Frame: --';
+            });
+            // Reset labels to defaults
+            const depthLabel = document.getElementById('depthMapLabel');
+            const stereoLabel = document.getElementById('stereoLeftLabel');
+            const vrLabel = document.getElementById('vrFrameLabel');
+            if (depthLabel) depthLabel.textContent = 'Depth Map';
+            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
+            if (vrLabel) vrLabel.textContent = 'VR Output';
+
+            // Reset upload state immediately (don't wait for modal dismiss)
+            uploadedFilename = null;
+            uploadedOutputDir = null;
+
+            // Reset file input to allow uploading new videos
+            const videoFile = document.getElementById('videoFile');
+            if (videoFile) {
+                videoFile.value = '';
+            }
+
+            // Hide video preview and info
+            const videoPreview = document.getElementById('videoPreview');
+            const videoInfo = document.getElementById('videoInfo');
+            if (videoPreview) videoPreview.style.display = 'none';
+            if (videoInfo) videoInfo.style.display = 'none';
+
+            // Reset upload button text
+            const uploadBtnText = document.getElementById('uploadBtnText');
+            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+            // Disable process button until new video is uploaded
+            const processBtnError = document.getElementById('processBtn');
+            if (processBtnError) {
+                processBtnError.disabled = true;
+            }
+
+            // Show error modal (after all state is reset)
             document.getElementById('errorMessage').textContent = data.error;
-            const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
-            errorModal.show();
+            const errorModalEl = document.getElementById('errorModal');
+            const errorModal = new bootstrap.Modal(errorModalEl, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
 
-            // Reset upload state when modal is dismissed to allow new processing
-            document.getElementById('errorModal').addEventListener('hidden.bs.modal', function resetAfterError() {
-                // Reset file input to allow uploading new videos
-                const videoFile = document.getElementById('videoFile');
-                if (videoFile) {
-                    videoFile.value = '';
-                }
-
-                // Hide video preview and info
-                const videoPreview = document.getElementById('videoPreview');
-                const videoInfo = document.getElementById('videoInfo');
-                if (videoPreview) videoPreview.style.display = 'none';
-                if (videoInfo) videoInfo.style.display = 'none';
-
-                // Reset upload button text
-                const uploadBtnText = document.getElementById('uploadBtnText');
-                if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
-
-                // Remove this event listener to prevent multiple bindings
-                this.removeEventListener('hidden.bs.modal', resetAfterError);
+            // Ensure backdrop is removed when modal closes
+            errorModalEl.addEventListener('hidden.bs.modal', function () {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
             }, { once: true });
+
+            errorModal.show();
         }
         
         // Handle processing stopped
@@ -2072,6 +2596,29 @@
             // Hide stop button, show start button
             hideProgressPanel();
             currentSessionId = null;
+
+            // Hide preview panel and clear preview images
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard) {
+                previewCard.style.display = 'none';
+            }
+            // Clear preview images
+            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+            // Reset frame counters
+            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+                const label = document.getElementById(id);
+                if (label) label.textContent = 'Frame: --';
+            });
+            // Reset labels to defaults
+            const depthLabel = document.getElementById('depthMapLabel');
+            const stereoLabel = document.getElementById('stereoLeftLabel');
+            const vrLabel = document.getElementById('vrFrameLabel');
+            if (depthLabel) depthLabel.textContent = 'Depth Map';
+            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
+            if (vrLabel) vrLabel.textContent = 'VR Output';
 
             // Show info message
             alert('Processing has been stopped: ' + data.message);
@@ -2093,6 +2640,50 @@
             if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
         }
 
+        // Handle frame preview
+        function handleFramePreview(data) {
+            // Show preview panel if hidden
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard && previewCard.style.display === 'none') {
+                previewCard.style.display = 'block';
+            }
+
+            // Update appropriate preview image based on frame type
+            const frameType = data.frame_type;
+            const imageData = data.image_data;
+            const frameNumber = data.frame_number;
+
+            // Map frame types to descriptive labels
+            const frameTypeLabels = {
+                'depth_map': 'Depth Map',
+                'stereo_left': 'Stereo Pair (Left)',
+                'upscaled_left': 'Upscaled (Left)',
+                'vr_frame': 'VR Output'
+            };
+
+            if (frameType === 'depth_map') {
+                const img = document.getElementById('depthMapPreview');
+                const label = document.getElementById('depthMapFrame');
+                const titleLabel = document.getElementById('depthMapLabel');
+                if (img) img.src = imageData;
+                if (label) label.textContent = `Frame: ${frameNumber}`;
+                if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'Depth Map';
+            } else if (frameType === 'stereo_left' || frameType === 'upscaled_left') {
+                const img = document.getElementById('stereoLeftPreview');
+                const label = document.getElementById('stereoLeftFrame');
+                const titleLabel = document.getElementById('stereoLeftLabel');
+                if (img) img.src = imageData;
+                if (label) label.textContent = `Frame: ${frameNumber}`;
+                if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'Left Eye';
+            } else if (frameType === 'vr_frame') {
+                const img = document.getElementById('vrFramePreview');
+                const label = document.getElementById('vrFrameFrame');
+                const titleLabel = document.getElementById('vrFrameLabel');
+                if (img) img.src = imageData;
+                if (label) label.textContent = `Frame: ${frameNumber}`;
+                if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'VR Output';
+            }
+        }
 
         // Update range info based on video duration and selected range
         function updateRangeInfo() {
@@ -2374,7 +2965,9 @@
                 cropFactor: document.getElementById('cropFactor').value,
                 fisheyeCropFactor: document.getElementById('fisheyeCropFactor').value,
                 holeFillQuality: document.getElementById('holeFillQuality').value,
-                
+                applyUpscaling: document.getElementById('applyUpscaling').checked,
+                upscaleModel: document.getElementById('upscaleModel').value,
+
                 // Experimental features
                 experimentalFrameInterpolation: document.getElementById('experimentalFrameInterpolation').checked
             };
@@ -2414,7 +3007,13 @@
                 if (settings.applyDistortion !== undefined) {
                     document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
                 }
-                
+                if (settings.applyUpscaling !== undefined) {
+                    document.getElementById('applyUpscaling').dispatchEvent(new Event('change'));
+                }
+
+                // Update optional step styling after loading settings
+                updateOptionalStepStyling();
+
             } catch (error) {
                 console.error('Error loading settings:', error);
             }
@@ -2443,7 +3042,9 @@
                 fisheyeFov: '180',
                 cropFactor: '1.0',
                 fisheyeCropFactor: '0.7',
-                holeFillQuality: 'fast'
+                holeFillQuality: 'fast',
+                applyUpscaling: false,
+                upscaleModel: 'x2'
             };
             
             Object.keys(defaults).forEach(key => {
@@ -2459,10 +3060,14 @@
             
             // Trigger change events
             document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
-            
+            document.getElementById('applyUpscaling').dispatchEvent(new Event('change'));
+
+            // Update optional step styling
+            updateOptionalStepStyling();
+
             // Clear saved settings
             localStorage.removeItem('stereoProjectorSettings');
-            
+
             alert('Settings reset to defaults');
         }
         
@@ -2472,7 +3077,7 @@
                 'startTime', 'endTime', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
                 'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'depthResolution', 'videoEncoder',
                 'preserveAudio', 'keepIntermediates', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
-                'fisheyeCropFactor', 'holeFillQuality', 'experimentalFrameInterpolation'
+                'fisheyeCropFactor', 'holeFillQuality', 'applyUpscaling', 'upscaleModel', 'experimentalFrameInterpolation'
             ];
             
             settingsElements.forEach(id => {
@@ -2527,15 +3132,114 @@
             }
         });
 
+        // Check for resumable jobs
+        function checkForResumableJobs() {
+            fetch('/detect_resumable')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.jobs && data.jobs.length > 0) {
+                        const mostRecent = data.jobs[0];
+                        showResumableJobNotification(mostRecent, data.jobs.length);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking for resumable jobs:', error);
+                });
+        }
+
+        function showResumableJobNotification(job, totalJobs) {
+            const message = totalJobs > 1
+                ? `Found ${totalJobs} incomplete processing jobs. Most recent: "${job.name}" (${job.highest_stage})`
+                : `Found incomplete processing: "${job.name}" (${job.highest_stage})`;
+
+            // Create toast notification
+            const toastHtml = `
+                <div class="toast align-items-center text-white bg-info border-0" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas fa-info-circle"></i> ${message}
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-light me-2" onclick="resumeJob('${job.path}')">Resume</button>
+                                <button class="btn btn-sm btn-outline-light" data-bs-dismiss="toast">Dismiss</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const toastContainer = document.createElement('div');
+            toastContainer.innerHTML = toastHtml;
+            document.body.appendChild(toastContainer);
+
+            const toastElement = toastContainer.querySelector('.toast');
+            const toast = new bootstrap.Toast(toastElement, { autohide: false });
+            toast.show();
+        }
+
+        function resumeJob(jobPath) {
+            // Pre-populate resume field and scroll to it
+            document.getElementById('resumeDirectory').value = jobPath;
+
+            // Dismiss any visible toasts
+            document.querySelectorAll('.toast').forEach(t => {
+                const toast = bootstrap.Toast.getInstance(t);
+                if (toast) toast.hide();
+            });
+
+            // Scroll to resume section
+            document.getElementById('resumeDirectory').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Highlight the field briefly
+            const resumeField = document.getElementById('resumeDirectory');
+            resumeField.classList.add('bg-warning');
+            setTimeout(() => resumeField.classList.remove('bg-warning'), 2000);
+        }
+
+        // Toggle temporal window settings visibility based on depth model version
+        document.getElementById('depthModelVersion').addEventListener('change', function() {
+            const isV2 = this.value === 'v2';
+            document.getElementById('temporalWindowSettings').style.display = isV2 ? 'block' : 'none';
+        });
+
+        // Update temporal window size value display
+        document.getElementById('temporalWindowSize').addEventListener('input', function() {
+            document.getElementById('temporalWindowSizeValue').textContent = this.value;
+        });
+
+        // Update temporal window overlap value display
+        document.getElementById('temporalWindowOverlap').addEventListener('input', function() {
+            document.getElementById('temporalWindowOverlapValue').textContent = this.value;
+        });
+
+        // Update preview update interval value display
+        document.getElementById('previewUpdateInterval').addEventListener('input', function() {
+            document.getElementById('previewUpdateIntervalValue').textContent = parseFloat(this.value).toFixed(1);
+        });
+
+        // Toggle preview frequency settings based on checkbox
+        document.getElementById('enableLivePreview').addEventListener('change', function() {
+            const frequencySettings = document.getElementById('previewFrequencySettings');
+            if (this.checked) {
+                frequencySettings.style.display = 'block';
+            } else {
+                frequencySettings.style.display = 'none';
+            }
+        });
+
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             initSocket();
             updateSystemInfo();
             loadSettings();
             setupAutoSave();
-            
+            checkForResumableJobs();  // Check for incomplete jobs
+
             // Update system info every 5 seconds
             setInterval(updateSystemInfo, 5000);
+
+            // Initialize temporal window settings visibility
+            const isV2 = document.getElementById('depthModelVersion').value === 'v2';
+            document.getElementById('temporalWindowSettings').style.display = isV2 ? 'block' : 'none';
         });
     </script>
 </body>

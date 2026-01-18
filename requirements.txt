@@ -1,6 +1,11 @@
+# Core dependencies - install these first
+numpy>=1.24.0,<2.0.0
 opencv-python>=4.8.0
-numpy>=1.24.0
 Pillow>=10.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Application dependencies
 tqdm>=4.65.0
 transformers>=4.30.0
 flask>=3.0.0
@@ -10,8 +15,14 @@ einops>=0.7.0
 easydict>=1.9
 
 # Depth Anything V3 dependencies
+# IMPORTANT: Install with --no-build-isolation to avoid numpy recompilation issues
+# pip install --no-build-isolation git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
+#
 # Note: xformers is optional - provides performance optimization for DA3
 # Uncomment the line below if you want to install xformers (may fail on some systems):
 # xformers>=0.0.26
-# Install DA3 from GitHub (not yet on PyPI)
 git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
+
+# AI Upscaling: Real-ESRGAN with standalone RRDB network (no extra dependencies)
+# Uses vendored architecture from ai-forever/Real-ESRGAN
+# Model weights auto-download to ~/.cache/depth-surge-3d/realesrgan/

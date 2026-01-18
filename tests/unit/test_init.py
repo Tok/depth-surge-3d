@@ -12,7 +12,7 @@ class TestPackageMetadata:
 
         assert hasattr(depth_surge_3d, "__version__")
         assert isinstance(depth_surge_3d.__version__, str)
-        assert depth_surge_3d.__version__ == "0.8.1"
+        assert depth_surge_3d.__version__ == "0.9.0"
 
     def test_author_attribute(self):
         """Test that __author__ is defined."""
@@ -107,7 +107,7 @@ class TestExportedConstants:
 class TestStereoProjectorInstantiation:
     """Test that StereoProjector can be instantiated through package import."""
 
-    @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
     def test_create_stereo_projector_from_package(self, mock_create):
         """Test creating StereoProjector instance from package level."""
         mock_create.return_value = MagicMock()
