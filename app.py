@@ -88,9 +88,8 @@ def vprint(*args: Any, **kwargs: Any) -> None:
         print(*args, **kwargs)
 
 
-def print_banner() -> None:
-    """Print Depth Surge 3D banner with lime gradient border and blue link"""
-    # Get version and git commit ID
+def _get_version_info() -> tuple[str, str]:
+    """Get version and git commit ID"""
     try:
         from depth_surge_3d import __version__
 
@@ -111,23 +110,61 @@ def print_banner() -> None:
     except Exception:
         git_commit = "unknown"
 
-    # Simple lime gradient - mathematically spaced through ANSI green/lime range
-    # Base lime color is #82, we darken/lighten around it
-    # Start at 28 instead of 22 to avoid too-dark greens
-    base_lime_codes = [28, 34, 40, 46, 82, 118, 154, 190]
+    return version, git_commit
 
-    def get_lime_color(position):
-        """Get interpolated lime color for position 0.0 to 1.0"""
-        index = position * (len(base_lime_codes) - 1)
-        return f"\033[38;5;{base_lime_codes[int(index)]}m"
 
-    # Blue accent colors
-    blue_accent = "\033[38;5;39m"  # Sky blue accent
-    bright_blue = "\033[38;5;51m"  # Bright cyan for version/commit
+def _get_lime_color(position: float) -> str:
+    """Get interpolated lime color for position 0.0 to 1.0 using 32 shades"""
+    # Mathematical interpolation from dark green (28) to bright lime (190)
+    # 32 evenly spaced steps for smooth gradient
+    start_code = 28
+    end_code = 190
+    color_code = int(start_code + (end_code - start_code) * position)
+    return f"\033[38;5;{color_code}m"
 
+
+def _print_banner_border(border_width: int, char: str) -> None:
+    """Print horizontal border with lime gradient"""
+    border = _get_lime_color(0.0) + "█"
+    for i in range(border_width):
+        position = i / border_width
+        border += f"{_get_lime_color(position)}{char}"
+    border += _get_lime_color(1.0) + "█\033[0m"
+    print(border)
+
+
+def _print_banner_line(line: str, row_idx: int, num_rows: int, max_diagonal: int) -> None:
+    """Print single banner line with gradient and white '3D' text"""
+    white = "\033[97m"
     reset = "\033[0m"
 
-    # ASCII art banner
+    # Left border
+    left_pos = row_idx / (num_rows + 1)
+    colored_line = f"{_get_lime_color(left_pos)}█{reset} "
+
+    # Apply diagonal gradient to text, but make "3D" part white
+    # "3D" starts at character 46 in each line
+    for col_idx, char in enumerate(line):
+        if col_idx >= 46:  # "3D" section
+            colored_line += f"{white}{char}"
+        else:  # "DEPTH SURGE" section with gradient
+            diagonal_pos = (row_idx + col_idx) / max_diagonal
+            colored_line += f"{_get_lime_color(diagonal_pos)}{char}"
+
+    # Right border
+    right_pos = (row_idx + 1) / (num_rows + 1)
+    colored_line += f"{reset} {_get_lime_color(right_pos)}█{reset}"
+    print(colored_line)
+
+
+def print_banner() -> None:
+    """Print Depth Surge 3D banner with lime gradient and white 3D text"""
+    version, git_commit = _get_version_info()
+
+    blue_accent = "\033[38;5;39m"
+    bright_blue = "\033[38;5;51m"
+    reset = "\033[0m"
+
     banner_lines = [
         "░█▀▄░█▀▀░█▀█░▀█▀░█░█░░░█▀▀░█░█░█▀▄░█▀▀░█▀▀░░░▀▀█░█▀▄",
         "░█░█░█▀▀░█▀▀░░█░░█▀█░░░▀▀█░█░█░█▀▄░█░█░█▀▀░░░░▀▄░█░█",
@@ -137,52 +174,23 @@ def print_banner() -> None:
     print()
 
     # Calculate dimensions
-    border_width = len(banner_lines[0]) + 2  # +2 for spaces around text
+    border_width = len(banner_lines[0]) + 2
     num_rows = len(banner_lines)
     line_length = len(banner_lines[0])
     max_diagonal = num_rows + line_length - 2
 
-    # Top border with lime gradient
-    top_border = f"{get_lime_color(0.0)}▐"
-    for i in range(border_width):
-        position = i / border_width
-        top_border += f"{get_lime_color(position)}▀"
-    top_border += f"{get_lime_color(1.0)}▌{reset}"
-    print(top_border)
-
-    # Text lines with border and lime diagonal gradient
+    # Print banner with borders
+    _print_banner_border(border_width, "▀")
     for row_idx, line in enumerate(banner_lines):
-        # Left border character with lime gradient
-        left_position = row_idx / (num_rows + 1)
-        colored_line = f"{get_lime_color(left_position)}▐{reset} "
+        _print_banner_line(line, row_idx, num_rows, max_diagonal)
+    _print_banner_border(border_width, "▄")
 
-        # Apply diagonal gradient to text (135° angle: top-left to bottom-right)
-        for col_idx, char in enumerate(line):
-            # Calculate position along diagonal (0.0 to 1.0)
-            diagonal_pos = (row_idx + col_idx) / max_diagonal
-            colored_line += f"{get_lime_color(diagonal_pos)}{char}"
-
-        # Right border character with lime gradient
-        right_position = (row_idx + 1) / (num_rows + 1)
-        colored_line += f"{reset} {get_lime_color(right_position)}▌{reset}"
-        print(colored_line)
-
-    # Bottom border with lime gradient
-    bottom_border = f"{get_lime_color(0.0)}▐"
-    for i in range(border_width):
-        position = i / border_width
-        bottom_border += f"{get_lime_color(position)}▄"
-    bottom_border += f"{get_lime_color(1.0)}▌{reset}"
-    print(bottom_border)
-
-    # GitHub repo link with accent blue
+    # GitHub repo link
     repo_link = "https://github.com/Tok/depth-surge-3d"
-
-    # Center the link
     padding = (border_width - len(repo_link)) // 2
     print(f"{' ' * padding}{blue_accent}{repo_link}{reset}")
 
-    # Version and commit info with bright blue accents
+    # Version and commit info
     version_info = f"v{version} [{git_commit}]"
     version_padding = (border_width - len(version_info)) // 2
     print(
