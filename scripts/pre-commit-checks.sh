@@ -69,10 +69,10 @@ echo ""
 # Step 3: Unit Tests with Coverage
 # =============================================================================
 echo "🧪 Step 3/3: Running unit tests with coverage..."
-echo "   Command: pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=term --cov-fail-under=75"
+echo "   Command: pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=term --cov-fail-under=85"
 echo ""
 
-pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=term --cov-fail-under=75
+pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=term --cov-fail-under=85
 
 PYTEST_EXIT=$?
 if [ $PYTEST_EXIT -eq 0 ]; then

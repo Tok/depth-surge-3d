@@ -181,6 +181,24 @@ video_encoder.py (180 LOC)
 pipeline_orchestrator.py (350 LOC)
 ```
 
+### Test Coverage Policy
+
+**Coverage Targets:**
+- **Minimum (enforced)**: 85% test coverage
+- **Goal (documented)**: 90% test coverage
+- **Rationale**: Balance between quality assurance and development velocity
+
+**Implementation:**
+- Pre-commit checks enforce 85% minimum coverage
+- Team aims for 90%+ coverage when writing new modules
+- Coverage gaps should be documented in commit messages if < 90%
+- Edge cases and integration tests may be added iteratively
+
+**Why separate minimum and goal?**
+- 85% ensures core functionality is tested
+- 90% is achievable but allows flexibility for rapid prototyping
+- Prevents blocking on perfect coverage for non-critical paths
+
 **Separation of Side Effects from Pure Logic:**
 
 When refactoring or writing new code, always separate pure logic from side effects:
