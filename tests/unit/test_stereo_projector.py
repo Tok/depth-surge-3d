@@ -1042,3 +1042,146 @@ class TestProcessImage:
         result = projector.process_image("test.jpg", "/tmp/output")
 
         assert result is False
+
+
+class TestProcessVideoSuccessPath:
+    """Test process_video successful path."""
+
+    @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.rendering.stereo_projector.validate_video_file")
+    @patch("src.depth_surge_3d.rendering.stereo_projector.get_video_properties")
+    @patch("src.depth_surge_3d.rendering.stereo_projector.VideoProcessor")
+    @patch("pathlib.Path.mkdir")
+    def test_process_video_success(
+        self, mock_mkdir, mock_processor_class, mock_get_props, mock_validate, mock_create
+    ):
+        """Test successful video processing path."""
+        mock_estimator = MagicMock()
+        mock_estimator.load_model.return_value = True
+        mock_create.return_value = mock_estimator
+
+        mock_validate.return_value = True
+        mock_get_props.return_value = {"width": 1920, "height": 1080, "fps": 30}
+
+        mock_processor = MagicMock()
+        mock_processor.process.return_value = True
+        mock_processor_class.return_value = mock_processor
+
+        projector = StereoProjector(device="cpu")
+        result = projector.process_video("test.mp4", "/tmp/output")
+
+        assert result is True
+        mock_processor.process.assert_called_once()
+
+
+class TestValidateInputsDirectoryError:
+    """Test validate_inputs with directory creation failure."""
+
+    @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.rendering.stereo_projector.validate_video_file")
+    @patch("pathlib.Path.mkdir")
+    def test_validate_inputs_directory_creation_fails(
+        self, mock_mkdir, mock_validate, mock_create
+    ):
+        """Test validate_inputs when directory creation fails."""
+        mock_create.return_value = MagicMock()
+        mock_validate.return_value = True
+        mock_mkdir.side_effect = PermissionError("Permission denied")
+
+        projector = StereoProjector(device="cpu")
+        result = projector._validate_inputs("test.mp4", "/root/forbidden", {})
+
+        assert result is False
+
+
+class TestExtractFramesEdgeCases:
+    """Test extract_frames edge cases."""
+
+    @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.io.operations.get_video_properties")
+    @patch("subprocess.run")
+    @patch("pathlib.Path.mkdir")
+    @patch("pathlib.Path.glob")
+    def test_extract_frames_cpu_fallback_with_time_range(
+        self, mock_glob, mock_mkdir, mock_run, mock_get_props, mock_create
+    ):
+        """Test extract_frames CPU fallback with time range parameters."""
+        mock_create.return_value = MagicMock()
+        mock_get_props.return_value = {"width": 1920, "height": 1080, "fps": 30}
+
+        # First call (CUDA) fails, second call (CPU) succeeds
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stderr="CUDA not available"),
+            MagicMock(returncode=0),
+        ]
+
+        mock_glob.return_value = [Path("/tmp/frame_000001.png")]
+
+        projector = StereoProjector(device="cpu")
+        frames = projector.extract_frames(
+            "test.mp4", "/tmp/output", start_time="00:10", end_time="00:20"
+        )
+
+        assert len(frames) == 1
+        # Verify CPU fallback was called with time range
+        assert mock_run.call_count == 2
+        cpu_call_args = mock_run.call_args_list[1][0][0]
+        assert "-ss" in cpu_call_args
+        assert "00:10" in cpu_call_args
+        assert "-to" in cpu_call_args
+        assert "00:20" in cpu_call_args
+
+    @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
+    @patch("src.depth_surge_3d.io.operations.get_video_properties")
+    @patch("subprocess.run")
+    @patch("pathlib.Path.mkdir")
+    def test_extract_frames_ffmpeg_error(self, mock_mkdir, mock_run, mock_get_props, mock_create):
+        """Test extract_frames when FFmpeg fails completely."""
+        import subprocess
+
+        mock_create.return_value = MagicMock()
+        mock_get_props.return_value = {"width": 1920, "height": 1080, "fps": 30}
+
+        # Both CUDA and CPU fail
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stderr="CUDA not available"),
+            subprocess.CalledProcessError(1, "ffmpeg", stderr="FFmpeg error"),
+        ]
+
+        projector = StereoProjector(device="cpu")
+
+        try:
+            projector.extract_frames("test.mp4", "/tmp/output")
+            assert False, "Should have raised RuntimeError"
+        except RuntimeError as e:
+            assert "FFmpeg frame extraction failed" in str(e)
+
+
+class TestCreateOutputVideoEdgeCases:
+    """Test create_output_video edge cases."""
+
+    @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
+    @patch("pathlib.Path.glob")
+    @patch("subprocess.run")
+    def test_create_output_video_with_numeric_target_fps(
+        self, mock_run, mock_glob, mock_create
+    ):
+        """Test create_output_video with numeric target_fps."""
+        mock_create.return_value = MagicMock()
+        mock_glob.return_value = [Path("/tmp/frame_000001.png")]
+        mock_run.return_value = MagicMock(returncode=0)
+
+        projector = StereoProjector(device="cpu")
+
+        with patch.object(projector, "_check_nvenc_available", return_value=False):
+            result = projector.create_output_video(
+                "/tmp/vr_frames",
+                "/tmp/output.mp4",
+                "/tmp/original.mp4",
+                target_fps=60,
+            )
+
+        assert result is True
+        # Verify numeric fps was used
+        ffmpeg_cmd = mock_run.call_args[0][0]
+        assert "60" in ffmpeg_cmd
