@@ -811,6 +811,8 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     """Handle video upload - saves directly to output directory with audio extraction"""
+    from src.depth_surge_3d.utils.path_utils import sanitize_filename
+
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
@@ -818,17 +820,21 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
 
-    # Create timestamped output directory
-    original_filename = file.filename
+    # Create timestamped output directory with sanitized filename
+    original_filename = sanitize_filename(file.filename)
     video_name = Path(original_filename).stem
     file_ext = Path(original_filename).suffix
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(app.config["OUTPUT_FOLDER"]) / f"{int(time.time())}_{video_name}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
+    vprint(f"Created output directory: {output_dir}")
+    vprint(f"  Directory exists: {output_dir.exists()}")
 
     # Save video to output directory preserving original filename
     video_path = output_dir / original_filename
+    vprint(f"Saving video as: {video_path.name}")
     file.save(video_path)
+    vprint(f"  Video saved: {video_path.exists()}")
 
     # Get video information
     video_info = get_video_info(video_path)
@@ -913,7 +919,10 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 
     output_dir = Path(output_dir_str)
     if not output_dir.exists():
-        return jsonify({"error": "Output directory not found"}), 404
+        vprint(f"ERROR: Output directory not found: {output_dir_str}")
+        vprint(f"  Resolved path: {output_dir}")
+        vprint(f"  Exists: {output_dir.exists()}")
+        return jsonify({"error": f"Output directory not found: {output_dir_str}"}), 404
 
     # Find the source video file in output directory
     video_path = find_source_video(output_dir)

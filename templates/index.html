@@ -2089,7 +2089,7 @@
 
         // Start processing
         document.getElementById('processBtn').addEventListener('click', function() {
-            if (!uploadedFilename) {
+            if (!uploadedFilename || !uploadedOutputDir) {
                 alert('Please upload a video first');
                 return;
             }
