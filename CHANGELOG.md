@@ -172,6 +172,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All functions now meet C901 complexity requirements (≤10)
   - Improved code maintainability
 
+#### Progress Tracking & UI Accuracy
+- **8-step progress bar architecture**
+  - Updated from 7 to 8 steps to match current pipeline
+  - Added separate "AI Upscaling" step (Step 6)
+  - Fixed progress weights distribution (now sums to exactly 100%)
+  - Progress bar now shows correct step name during ESRGAN processing
+- **Adaptive ETA calculation**
+  - Measures actual time-per-frame for current step (especially ESRGAN)
+  - Estimates remaining time using measured step rate, not overall average
+  - Fixes wildly inaccurate ETAs during slow upscaling steps (2-3x slower)
+  - Blends step-based and fallback estimates for robustness
+- **Upscale preview functionality**
+  - Preview frames now appear regardless of keep_intermediates setting
+  - Creates temporary directories for preview when intermediates disabled
+  - Fixed preview not showing during AI upscaling operations
+
+#### File Management & Paths
+- **Original filename preservation**
+  - Videos no longer renamed to "original_video.ext" on upload
+  - Output files maintain connection to source video name
+  - Added find_source_video() helper to locate videos in directories
+  - Intelligently excludes processed outputs (files with _3D_ marker)
+- **Absolute path resolution**
+  - OUTPUT_FOLDER now uses absolute paths to prevent resolution issues
+  - Upload endpoint returns absolute paths via .resolve()
+  - Process endpoint resolves incoming paths for consistency
+  - Fixes "output dir not found" errors caused by relative path mismatches
+
+#### Modal & UI State Management
+- **Bootstrap modal backdrop cleanup**
+  - Fixed modal backdrop remaining after modal close (blocking interaction)
+  - Added explicit cleanup on 'hidden.bs.modal' event
+  - Removes all .modal-backdrop elements and resets body state
+  - Fixes entire page being stuck/unclickable after processing completion
+- **Process button state management**
+  - Properly disables after completion (not just hidden)
+  - Re-enables only when new video is uploaded
+  - Prevents clicking when no video loaded
+
+#### Visual Design
+- **Background grid gravity well effect**
+  - Grid now converges towards header like general relativity spacetime diagram
+  - Transform origin set above viewport (-100vh) for convergence effect
+  - Increased perspective (60deg rotation) for dramatic warping
+  - Added gradient mask to fade grid near convergence point
+  - Visualizes depth/3D theme matching the app's purpose
+
+#### Setup & Installation
+- **Setup script improvements** (PR #10 by @danrossi)
+  - Fixed Windows setup.ps1 variable name bug ($modelFile vs $model_path)
+  - Moved GPU torch install to pip-only path (UV handles it automatically)
+  - Added UV command line documentation with WSL support
+  - WSL users: export UV_LINK_MODE=copy for proper linking
+
+#### Code Quality & CI
+- **Black formatting consistency**
+  - Pinned Black version to 25.1.0 in CI workflow
+  - Ensures consistent formatting checks across environments
+  - Resolves formatting errors that don't reproduce locally
+- **Filename sanitization**
+  - Upload handler now sanitizes filenames to prevent path issues
+  - Removes invalid characters: <>:"/\|?*
+  - Frontend validates uploadedOutputDir before processing
+
 #### Documentation & Links
 - **Depth Anything V3 repository link** corrected in documentation
 - **Settings persistence** for AI upscaling and other UI state
@@ -206,11 +270,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Release Planning
 
 ### v0.9.1 (Upcoming)
-- Fix remaining UI freeze edge cases
-- Fix preview label initialization on page load
-- Fix pre-existing test failures (15 tests)
-- Additional documentation polish
 - Performance regression tests
+- VR headset-specific presets (Quest 2/3, Vive, PSVR2)
+- Additional export format optimizations
 
 ### Future Releases
 - VR headset-specific presets (Quest 2/3, Vive, PSVR2)
