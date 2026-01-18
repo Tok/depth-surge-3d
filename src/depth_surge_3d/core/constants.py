@@ -169,14 +169,15 @@ VR_HEADSET_PRESETS: dict[str, dict[str, int | float | str]] = {
 PROGRESS_UPDATE_INTERVAL = 0.1  # seconds - throttle for progress updates (10 updates/sec)
 PROGRESS_DECIMAL_PLACES = 1  # decimal places for progress percentage
 PROGRESS_STEP_WEIGHTS = [
-    0.01,
-    0.17,
-    0.01,
-    0.30,
-    0.38,
-    0.06,
-    0.07,
-]  # Weighted progress distribution
+    0.02,  # Step 1: Frame Extraction (fast)
+    0.35,  # Step 2: Depth Map Generation (slow - AI depth estimation)
+    0.20,  # Step 3: Stereo Pair Creation (moderate - includes warping, hole-filling)
+    0.08,  # Step 4: Fisheye Distortion (fast, optional)
+    0.02,  # Step 5: Crop Frames (fast)
+    0.18,  # Step 6: AI Upscaling (slow, optional)
+    0.08,  # Step 7: VR Assembly (moderate - side-by-side combining)
+    0.07,  # Step 8: Video Creation (moderate - FFmpeg encoding)
+]  # Weighted progress distribution (sums to 1.00)
 PROCESSING_STEPS = [
     "Frame Extraction",
     "Super Sampling",

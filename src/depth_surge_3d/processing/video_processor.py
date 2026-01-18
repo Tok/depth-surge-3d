@@ -1541,6 +1541,12 @@ class VideoProcessor:
         left_upscaled = directories.get("left_upscaled")
         right_upscaled = directories.get("right_upscaled")
 
+        # If directories don't exist (keep_intermediates=False), create them temporarily for previews
+        if not left_upscaled:
+            left_upscaled = directories["base"] / INTERMEDIATE_DIRS["left_upscaled"]
+        if not right_upscaled:
+            right_upscaled = directories["base"] / INTERMEDIATE_DIRS["right_upscaled"]
+
         if left_upscaled:
             left_upscaled.mkdir(exist_ok=True)
         if right_upscaled:
@@ -1586,20 +1592,29 @@ class VideoProcessor:
         left_upscaled_img = upscaler.upscale_image(left_img)
         right_upscaled_img = upscaler.upscale_image(right_img)
 
-        # Save if keeping intermediates
-        if settings["keep_intermediates"]:
-            frame_name = left_file.stem
+        frame_name = left_file.stem
+
+        # Determine if we should send preview for this frame
+        should_send_preview = (
+            progress_tracker
+            and hasattr(progress_tracker, "send_preview_frame")
+            and (frame_idx % PREVIEW_FRAME_SAMPLE_RATE == 0 or frame_idx == total_frames - 1)
+        )
+
+        # Save if keeping intermediates OR if we need to send a preview
+        if settings["keep_intermediates"] or should_send_preview:
             if left_upscaled:
                 left_upscaled_path = left_upscaled / f"{frame_name}.png"
                 cv2.imwrite(str(left_upscaled_path), left_upscaled_img)
 
                 # Send preview frame
-                if progress_tracker and hasattr(progress_tracker, "send_preview_frame"):
-                    if frame_idx % PREVIEW_FRAME_SAMPLE_RATE == 0 or frame_idx == total_frames - 1:
-                        progress_tracker.send_preview_frame(
-                            left_upscaled_path, "upscaled_left", frame_idx + 1
-                        )
-            if right_upscaled:
+                if should_send_preview:
+                    progress_tracker.send_preview_frame(
+                        left_upscaled_path, "upscaled_left", frame_idx + 1
+                    )
+
+            if right_upscaled and settings["keep_intermediates"]:
+                # Only save right frame if keeping intermediates (preview uses left only)
                 cv2.imwrite(str(right_upscaled / f"{frame_name}.png"), right_upscaled_img)
 
         # Progress update (every frame since upscaling is slow)

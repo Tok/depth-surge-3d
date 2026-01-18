@@ -267,14 +267,15 @@ class ProgressCallback:
         self.steps = [
             "Frame Extraction",  # Step 1: FFmpeg extracts frames
             "Depth Map Generation",  # Step 2: AI generates depth maps
-            "Frame Loading",  # Step 3: Load frames for stereo
-            "Stereo Pair Creation",  # Step 4: Create L/R stereo pairs
-            "Fisheye Distortion",  # Step 5: Apply distortion
-            "Final Processing",  # Step 6: Create VR frames
-            "Video Creation",  # Step 7: FFmpeg creates video
+            "Stereo Pair Creation",  # Step 3: Create L/R stereo pairs (includes frame loading)
+            "Fisheye Distortion",  # Step 4: Apply distortion (optional)
+            "Crop Frames",  # Step 5: Crop frames for VR
+            "AI Upscaling",  # Step 6: AI upscaling (optional)
+            "VR Assembly",  # Step 7: Assemble final VR frames
+            "Video Creation",  # Step 8: FFmpeg creates video
         ]
         # Weighted progress based on actual timing measurements
-        # [1%, 17%, 1%, 31%, 38%, 6%, 7%] = 100%
+        # [2%, 35%, 20%, 8%, 2%, 18%, 8%, 7%] = 100%
         self.step_weights = PROGRESS_STEP_WEIGHTS
         self.current_step_index = 0
         self.step_progress = 0
