@@ -10,6 +10,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import subprocess
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -254,8 +255,6 @@ class StereoProjector:
 
         except Exception as e:
             print(f"Error during image processing: {e}")
-            import traceback
-
             traceback.print_exc()
             return False
 

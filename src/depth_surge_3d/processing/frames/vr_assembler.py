@@ -7,6 +7,7 @@ Assembles stereo pairs into final VR format (side-by-side or over-under).
 from __future__ import annotations
 
 import cv2
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -97,7 +98,6 @@ class VRFrameAssembler:
 
         except Exception as e:
             print(f"Error assembling VR frames: {e}")
-            import traceback
 
             traceback.print_exc()
             return False

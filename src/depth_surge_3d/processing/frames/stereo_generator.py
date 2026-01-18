@@ -9,6 +9,7 @@ from __future__ import annotations
 import cv2
 import multiprocessing as mp
 import numpy as np
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -159,7 +160,5 @@ class StereoPairGenerator:
 
         except Exception as e:
             print(f"Error creating stereo pairs: {e}")
-            import traceback
-
             traceback.print_exc()
             return False

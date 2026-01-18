@@ -7,6 +7,7 @@ Handles AI-based frame upscaling using Real-ESRGAN or similar models.
 from __future__ import annotations
 
 import cv2
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -86,7 +87,6 @@ class FrameUpscalerProcessor:
 
         except Exception as e:
             print(f"Error applying upscaling: {e}")
-            import traceback
 
             traceback.print_exc()
             return False
