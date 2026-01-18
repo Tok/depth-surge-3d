@@ -253,7 +253,9 @@ class TestStepExtractFrames:
 class TestMainProcess:
     """Test main process() method."""
 
-    @pytest.mark.skip(reason="Test needs update for new pipeline architecture (cropping, upscaling)")
+    @pytest.mark.skip(
+        reason="Test needs update for new pipeline architecture (cropping, upscaling)"
+    )
     @patch("cv2.imread")
     @patch.object(VideoProcessor, "_step_create_final_video")
     @patch.object(VideoProcessor, "_step_assemble_vr_frames")
@@ -585,7 +587,9 @@ class TestStepApplyDistortion:
         mock_tracker = MagicMock()
         mock_tracker.get_step_duration.return_value = 5.0
 
-        result = processor._step_apply_distortion(directories, settings, mock_tracker, current_step=5)
+        result = processor._step_apply_distortion(
+            directories, settings, mock_tracker, current_step=5
+        )
 
         assert result is True
         assert mock_fisheye.call_count >= 2
@@ -600,7 +604,9 @@ class TestStepApplyDistortion:
         mock_tracker = MagicMock()
         mock_tracker.get_step_duration.return_value = 0.0
 
-        result = processor._step_apply_distortion(directories, settings, mock_tracker, current_step=5)
+        result = processor._step_apply_distortion(
+            directories, settings, mock_tracker, current_step=5
+        )
 
         assert result is True
 
@@ -652,7 +658,9 @@ class TestStepCreateVRFrames:
         mock_tracker = MagicMock()
         mock_tracker.get_step_duration.return_value = 10.0
 
-        result = processor._step_assemble_vr_frames(directories, settings, mock_tracker, current_step=7, num_frames=1)
+        result = processor._step_assemble_vr_frames(
+            directories, settings, mock_tracker, current_step=7, num_frames=1
+        )
 
         assert result is True
         mock_create_vr.assert_called_once()
