@@ -73,7 +73,7 @@ class VideoDepthEstimator:
                 print(f"Cannot determine model type from path: {self.model_path}")
                 return False
 
-            self.model_config = MODEL_CONFIGS[model_type]
+            self.model_config = MODEL_CONFIGS[model_type]  # type: ignore[assignment]
 
             # Import and load model
             repo_path = Path(VIDEO_DEPTH_ANYTHING_REPO_DIR)
@@ -96,8 +96,8 @@ class VideoDepthEstimator:
                 else:
                     fixed_state_dict[key] = value
 
-            self.model.load_state_dict(fixed_state_dict, strict=True)
-            self.model = self.model.to(self.device).eval()
+            self.model.load_state_dict(fixed_state_dict, strict=True)  # type: ignore[attr-defined]
+            self.model = self.model.to(self.device).eval()  # type: ignore[attr-defined]
 
             model_variant = "Metric-" if self.metric else ""
             print(f"Loaded {model_variant}Video-Depth-Anything ({model_type}) on {self.device}")
@@ -106,7 +106,7 @@ class VideoDepthEstimator:
         except Exception as e:
             print(f"Error loading video model: {e}")
             print("Try downloading the model manually from:")
-            print(f"  {MODEL_DOWNLOAD_URLS.get(model_type, 'Unknown')}")
+            print(f"  {MODEL_DOWNLOAD_URLS.get(model_type, 'Unknown')}")  # type: ignore[arg-type]
             return False
 
     def _ensure_dependencies(self) -> bool:
@@ -232,7 +232,7 @@ class VideoDepthEstimator:
                 sys.stderr = open(os.devnull, "w")
 
                 # Call the video depth inference method
-                depths, _ = self.model.infer_video_depth(
+                depths, _ = self.model.infer_video_depth(  # type: ignore[attr-defined]
                     frames_rgb,
                     target_fps,
                     input_size=input_size,
@@ -334,7 +334,7 @@ class VideoDepthEstimator:
     ) -> np.ndarray:
         """Process a single chunk for depth estimation with output suppression."""
         with self._suppress_model_output():
-            depths, _ = self.model.infer_video_depth(
+            depths, _ = self.model.infer_video_depth(  # type: ignore[attr-defined]
                 frames_rgb,
                 target_fps,
                 input_size=input_size,
@@ -351,7 +351,7 @@ class VideoDepthEstimator:
         torch.cuda.empty_cache()
 
         with self._suppress_model_output():
-            depths, _ = self.model.infer_video_depth(
+            depths, _ = self.model.infer_video_depth(  # type: ignore[attr-defined]
                 frames_rgb,
                 target_fps,
                 input_size=max(384, input_size // 2),

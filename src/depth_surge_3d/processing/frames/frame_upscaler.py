@@ -60,7 +60,7 @@ class FrameUpscalerProcessor:
             from ...inference import create_upscaler
 
             # Get source directories (cropped frames)
-            source_left, source_right = self._get_upscaling_source_dirs(directories, settings)
+            source_left, source_right = self._get_upscaling_source_dirs(directories, settings)  # type: ignore[misc]
             if source_left is None or source_right is None:
                 return False
 
@@ -253,4 +253,4 @@ class FrameUpscalerProcessor:
         if "left_cropped" in directories and "right_cropped" in directories:
             return directories["left_cropped"], directories["right_cropped"]
         else:
-            return None, None
+            return None, None  # type: ignore[return-value]

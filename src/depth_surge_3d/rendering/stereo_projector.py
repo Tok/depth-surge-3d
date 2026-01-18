@@ -61,7 +61,7 @@ class StereoProjector:
             self.depth_estimator = create_video_depth_estimator_da3(model_name, device, metric)
         else:
             # Use Video-Depth-Anything V2 (default)
-            self.depth_estimator = create_video_depth_estimator(
+            self.depth_estimator = create_video_depth_estimator(  # type: ignore[assignment]
                 model_path, device, metric, temporal_window_overlap
             )
 

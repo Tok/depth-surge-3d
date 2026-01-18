@@ -87,11 +87,11 @@ class ConsoleProgressReporter(ProgressReporter):
                 )
 
             # Update progress bar
-            self.current_pbar.n = current
-            self.current_pbar.refresh()
+            self.current_pbar.n = current  # type: ignore[attr-defined]
+            self.current_pbar.refresh()  # type: ignore[attr-defined]
 
             if current >= total:
-                self.current_pbar.close()
+                self.current_pbar.close()  # type: ignore[attr-defined]
                 self.current_pbar = None
         else:
             # Fallback to simple console output

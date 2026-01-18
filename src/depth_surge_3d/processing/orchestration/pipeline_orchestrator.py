@@ -181,7 +181,7 @@ class ProcessingOrchestrator:
             img = cv2.imread(str(frame_file))
             if img is not None:
                 frames.append(img)
-        frames = np.array(frames) if frames else None
+        frames = np.array(frames) if frames else None  # type: ignore[assignment]
         if frames is None:
             return False
 
@@ -189,7 +189,7 @@ class ProcessingOrchestrator:
         return self._execute_remaining_steps(
             directories,
             settings,
-            frames,
+            frames,  # type: ignore[arg-type]
             depth_maps,
             frame_files,
             fps,
