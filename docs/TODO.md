@@ -53,7 +53,6 @@
 - [ ] Real-time preview while processing
   - Show current frame being processed
   - Display depth map visualization
-- [ ] Resume interrupted processing automatically
 
 ### 🎛️ Advanced Settings
 - [ ] Fine-tune stereo parameters per VR headset

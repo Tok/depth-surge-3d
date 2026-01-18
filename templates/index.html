@@ -1423,6 +1423,56 @@
             </div>
         </div>
 
+        <!-- Live Preview Panel -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card" id="livePreviewCard" style="display: none;">
+                    <div class="card-header">
+                        <h5><i class="fas fa-eye"></i> Live Preview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Depth Map Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong>Depth Map</strong></div>
+                                    <img id="depthMapPreview"
+                                         src=""
+                                         alt="Depth map preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="depthMapFrame">Frame: --</small>
+                                </div>
+                            </div>
+
+                            <!-- Stereo Left Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong>Left Eye</strong></div>
+                                    <img id="stereoLeftPreview"
+                                         src=""
+                                         alt="Left eye preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="stereoLeftFrame">Frame: --</small>
+                                </div>
+                            </div>
+
+                            <!-- VR Frame Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong>VR Output</strong></div>
+                                    <img id="vrFramePreview"
+                                         src=""
+                                         alt="VR frame preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="vrFrameFrame">Frame: --</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Output Directory -->
         <div class="row">
             <div class="col-12">
@@ -1649,6 +1699,10 @@
             
             socket.on('processing_stopped', function(data) {
                 handleProcessingStopped(data);
+            });
+
+            socket.on('frame_preview', function(data) {
+                handleFramePreview(data);
             });
         }
 
@@ -2290,6 +2344,20 @@
             hideCurrentBatchDirectory();
             currentSessionId = null;
 
+            // Hide preview panel and clear preview images
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard) {
+                previewCard.style.display = 'none';
+            }
+            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+                const label = document.getElementById(id);
+                if (label) label.textContent = 'Frame: --';
+            });
+
             // Show output directory card
             document.getElementById('outputPath').textContent = data.output_dir;
             document.getElementById('outputDirectoryCard').style.display = 'block';
@@ -2347,6 +2415,20 @@
             hideProgressPanel();
             currentSessionId = null;
 
+            // Hide preview panel and clear preview images
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard) {
+                previewCard.style.display = 'none';
+            }
+            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+                const label = document.getElementById(id);
+                if (label) label.textContent = 'Frame: --';
+            });
+
             // Show error modal
             document.getElementById('errorMessage').textContent = data.error;
             const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
@@ -2394,6 +2476,20 @@
             hideProgressPanel();
             currentSessionId = null;
 
+            // Hide preview panel and clear preview images
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard) {
+                previewCard.style.display = 'none';
+            }
+            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+                const label = document.getElementById(id);
+                if (label) label.textContent = 'Frame: --';
+            });
+
             // Show info message
             alert('Processing has been stopped: ' + data.message);
 
@@ -2414,6 +2510,36 @@
             if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
         }
 
+        // Handle frame preview
+        function handleFramePreview(data) {
+            // Show preview panel if hidden
+            const previewCard = document.getElementById('livePreviewCard');
+            if (previewCard && previewCard.style.display === 'none') {
+                previewCard.style.display = 'block';
+            }
+
+            // Update appropriate preview image based on frame type
+            const frameType = data.frame_type;
+            const imageData = data.image_data;
+            const frameNumber = data.frame_number;
+
+            if (frameType === 'depth_map') {
+                const img = document.getElementById('depthMapPreview');
+                const label = document.getElementById('depthMapFrame');
+                if (img) img.src = imageData;
+                if (label) label.textContent = `Frame: ${frameNumber}`;
+            } else if (frameType === 'stereo_left') {
+                const img = document.getElementById('stereoLeftPreview');
+                const label = document.getElementById('stereoLeftFrame');
+                if (img) img.src = imageData;
+                if (label) label.textContent = `Frame: ${frameNumber}`;
+            } else if (frameType === 'vr_frame') {
+                const img = document.getElementById('vrFramePreview');
+                const label = document.getElementById('vrFrameFrame');
+                if (img) img.src = imageData;
+                if (label) label.textContent = `Frame: ${frameNumber}`;
+            }
+        }
 
         // Update range info based on video duration and selected range
         function updateRangeInfo() {

@@ -387,3 +387,9 @@ CHUNK_SIZE_1080P_MANUAL = 12  # Manual 1080p depth setting
 CHUNK_SIZE_720P = 16  # 720p and manual settings
 CHUNK_SIZE_SD = 24  # Auto mode for SD sources
 CHUNK_SIZE_SMALL = 32  # Very small resolutions
+
+# Preview configuration (real-time frame preview via websocket)
+PREVIEW_UPDATE_INTERVAL = 2.0  # seconds between preview updates
+PREVIEW_FRAME_SAMPLE_RATE = 30  # Send every Nth frame (if time interval allows)
+PREVIEW_DOWNSCALE_WIDTH = 480  # Downscale width for transmission (pixels)
+PREVIEW_JPEG_QUALITY = 85  # JPEG quality (if using JPEG instead of PNG)

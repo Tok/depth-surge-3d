@@ -14,6 +14,7 @@ import platform
 import argparse
 import sys
 import signal
+import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,8 @@ from src.depth_surge_3d.core.constants import (
     PROGRESS_UPDATE_INTERVAL,
     PROGRESS_DECIMAL_PLACES,
     PROGRESS_STEP_WEIGHTS,
+    PREVIEW_UPDATE_INTERVAL,
+    PREVIEW_DOWNSCALE_WIDTH,
     FFMPEG_OVERWRITE_FLAG,
     FFMPEG_CRF_HIGH_QUALITY,
     FFMPEG_CRF_MEDIUM_QUALITY,
@@ -246,6 +249,11 @@ class ProgressCallback:
         self.current_step_name = None
         self.start_time = time.time()  # For ETA calculation
 
+        # Preview tracking
+        self.last_preview_time = 0
+        self.preview_interval = PREVIEW_UPDATE_INTERVAL
+        self.preview_downscale_width = PREVIEW_DOWNSCALE_WIDTH
+
         # Step tracking (used for all modes)
         # Note: These must match the step names sent from video_processor.py
         self.steps = [
@@ -263,6 +271,59 @@ class ProgressCallback:
         self.current_step_index = 0
         self.step_progress = 0
         self.step_total = 0
+
+    def send_preview_frame(
+        self,
+        frame_path: Path,
+        frame_type: str,
+        frame_number: int,
+    ) -> None:
+        """
+        Send preview frame via websocket.
+
+        Args:
+            frame_path: Path to the frame image file
+            frame_type: Type of frame ("depth_map", "stereo_left", "stereo_right", "vr_frame")
+            frame_number: Frame number being processed
+        """
+        current_time = time.time()
+
+        # Throttle preview updates
+        if current_time - self.last_preview_time < self.preview_interval:
+            return
+
+        try:
+            # Read frame
+            frame = cv2.imread(str(frame_path))
+            if frame is None:
+                return
+
+            # Downscale for transmission
+            height, width = frame.shape[:2]
+            scale = self.preview_downscale_width / width
+            new_width = self.preview_downscale_width
+            new_height = int(height * scale)
+            frame_small = cv2.resize(frame, (new_width, new_height))
+
+            # Encode to base64
+            _, buffer = cv2.imencode(".png", frame_small)
+            img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+            # Send via socketio
+            preview_data = {
+                "frame_type": frame_type,
+                "frame_number": frame_number,
+                "image_data": f"data:image/png;base64,{img_base64}",
+                "dimensions": {"width": new_width, "height": new_height},
+            }
+
+            socketio.emit("frame_preview", preview_data, room=self.session_id)
+
+            self.last_preview_time = current_time
+
+        except Exception as e:
+            # Silent fail - don't interrupt processing
+            pass
 
     def _calculate_eta(self, current_progress: float) -> str | None:
         """

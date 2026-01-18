@@ -5,7 +5,7 @@
 - **Code quality** - Type hints, documentation, complexity limits
 - **Testability** - Small, testable units with comprehensive coverage
 
-**Target Coverage: 70%+** (currently 23%)
+**Target Coverage: 90%+**
 
 ---
 

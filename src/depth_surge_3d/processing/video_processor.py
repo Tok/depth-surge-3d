@@ -64,6 +64,7 @@ from ..core.constants import (
     CHUNK_SIZE_1080P_MANUAL,
     CHUNK_SIZE_720P,
     CHUNK_SIZE_SMALL,
+    PREVIEW_FRAME_SAMPLE_RATE,
 )
 from ..utils.console import (
     step_complete,
@@ -1217,6 +1218,7 @@ class VideoProcessor:
         settings: dict[str, Any],
         directories: dict[str, Path],
         input_size: int,
+        progress_tracker=None,
     ) -> np.ndarray | None:
         """Process depth for a chunk and optionally save results."""
         # Normalize target_fps
@@ -1232,7 +1234,9 @@ class VideoProcessor:
 
         # Save depth maps immediately to free memory
         if settings["keep_intermediates"] and "depth_maps" in directories:
-            self._save_depth_maps(chunk_depth_maps, chunk_files, directories["depth_maps"])
+            self._save_depth_maps(
+                chunk_depth_maps, chunk_files, directories["depth_maps"], progress_tracker
+            )
 
         return chunk_depth_maps
 
@@ -1281,7 +1285,7 @@ class VideoProcessor:
             # Process chunk for depth
             try:
                 chunk_depth_maps = self._process_chunk_depth(
-                    chunk_frames, chunk_files, settings, directories, input_size
+                    chunk_frames, chunk_files, settings, directories, input_size, progress_tracker
                 )
                 all_depth_maps.extend(chunk_depth_maps)
 
@@ -1337,13 +1341,23 @@ class VideoProcessor:
             return None
 
     def _save_depth_maps(
-        self, depth_maps: np.ndarray, frame_files: list[Path], depth_dir: Path
+        self,
+        depth_maps: np.ndarray,
+        frame_files: list[Path],
+        depth_dir: Path,
+        progress_tracker=None,
     ) -> None:
         """Save depth maps to disk."""
         for i, (depth_map, frame_file) in enumerate(zip(depth_maps, frame_files)):
             depth_vis = (depth_map * DEPTH_MAP_SCALE).astype("uint8")
             frame_name = frame_file.stem
-            cv2.imwrite(str(depth_dir / f"{frame_name}.png"), depth_vis)
+            depth_path = depth_dir / f"{frame_name}.png"
+            cv2.imwrite(str(depth_path), depth_vis)
+
+            # Send preview frame
+            if progress_tracker and hasattr(progress_tracker, "send_preview_frame"):
+                if i % PREVIEW_FRAME_SAMPLE_RATE == 0 or i == len(depth_maps) - 1:
+                    progress_tracker.send_preview_frame(depth_path, "depth_map", i + 1)
 
     def _create_stereo_pairs(
         self,
@@ -1396,6 +1410,15 @@ class VideoProcessor:
                             step_progress=i + 1,
                             step_total=len(frames),
                         )
+
+                    # Send preview frame for left eye
+                    if progress_tracker and hasattr(progress_tracker, "send_preview_frame"):
+                        if i % PREVIEW_FRAME_SAMPLE_RATE == 0 or i == len(args_list) - 1:
+                            left_path = args_list[i][3]  # left_path from args
+                            if left_path:
+                                progress_tracker.send_preview_frame(
+                                    Path(left_path), "stereo_left", i + 1
+                                )
 
             return True
 
@@ -1672,6 +1695,8 @@ class VideoProcessor:
         right_file: Path,
         directories: dict[str, Path],
         settings: dict[str, Any],
+        progress_tracker=None,
+        frame_idx: int = 0,
     ) -> bool:
         """Assemble a single VR frame from cropped/upscaled frames (Step 7)."""
         # Load images
@@ -1690,7 +1715,13 @@ class VideoProcessor:
         vr_frame = create_vr_frame(left_final, right_final, settings["vr_format"])
         frame_name = left_file.stem
         if "vr_frames" in directories:
-            cv2.imwrite(str(directories["vr_frames"] / f"{frame_name}.png"), vr_frame)
+            vr_path = directories["vr_frames"] / f"{frame_name}.png"
+            cv2.imwrite(str(vr_path), vr_frame)
+
+            # Send preview frame
+            if progress_tracker and hasattr(progress_tracker, "send_preview_frame"):
+                # Send every VR frame preview (already throttled by time in send_preview_frame)
+                progress_tracker.send_preview_frame(vr_path, "vr_frame", frame_idx + 1)
 
         return True
 
@@ -1770,7 +1801,9 @@ class VideoProcessor:
 
             # Process each frame pair
             for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
-                self._assemble_single_vr_frame(left_file, right_file, directories, settings)
+                self._assemble_single_vr_frame(
+                    left_file, right_file, directories, settings, progress_tracker, i
+                )
 
                 # Update progress more frequently (every frame for slow operations)
                 if i % 1 == 0 or i == len(left_files) - 1:
