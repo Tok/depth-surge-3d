@@ -123,9 +123,7 @@ def print_banner() -> None:
             # Diagonal position (135° gradient from top-left to bottom-right)
             diagonal_pos = row_idx + col_idx
             # Map diagonal position to color gradient
-            color_index = min(
-                int((diagonal_pos / max_diagonal) * len(colors)), len(colors) - 1
-            )
+            color_index = min(int((diagonal_pos / max_diagonal) * len(colors)), len(colors) - 1)
             colored_line += f"{colors[color_index]}{char}"
         print(f"{colored_line}{reset}")
     print()
