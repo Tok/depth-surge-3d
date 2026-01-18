@@ -157,10 +157,12 @@ class VideoProcessor:
 
     def _get_total_steps(self, settings: dict[str, Any]) -> int:
         """Calculate total processing steps based on settings."""
-        total = 7  # Base: Extract, Depth, Load, Stereo, Fisheye, VR, Video
+        total = 6  # Base: Extract, Depth, Stereo, Crop, Assemble, Video
+        if settings.get("apply_distortion", True):
+            total += 1  # Add Step 4: Distortion
         if settings.get("upscale_model", "none") != "none":
-            total += 1  # Add Step 6.5: AI Upscaling
-        return total
+            total += 1  # Add Step 6: Upscaling
+        return total  # 6-8 steps total
 
     def _setup_processing(
         self,
@@ -394,34 +396,6 @@ class VideoProcessor:
 
         return depth_maps
 
-    def _step_load_frames(
-        self, frame_files: list[Path], settings: dict[str, Any], progress_tracker
-    ) -> np.ndarray | None:
-        """Execute Step 3: Load frames for stereo processing."""
-        print("Step 3/7: Loading frames for stereo processing...")
-        progress_tracker.update_progress(
-            "Loading frames",
-            phase="depth_estimation",
-            frame_num=0,
-            step_name="Frame Loading",
-            step_progress=0,
-            step_total=len(frame_files),
-        )
-
-        frames = self._load_frames(frame_files, settings, progress_tracker)
-        if frames is None or len(frames) == 0:
-            self._handle_step_error("Failed to load frames")
-            return None
-
-        duration = (
-            progress_tracker.get_step_duration()
-            if hasattr(progress_tracker, "get_step_duration")
-            else 0
-        )
-        print(step_complete(f"Loaded {len(frames):04d} frames in {duration:.2f}s"))
-        print()
-        return frames
-
     def _step_create_stereo_pairs(
         self,
         frames: np.ndarray,
@@ -430,8 +404,9 @@ class VideoProcessor:
         directories: dict[str, Path],
         settings: dict[str, Any],
         progress_tracker,
+        current_step: int,
     ) -> bool:
-        """Execute Step 4: Create stereo pairs."""
+        """Execute Step 3: Create stereo pairs (includes loading frames)."""
         # Check if stereo pairs already exist (only if keep_intermediates is enabled)
         if (
             settings.get("keep_intermediates")
@@ -449,7 +424,9 @@ class VideoProcessor:
                     and len(existing_left) >= len(frames)
                     and len(existing_right) >= len(frames)
                 ):
-                    print("Step 4/7: Skipping stereo pair creation (stereo pairs already exist)")
+                    print(
+                        f"Step {current_step}/{self._total_steps}: Skipping stereo pair creation (stereo pairs already exist)"
+                    )
                     print(
                         f"  Found {len(existing_left):04d} left and {len(existing_right):04d} right frames"
                     )
@@ -465,7 +442,7 @@ class VideoProcessor:
                         )
                     return True
 
-        print("Step 4/7: Creating stereo pairs...")
+        print(f"Step {current_step}/{self._total_steps}: Creating stereo pairs...")
         success = self._create_stereo_pairs(
             frames, depth_maps, frame_files, directories, settings, progress_tracker
         )
@@ -492,13 +469,13 @@ class VideoProcessor:
         return True
 
     def _step_apply_distortion(
-        self, directories: dict[str, Path], settings: dict[str, Any], progress_tracker
+        self,
+        directories: dict[str, Path],
+        settings: dict[str, Any],
+        progress_tracker,
+        current_step: int,
     ) -> bool:
-        """Execute Step 5: Apply fisheye distortion (if enabled)."""
-        if not settings["apply_distortion"]:
-            print("Step 5/7: Skipping fisheye distortion (disabled)\n")
-            return True
-
+        """Execute Step 4: Apply fisheye distortion (optional)."""
         # Check if distorted frames already exist (only if keep_intermediates is enabled)
         if (
             settings.get("keep_intermediates")
@@ -522,7 +499,9 @@ class VideoProcessor:
                     and len(existing_left) >= len(left_files)
                     and len(existing_right) >= len(left_files)
                 ):
-                    print("Step 5/7: Skipping fisheye distortion (distorted frames already exist)")
+                    print(
+                        f"Step {current_step}/{self._total_steps}: Skipping fisheye distortion (distorted frames already exist)"
+                    )
                     print(
                         f"  Found {len(existing_left):04d} distorted left and {len(existing_right):04d} distorted right frames"
                     )
@@ -538,7 +517,7 @@ class VideoProcessor:
                         )
                     return True
 
-        print("Step 5/7: Applying fisheye distortion...")
+        print(f"Step {current_step}/{self._total_steps}: Applying fisheye distortion...")
         left_files = (
             sorted(directories["left_frames"].glob("*.png")) if "left_frames" in directories else []
         )
@@ -575,15 +554,72 @@ class VideoProcessor:
             print()
         return True
 
-    def _step_apply_upscaling(
-        self, directories: dict[str, Path], settings: dict[str, Any], progress_tracker
+    def _step_crop_frames(
+        self,
+        directories: dict[str, Path],
+        settings: dict[str, Any],
+        progress_tracker,
+        current_step: int,
+        num_frames: int,
     ) -> bool:
-        """Execute Step 6.5: Apply AI upscaling to cropped VR frames (if enabled)."""
-        upscale_model = settings.get("upscale_model", "none")
+        """Execute Step 5: Crop frames for VR."""
+        # Check if cropped frames already exist
+        if "left_cropped" in directories and "right_cropped" in directories:
+            left_cropped_dir = directories["left_cropped"]
+            right_cropped_dir = directories["right_cropped"]
+            if left_cropped_dir.exists() and right_cropped_dir.exists():
+                existing_left = sorted(list(left_cropped_dir.glob("*.png")))
+                existing_right = sorted(list(right_cropped_dir.glob("*.png")))
+                if (
+                    existing_left
+                    and existing_right
+                    and len(existing_left) >= num_frames
+                    and len(existing_right) >= num_frames
+                ):
+                    print(
+                        f"Step {current_step}/{self._total_steps}: Skipping frame cropping (cropped frames already exist)"
+                    )
+                    print(
+                        f"  Found {len(existing_left):04d} cropped left and {len(existing_right):04d} cropped right frames"
+                    )
+                    print(saved_to(f"  Location: {left_cropped_dir} & {right_cropped_dir}\n"))
+                    if progress_tracker:
+                        progress_tracker.update_progress(
+                            "Skipped frame cropping (already exists)",
+                            phase="cropping",
+                            frame_num=len(existing_left),
+                            step_name="Frame Cropping",
+                            step_progress=len(existing_left),
+                            step_total=len(existing_left),
+                        )
+                    return True
 
-        if upscale_model == "none":
-            print(f"Step 6.5/{self._total_steps}: Skipping upscaling (disabled)\n")
-            return True
+        print(f"Step {current_step}/{self._total_steps}: Cropping frames for VR...")
+        success = self._crop_frames(directories, settings, progress_tracker, num_frames)
+        if not success:
+            self._handle_step_error("Frame cropping failed")
+            return False
+
+        duration = (
+            progress_tracker.get_step_duration()
+            if hasattr(progress_tracker, "get_step_duration")
+            else 0
+        )
+        print(step_complete(f"Cropped {num_frames:04d} frames in {duration:.2f}s"))
+        print(
+            saved_to(f"Saved to: {directories['left_cropped']} & {directories['right_cropped']}\n")
+        )
+        return True
+
+    def _step_apply_upscaling(
+        self,
+        directories: dict[str, Path],
+        settings: dict[str, Any],
+        progress_tracker,
+        current_step: int,
+    ) -> bool:
+        """Execute Step 6: Apply AI upscaling to cropped frames (optional)."""
+        upscale_model = settings.get("upscale_model", "none")
 
         # Check if upscaled frames already exist (only if keep_intermediates is enabled)
         if (
@@ -608,7 +644,7 @@ class VideoProcessor:
                     and len(existing_right) >= len(source_files)
                 ):
                     print(
-                        f"Step 6.5/{self._total_steps}: Skipping upscaling (upscaled frames already exist)"
+                        f"Step {current_step}/{self._total_steps}: Skipping upscaling (upscaled frames already exist)"
                     )
                     print(
                         f"  Found {len(existing_left):04d} upscaled left and {len(existing_right):04d} upscaled right frames"
@@ -626,13 +662,13 @@ class VideoProcessor:
                     return True
 
         print(
-            f"Step 6.5/{self._total_steps}: Applying {upscale_model} AI upscaling to cropped VR frames..."
+            f"Step {current_step}/{self._total_steps}: Applying {upscale_model} AI upscaling to cropped frames..."
         )
 
-        # Get source directories (cropped frames from Step 6)
+        # Get source directories (cropped frames from Step 5)
         source_left, source_right = self._get_upscaling_source_dirs(directories, settings)
         if source_left is None or source_right is None:
-            self._handle_step_error("No cropped VR frames found for upscaling")
+            self._handle_step_error("No cropped frames found for upscaling")
             return False
 
         # Apply upscaling
@@ -654,7 +690,7 @@ class VideoProcessor:
         )
         print(
             step_complete(
-                f"Upscaled {len(left_files):04d} cropped VR frames with {upscale_model} in {duration:.2f}s"
+                f"Upscaled {len(left_files):04d} cropped frames with {upscale_model} in {duration:.2f}s"
             )
         )
         if settings["keep_intermediates"] and "left_upscaled" in directories:
@@ -667,37 +703,40 @@ class VideoProcessor:
             print()
         return True
 
-    def _step_create_vr_frames(
+    def _step_assemble_vr_frames(
         self,
         directories: dict[str, Path],
         settings: dict[str, Any],
         progress_tracker,
+        current_step: int,
         num_frames: int,
     ) -> bool:
-        """Execute Step 6: Create final VR frames."""
+        """Execute Step 7: Assemble final VR frames from cropped/upscaled frames."""
         # Check if VR frames already exist (resume functionality)
         vr_frames_dir = directories.get("vr_frames")
         if vr_frames_dir and vr_frames_dir.exists():
             existing_vr_frames = sorted(list(vr_frames_dir.glob("*.png")))
             if existing_vr_frames and len(existing_vr_frames) >= num_frames:
-                print("Step 6/7: Skipping VR frame creation (VR frames already exist)")
+                print(
+                    f"Step {current_step}/{self._total_steps}: Skipping VR frame assembly (VR frames already exist)"
+                )
                 print(f"  Found {len(existing_vr_frames):04d} existing VR frames")
                 print(saved_to(f"  Location: {vr_frames_dir}\n"))
                 if progress_tracker:
                     progress_tracker.update_progress(
-                        "Skipped VR frame creation (already exists)",
+                        "Skipped VR frame assembly (already exists)",
                         phase="vr_assembly",
                         frame_num=len(existing_vr_frames),
-                        step_name="Final Processing",
+                        step_name="VR Assembly",
                         step_progress=len(existing_vr_frames),
                         step_total=len(existing_vr_frames),
                     )
                 return True
 
-        print("Step 6/7: Creating final VR frames...")
-        success = self._create_vr_frames(directories, settings, progress_tracker, num_frames)
+        print(f"Step {current_step}/{self._total_steps}: Assembling final VR frames...")
+        success = self._assemble_vr_frames(directories, settings, progress_tracker, num_frames)
         if not success:
-            self._handle_step_error("VR frame creation failed")
+            self._handle_step_error("VR frame assembly failed")
             return False
 
         duration = (
@@ -705,7 +744,7 @@ class VideoProcessor:
             if hasattr(progress_tracker, "get_step_duration")
             else 0
         )
-        print(step_complete(f"Created {num_frames:04d} VR frames in {duration:.2f}s"))
+        print(step_complete(f"Assembled {num_frames:04d} VR frames in {duration:.2f}s"))
         if "vr_frames" in directories:
             print(saved_to(f"Saved to: {directories['vr_frames']}\n"))
         else:
@@ -720,9 +759,10 @@ class VideoProcessor:
         settings: dict[str, Any],
         progress_tracker,
         progress_callback,
+        current_step: int,
     ) -> bool:
-        """Execute Step 7: Create final video with audio."""
-        print("Step 7/7: Creating final video with audio...")
+        """Execute Step 8: Create final video with audio."""
+        print(f"Step {current_step}/{self._total_steps}: Creating final video with audio...")
         if progress_callback:
             progress_callback.update_progress(
                 "Creating final video",
@@ -829,12 +869,13 @@ class VideoProcessor:
         if depth_maps is None:
             return False
 
-        # Step 3: Load frames for stereo processing
-        frames = self._step_load_frames(frame_files, settings, progress_tracker)
-        if frames is None:
+        # Load frames for stereo processing (internal - not a separate step)
+        frames = self._load_frames(frame_files, settings, progress_tracker)
+        if frames is None or len(frames) == 0:
+            print("Error: Failed to load frames")
             return False
 
-        # Execute steps 4-7
+        # Execute steps 3-8
         return self._execute_remaining_steps(
             frames,
             depth_maps,
@@ -859,28 +900,56 @@ class VideoProcessor:
         progress_tracker,
         progress_callback,
     ) -> bool:
-        """Execute steps 4-8 of the pipeline (8 if upscaling enabled)."""
-        # Step 4: Create stereo pairs
+        """Execute steps 3-8 of the pipeline (depends on optional steps)."""
+        # Calculate current step number (dynamic based on optional steps)
+        current_step = 3
+
+        # Step 3: Create stereo pairs (includes loading)
         if not self._step_create_stereo_pairs(
-            frames, depth_maps, frame_files, directories, settings, progress_tracker
+            frames, depth_maps, frame_files, directories, settings, progress_tracker, current_step
         ):
             return False
+        current_step += 1
 
-        # Step 5: Apply fisheye distortion (if enabled)
-        if not self._step_apply_distortion(directories, settings, progress_tracker):
+        # Step 4: Apply fisheye distortion (optional - skip if disabled)
+        if settings.get("apply_distortion", True):
+            if not self._step_apply_distortion(
+                directories, settings, progress_tracker, current_step
+            ):
+                return False
+            current_step += 1
+
+        # Step 5: Crop frames
+        if not self._step_crop_frames(
+            directories, settings, progress_tracker, current_step, len(frames)
+        ):
             return False
+        current_step += 1
 
-        # Step 6: Create final VR frames (with cropping)
-        if not self._step_create_vr_frames(directories, settings, progress_tracker, len(frames)):
+        # Step 6: Apply AI upscaling (optional - skip if disabled)
+        if settings.get("upscale_model", "none") != "none":
+            if not self._step_apply_upscaling(
+                directories, settings, progress_tracker, current_step
+            ):
+                return False
+            current_step += 1
+
+        # Step 7: Assemble VR frames
+        if not self._step_assemble_vr_frames(
+            directories, settings, progress_tracker, current_step, len(frames)
+        ):
             return False
+        current_step += 1
 
-        # Step 6.5: Apply AI upscaling to cropped VR frames (if enabled)
-        if not self._step_apply_upscaling(directories, settings, progress_tracker):
-            return False
-
-        # Step 7: Create final video
+        # Step 8: Create final video
         success = self._step_create_final_video(
-            directories, output_path, video_path, settings, progress_tracker, progress_callback
+            directories,
+            output_path,
+            video_path,
+            settings,
+            progress_tracker,
+            progress_callback,
+            current_step,
         )
 
         # Finalize and cleanup
@@ -1494,8 +1563,8 @@ class VideoProcessor:
             if right_upscaled:
                 cv2.imwrite(str(right_upscaled / f"{frame_name}.png"), right_upscaled_img)
 
-        # Progress update (every 5 frames or last frame)
-        if frame_idx % 5 == 0 or frame_idx == total_frames - 1:
+        # Progress update (every frame since upscaling is slow)
+        if frame_idx % 1 == 0 or frame_idx == total_frames - 1:
             progress_tracker.update_progress(
                 f"Upscaling frame {frame_idx+1}/{total_frames}",
                 phase="upscaling",
@@ -1518,93 +1587,36 @@ class VideoProcessor:
     def _get_stereo_source_dirs(
         self, directories: dict[str, Path], settings: dict[str, Any]
     ) -> tuple[Path, Path] | None:
-        """Determine source directories for final VR assembly (prioritizes upscaled)."""
-        # Priority: upscaled (Step 6.5) > cropped (Step 6) > distorted (Step 5) > original (Step 4)
-        if settings.get("upscale_model") != "none" and "left_upscaled" in directories:
-            left_upscaled = directories["left_upscaled"]
-            right_upscaled = directories["right_upscaled"]
-            if left_upscaled.exists() and right_upscaled.exists():
-                return left_upscaled, right_upscaled
+        """Determine source directories for VR frame creation (Step 6 input)."""
+        # Step 6 INPUT priority: distorted (Step 5) > original stereo (Step 4)
+        # Note: We DON'T check cropped/upscaled here - those are Step 6's OUTPUT
+        if settings.get("apply_distortion") and "left_distorted" in directories:
+            left_dir = directories["left_distorted"]
+            right_dir = directories["right_distorted"]
+            if left_dir.exists() and right_dir.exists():
+                left_files = list(left_dir.glob("*.png"))
+                if left_files:  # Verify directory has frames
+                    return left_dir, right_dir
 
-        if "left_cropped" in directories:
-            return directories["left_cropped"], directories["right_cropped"]
-        elif settings.get("apply_distortion") and "left_distorted" in directories:
-            return directories["left_distorted"], directories["right_distorted"]
-        elif "left_frames" in directories:
-            return directories["left_frames"], directories["right_frames"]
-        else:
-            print("Error: No stereo frames found")
-            return None
+        if "left_frames" in directories:
+            left_dir = directories["left_frames"]
+            right_dir = directories["right_frames"]
+            if left_dir.exists() and right_dir.exists():
+                left_files = list(left_dir.glob("*.png"))
+                if left_files:  # Verify directory has frames
+                    return left_dir, right_dir
 
-    def _process_fisheye_frame_pair(self, left_img, right_img, settings: dict[str, Any]) -> tuple:
-        """Process frame pair with fisheye distortion applied."""
-        fisheye_crop_factor = max(0.5, min(2.0, float(settings.get("fisheye_crop_factor", 0.7))))
+        print("Error: No stereo frames found")
+        return None
 
-        left_cropped = apply_fisheye_square_crop(
-            left_img,
-            settings["per_eye_width"],
-            settings["per_eye_height"],
-            fisheye_crop_factor,
-        )
-        right_cropped = apply_fisheye_square_crop(
-            right_img,
-            settings["per_eye_width"],
-            settings["per_eye_height"],
-            fisheye_crop_factor,
-        )
-
-        left_final = resize_image(
-            left_cropped, settings["per_eye_width"], settings["per_eye_height"]
-        )
-        right_final = resize_image(
-            right_cropped, settings["per_eye_width"], settings["per_eye_height"]
-        )
-
-        return left_cropped, right_cropped, left_final, right_final
-
-    def _process_regular_frame_pair(self, left_img, right_img, settings: dict[str, Any]) -> tuple:
-        """Process frame pair without fisheye distortion."""
-        crop_factor = max(0.5, min(1.0, float(settings.get("crop_factor", 1.0))))
-
-        left_cropped = apply_center_crop(left_img, crop_factor)
-        right_cropped = apply_center_crop(right_img, crop_factor)
-
-        left_final = resize_image(
-            left_cropped, settings["per_eye_width"], settings["per_eye_height"]
-        )
-        right_final = resize_image(
-            right_cropped, settings["per_eye_width"], settings["per_eye_height"]
-        )
-
-        return left_cropped, right_cropped, left_final, right_final
-
-    def _save_vr_intermediate_frames(
-        self,
-        directories: dict[str, Path],
-        frame_name: str,
-        left_cropped,
-        right_cropped,
-        left_final,
-        right_final,
-    ) -> None:
-        """Save intermediate cropped and final frames."""
-        if "left_cropped" in directories:
-            cv2.imwrite(str(directories["left_cropped"] / f"{frame_name}.png"), left_cropped)
-        if "right_cropped" in directories:
-            cv2.imwrite(str(directories["right_cropped"] / f"{frame_name}.png"), right_cropped)
-        if "left_final" in directories:
-            cv2.imwrite(str(directories["left_final"] / f"{frame_name}.png"), left_final)
-        if "right_final" in directories:
-            cv2.imwrite(str(directories["right_final"] / f"{frame_name}.png"), right_final)
-
-    def _process_single_vr_frame(
+    def _crop_single_frame_pair(
         self,
         left_file: Path,
         right_file: Path,
         directories: dict[str, Path],
         settings: dict[str, Any],
     ) -> bool:
-        """Process a single VR frame pair."""
+        """Crop a single stereo frame pair (Step 6)."""
         # Load images
         left_img = cv2.imread(str(left_file))
         right_img = cv2.imread(str(right_file))
@@ -1613,47 +1625,77 @@ class VideoProcessor:
             print(f"Warning: Could not load {left_file} or {right_file}")
             return False
 
-        # Process frame pair based on distortion setting
+        # Crop based on distortion setting
+        crop_factor = (
+            max(0.5, min(2.0, float(settings.get("fisheye_crop_factor", 0.7))))
+            if settings["apply_distortion"]
+            else max(0.5, min(1.0, float(settings.get("crop_factor", 1.0))))
+        )
+
         if settings["apply_distortion"]:
-            left_cropped, right_cropped, left_final, right_final = self._process_fisheye_frame_pair(
-                left_img, right_img, settings
+            left_cropped = apply_fisheye_square_crop(
+                left_img,
+                settings["per_eye_width"],
+                settings["per_eye_height"],
+                crop_factor,
+            )
+            right_cropped = apply_fisheye_square_crop(
+                right_img,
+                settings["per_eye_width"],
+                settings["per_eye_height"],
+                crop_factor,
             )
         else:
-            left_cropped, right_cropped, left_final, right_final = self._process_regular_frame_pair(
-                left_img, right_img, settings
-            )
+            left_cropped = apply_center_crop(left_img, crop_factor)
+            right_cropped = apply_center_crop(right_img, crop_factor)
 
-        # Save cropped frames (always - needed for Step 6.5 upscaling)
+        # Save cropped frames (always - needed for Step 6.5 upscaling or Step 7 VR assembly)
         frame_name = left_file.stem
         if "left_cropped" in directories:
             cv2.imwrite(str(directories["left_cropped"] / f"{frame_name}.png"), left_cropped)
         if "right_cropped" in directories:
             cv2.imwrite(str(directories["right_cropped"] / f"{frame_name}.png"), right_cropped)
 
-        # Save final resized frames (only if keep_intermediates)
-        if settings["keep_intermediates"]:
-            if "left_final" in directories:
-                cv2.imwrite(str(directories["left_final"] / f"{frame_name}.png"), left_final)
-            if "right_final" in directories:
-                cv2.imwrite(str(directories["right_final"] / f"{frame_name}.png"), right_final)
+        return True
+
+    def _assemble_single_vr_frame(
+        self,
+        left_file: Path,
+        right_file: Path,
+        directories: dict[str, Path],
+        settings: dict[str, Any],
+    ) -> bool:
+        """Assemble a single VR frame from cropped/upscaled frames (Step 7)."""
+        # Load images
+        left_img = cv2.imread(str(left_file))
+        right_img = cv2.imread(str(right_file))
+
+        if left_img is None or right_img is None:
+            print(f"Warning: Could not load {left_file} or {right_file}")
+            return False
+
+        # Resize to final target resolution
+        left_final = resize_image(left_img, settings["per_eye_width"], settings["per_eye_height"])
+        right_final = resize_image(right_img, settings["per_eye_width"], settings["per_eye_height"])
 
         # Create and save final VR frame
         vr_frame = create_vr_frame(left_final, right_final, settings["vr_format"])
+        frame_name = left_file.stem
         if "vr_frames" in directories:
             cv2.imwrite(str(directories["vr_frames"] / f"{frame_name}.png"), vr_frame)
 
         return True
 
-    def _create_vr_frames(
+    def _crop_frames(
         self,
         directories: dict[str, Path],
         settings: dict[str, Any],
         progress_tracker,
         total_frames: int,
     ) -> bool:
-        """Create final VR frames from processed left/right frames."""
+        """Crop stereo frames for VR (Step 5)."""
         try:
-            # Determine source directories
+            # Determine source directories (distorted or original stereo)
             stereo_dirs = self._get_stereo_source_dirs(directories, settings)
             if not stereo_dirs:
                 return False
@@ -1671,15 +1713,15 @@ class VideoProcessor:
 
             # Process each frame pair
             for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
-                self._process_single_vr_frame(left_file, right_file, directories, settings)
+                self._crop_single_frame_pair(left_file, right_file, directories, settings)
 
-                # Update progress periodically
-                if i % 5 == 0 or i == len(left_files) - 1:
+                # Update progress more frequently (every frame for slow operations)
+                if i % 1 == 0 or i == len(left_files) - 1:
                     progress_tracker.update_progress(
-                        "Creating VR frames",
-                        phase="vr_assembly",
+                        f"Cropping frame {i + 1}/{len(left_files)}",
+                        phase="cropping",
                         frame_num=i + 1,
-                        step_name="Final Processing",
+                        step_name="Frame Cropping",
                         step_progress=i + 1,
                         step_total=len(left_files),
                     )
@@ -1687,8 +1729,85 @@ class VideoProcessor:
             return True
 
         except Exception as e:
-            print(f"Error creating VR frames: {e}")
+            print(f"Error cropping frames: {e}")
+            import traceback
+
+            traceback.print_exc()
             return False
+
+    def _assemble_vr_frames(
+        self,
+        directories: dict[str, Path],
+        settings: dict[str, Any],
+        progress_tracker,
+        total_frames: int,
+    ) -> bool:
+        """Assemble final VR frames from cropped/upscaled frames (Step 7)."""
+        try:
+            # Determine source directories (upscaled if available, otherwise cropped)
+            source_dirs = self._get_vr_assembly_source_dirs(directories, settings)
+            if not source_dirs:
+                return False
+
+            left_dir, right_dir = source_dirs
+
+            # Get frame files
+            left_files = sorted(left_dir.glob("*.png"))
+            right_files = sorted(right_dir.glob("*.png"))
+
+            if len(left_files) != len(right_files):
+                print(
+                    f"Warning: Mismatched frame count: {len(left_files)} left, {len(right_files)} right"
+                )
+
+            # Process each frame pair
+            for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
+                self._assemble_single_vr_frame(left_file, right_file, directories, settings)
+
+                # Update progress more frequently (every frame for slow operations)
+                if i % 1 == 0 or i == len(left_files) - 1:
+                    progress_tracker.update_progress(
+                        f"Assembling VR frame {i + 1}/{len(left_files)}",
+                        phase="vr_assembly",
+                        frame_num=i + 1,
+                        step_name="VR Assembly",
+                        step_progress=i + 1,
+                        step_total=len(left_files),
+                    )
+
+            return True
+
+        except Exception as e:
+            print(f"Error assembling VR frames: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return False
+
+    def _get_vr_assembly_source_dirs(
+        self, directories: dict[str, Path], settings: dict[str, Any]
+    ) -> tuple[Path, Path] | None:
+        """Get source directories for VR assembly (Step 7 input)."""
+        # Priority: upscaled (Step 6) > cropped (Step 5)
+        if settings.get("upscale_model", "none") != "none" and "left_upscaled" in directories:
+            left_dir = directories["left_upscaled"]
+            right_dir = directories["right_upscaled"]
+            if left_dir.exists() and right_dir.exists():
+                left_files = list(left_dir.glob("*.png"))
+                if left_files:  # Verify directory has frames
+                    return left_dir, right_dir
+
+        # Fallback to cropped frames
+        if "left_cropped" in directories and "right_cropped" in directories:
+            left_dir = directories["left_cropped"]
+            right_dir = directories["right_cropped"]
+            if left_dir.exists() and right_dir.exists():
+                left_files = list(left_dir.glob("*.png"))
+                if left_files:  # Verify directory has frames
+                    return left_dir, right_dir
+
+        print("Error: No cropped or upscaled frames found for VR assembly")
+        return None
 
     def _check_nvenc_available(self) -> bool:
         """Check if NVENC hardware encoding is available."""

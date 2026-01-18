@@ -254,22 +254,29 @@ HOLE_FILL_METHODS = ["fast", "advanced", "high"]
 UPSCALE_MODELS = ["none", "x2", "x4", "x4-conservative"]
 
 # Directory names for intermediate files
-# Numbered to match processing steps: 00=input, 01-07=processing, 99=output
-# Optional steps (01, 05, 06) are skipped if not enabled
+# Numbered to match processing steps (6-8 steps total based on optional features):
+# Step 1: Extract Frames (00_original_frames)
+# Step 2: Generate Depth Maps (02_depth_maps)
+# Step 3: Create Stereo Pairs (04_left_frames, 04_right_frames)
+# Step 4: Apply Distortion - OPTIONAL (05_left_distorted, 05_right_distorted)
+# Step 5: Crop Frames (06_left_cropped, 06_right_cropped)
+# Step 6: Upscale Frames - OPTIONAL (07_left_upscaled, 07_right_upscaled)
+# Step 7: Assemble VR Frames (99_vr_frames)
+# Step 8: Create Final Video
 INTERMEDIATE_DIRS = {
     "frames": "00_original_frames",  # Step 1: Extracted input frames
-    "supersampled": "01_supersampled_frames",  # Optional: Super sampling (if enabled)
+    "supersampled": "01_supersampled_frames",  # Legacy: Super sampling (deprecated)
     "depth_maps": "02_depth_maps",  # Step 2: AI-generated depth maps
-    "left_frames": "04_left_frames",  # Step 4: Stereo pair - left eye
-    "right_frames": "04_right_frames",  # Step 4: Stereo pair - right eye
-    "left_distorted": "05_left_distorted",  # Step 5: Fisheye distortion - left (optional)
-    "right_distorted": "05_right_distorted",  # Step 5: Fisheye distortion - right (optional)
-    "left_cropped": "06_left_cropped",  # Step 6: Center cropped - left
-    "right_cropped": "06_right_cropped",  # Step 6: Center cropped - right
-    "left_upscaled": "07_left_upscaled",  # Step 6.5: AI upscaled - left (optional)
-    "right_upscaled": "07_right_upscaled",  # Step 6.5: AI upscaled - right (optional)
-    "left_final": "08_left_final",  # Step 7: Final resized - left
-    "right_final": "08_right_final",  # Step 7: Final resized - right
+    "left_frames": "04_left_frames",  # Step 3: Stereo pair - left eye
+    "right_frames": "04_right_frames",  # Step 3: Stereo pair - right eye
+    "left_distorted": "05_left_distorted",  # Step 4: Fisheye distortion - left (optional)
+    "right_distorted": "05_right_distorted",  # Step 4: Fisheye distortion - right (optional)
+    "left_cropped": "06_left_cropped",  # Step 5: Center cropped - left
+    "right_cropped": "06_right_cropped",  # Step 5: Center cropped - right
+    "left_upscaled": "07_left_upscaled",  # Step 6: AI upscaled - left (optional)
+    "right_upscaled": "07_right_upscaled",  # Step 6: AI upscaled - right (optional)
+    "left_final": "08_left_final",  # Legacy: kept for compatibility
+    "right_final": "08_right_final",  # Legacy: kept for compatibility
     "vr_frames": "99_vr_frames",  # Step 7: Final VR assembled frames
 }
 

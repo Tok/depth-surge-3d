@@ -282,7 +282,22 @@
             height: 8px;
             margin: 8px 0;
         }
-        
+
+        /* Optional step styling (golden ratio smaller, opacity based on enabled state) */
+        .step-optional {
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+
+        .step-optional.step-enabled {
+            opacity: 1;
+        }
+
+        .step-optional .step-number {
+            font-size: 0.618em; /* Golden ratio: 1/1.618 */
+            vertical-align: super;
+        }
+
         .frame-update-indicator {
             position: absolute;
             top: 10px;
@@ -1000,11 +1015,11 @@
                         <div class="step-indicator">Preview showing [L][R] disparity</div>
                     </div>
 
-                    <!-- Step 4: VR Lens Simulation -->
-                    <div class="pipeline-step">
+                    <!-- Step 4: Fisheye Distortion (Optional) -->
+                    <div class="pipeline-step step-optional step-enabled" id="step4SettingsContainer">
                         <div class="step-header">
                             <span class="step-number">4</span>
-                            <h6 class="step-title">Fisheye Distortion</h6>
+                            <h6 class="step-title">Fisheye Distortion <small class="text-muted">(optional)</small></h6>
                         </div>
                         <div class="mb-3">
                             <div class="form-check">
@@ -1033,11 +1048,11 @@
                         <div class="step-indicator">FOV: 180° → hemispherical projection</div>
                     </div>
 
-                    <!-- Step 5: Final Processing -->
+                    <!-- Step 5: Frame Cropping -->
                     <div class="pipeline-step">
                         <div class="step-header">
                             <span class="step-number">5</span>
-                            <h6 class="step-title">Final Processing</h6>
+                            <h6 class="step-title">Frame Cropping</h6>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Crop Factor (Standard) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Applied when fisheye is disabled. Crops from center to remove stereo edge artifacts. 1.0 = no crop, 0.5 = keep center 50%."></i></label>
@@ -1065,26 +1080,57 @@
                             <small class="form-text text-muted">Balance between processing speed and stereo quality
                             <br><strong>Warning:</strong> Advanced is 3-5x slower with often minimal visual improvement</small>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">AI Upscaling <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Real-ESRGAN upscaling applied after fisheye distortion for enhanced resolution. Increases processing time and VRAM usage."></i></label>
-                            <select class="form-select" id="upscaleModel">
-                                <option value="none" selected>None (No Upscaling)</option>
-                                <option value="x2">2x Real-ESRGAN (Fast, +2GB VRAM)</option>
-                                <option value="x4">4x Real-ESRGAN (Best Quality, +4GB VRAM)</option>
-                                <option value="x4-conservative">4x Conservative (No GAN Artifacts, +4GB VRAM)</option>
-                            </select>
-                            <small class="form-text text-muted">
-                                <i class="fas fa-robot"></i> Uses Real-ESRGAN for AI-enhanced super-resolution<br>
-                                <i class="fas fa-exclamation-triangle"></i> Significantly increases processing time (~2-3x)
-                            </small>
-                        </div>
                         <div class="step-indicator">Cropping removes edge artifacts from stereo generation</div>
                     </div>
 
-                    <!-- Step 6: VR Format & Output -->
-                    <div class="pipeline-step">
+                    <!-- Step 6: AI Upscaling (Optional) -->
+                    <div class="pipeline-step step-optional step-disabled" id="step6SettingsContainer">
                         <div class="step-header">
                             <span class="step-number">6</span>
+                            <h6 class="step-title">AI Upscaling <small class="text-muted">(optional)</small></h6>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="applyUpscaling">
+                                <label class="form-check-label" for="applyUpscaling">
+                                    Enable AI Upscaling
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">Enable Real-ESRGAN upscaling after cropping</small>
+                        </div>
+                        <div class="mb-3" id="upscalingOptions">
+                            <label class="form-label">Upscale Factor <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Target resolution multiplier using Real-ESRGAN. WARNING: Very slow - can triple total processing time!"></i></label>
+                            <select class="form-select" id="upscaleModel">
+                                <option value="x2" selected>2x Resolution (+2GB VRAM, 2-3x slower)</option>
+                                <option value="x4">4x Resolution (+4GB VRAM, 3-5x slower)</option>
+                                <option value="x4-conservative">4x Conservative (No artifacts, +4GB VRAM, 3-5x slower)</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-robot"></i> Uses Real-ESRGAN AI super-resolution<br>
+                                <i class="fas fa-exclamation-triangle text-warning"></i> <strong>WARNING:</strong> Very slow - can easily triple total processing time!
+                            </small>
+                        </div>
+                        <div class="step-indicator">
+                            <i class="fas fa-hourglass-half"></i> <strong>Performance impact:</strong> Upscaling adds significant processing time (2-5x slower depending on model)
+                        </div>
+                    </div>
+
+                    <!-- Step 7: VR Assembly -->
+                    <div class="pipeline-step">
+                        <div class="step-header">
+                            <span class="step-number">7</span>
+                            <h6 class="step-title">VR Assembly</h6>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-vr-cardboard"></i> Assembles left and right frames into final VR format (configured in Step 8)
+                        </div>
+                        <div class="step-indicator">Combines upscaled/cropped frames into side-by-side or over-under format</div>
+                    </div>
+
+                    <!-- Step 8: VR Format & Output -->
+                    <div class="pipeline-step">
+                        <div class="step-header">
+                            <span class="step-number">8</span>
                             <h6 class="step-title">VR Format & Output</h6>
                         </div>
                         <div class="mb-3">
@@ -1293,10 +1339,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 3: Load Frames -->
+                                <!-- Step 3: Stereo Pairs -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-image"></i> 3. Load Frames</span>
+                                        <span><i class="fas fa-glasses"></i> 3. Create Stereo Pairs</span>
                                         <span id="step3Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1304,10 +1350,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 4: Stereo Pairs -->
-                                <div class="mb-2">
+                                <!-- Step 4: Fisheye Distortion (Optional) -->
+                                <div class="mb-2 step-optional step-enabled" id="step4Container">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-glasses"></i> 4. Create Stereo Pairs</span>
+                                        <span><i class="fas fa-circle-notch"></i> 4. Apply Distortion <small class="text-muted">(optional)</small></span>
                                         <span id="step4Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1315,10 +1361,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 5: Fisheye Distortion -->
+                                <!-- Step 5: Crop Frames -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-circle-notch"></i> 5. Apply Distortion</span>
+                                        <span><i class="fas fa-crop"></i> 5. Crop Frames</span>
                                         <span id="step5Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1326,10 +1372,10 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 6: VR Frames -->
-                                <div class="mb-2">
+                                <!-- Step 6: AI Upscaling (Optional) -->
+                                <div class="mb-2 step-optional step-disabled" id="step6Container">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-vr-cardboard"></i> 6. Create VR Frames</span>
+                                        <span><i class="fas fa-expand-arrows-alt"></i> 6. AI Upscaling <small class="text-muted">(optional)</small></span>
                                         <span id="step6Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1337,14 +1383,25 @@
                                     </div>
                                 </div>
 
-                                <!-- Step 7: Final Video -->
+                                <!-- Step 7: Assemble VR Frames -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-video"></i> 7. Create Final Video</span>
+                                        <span><i class="fas fa-vr-cardboard"></i> 7. Assemble VR Frames</span>
                                         <span id="step7Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step7Bar" style="width: 0%;"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 8: Final Video -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
+                                        <span><i class="fas fa-video"></i> 8. Create Final Video</span>
+                                        <span id="step8Progress">0%</span>
+                                    </div>
+                                    <div class="progress sub-progress">
+                                        <div class="progress-bar bg-info" id="step8Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
                             </div>
@@ -1724,6 +1781,65 @@
             }
         });
 
+        // Update optional step styling based on settings
+        function updateOptionalStepStyling() {
+            // Step 4: Fisheye Distortion
+            const distortionEnabled = document.getElementById('applyDistortion').checked;
+            const step4Container = document.getElementById('step4Container');
+            const step4SettingsContainer = document.getElementById('step4SettingsContainer');
+
+            if (distortionEnabled) {
+                step4Container.classList.remove('step-disabled');
+                step4Container.classList.add('step-enabled');
+                if (step4SettingsContainer) {
+                    step4SettingsContainer.classList.remove('step-disabled');
+                    step4SettingsContainer.classList.add('step-enabled');
+                }
+            } else {
+                step4Container.classList.remove('step-enabled');
+                step4Container.classList.add('step-disabled');
+                if (step4SettingsContainer) {
+                    step4SettingsContainer.classList.remove('step-enabled');
+                    step4SettingsContainer.classList.add('step-disabled');
+                }
+            }
+
+            // Step 6: AI Upscaling
+            const upscalingEnabled = document.getElementById('applyUpscaling').checked;
+            const step6Container = document.getElementById('step6Container');
+            const step6SettingsContainer = document.getElementById('step6SettingsContainer');
+            const upscalingOptions = document.getElementById('upscalingOptions');
+
+            if (upscalingEnabled) {
+                step6Container.classList.remove('step-disabled');
+                step6Container.classList.add('step-enabled');
+                if (step6SettingsContainer) {
+                    step6SettingsContainer.classList.remove('step-disabled');
+                    step6SettingsContainer.classList.add('step-enabled');
+                }
+                if (upscalingOptions) {
+                    upscalingOptions.style.display = 'block';
+                }
+            } else {
+                step6Container.classList.remove('step-enabled');
+                step6Container.classList.add('step-disabled');
+                if (step6SettingsContainer) {
+                    step6SettingsContainer.classList.remove('step-enabled');
+                    step6SettingsContainer.classList.add('step-disabled');
+                }
+                if (upscalingOptions) {
+                    upscalingOptions.style.display = 'none';
+                }
+            }
+        }
+
+        // Listen for changes to optional step settings
+        document.getElementById('applyDistortion').addEventListener('change', updateOptionalStepStyling);
+        document.getElementById('applyUpscaling').addEventListener('change', updateOptionalStepStyling);
+
+        // Initialize optional step styling on page load
+        updateOptionalStepStyling();
+
         // Display video info
         function displayVideoInfo(info, file) {
             currentVideoInfo = info;
@@ -1905,7 +2021,7 @@
                 crop_factor: document.getElementById('cropFactor') ? parseFloat(document.getElementById('cropFactor').value) : 0.7,
                 fisheye_crop_factor: parseFloat(document.getElementById('fisheyeCropFactor').value),
                 hole_fill_quality: document.getElementById('holeFillQuality').value,
-                upscale_model: document.getElementById('upscaleModel').value,
+                upscale_model: document.getElementById('applyUpscaling').checked ? document.getElementById('upscaleModel').value : 'none',
                 experimental_frame_interpolation: document.getElementById('experimentalFrameInterpolation').checked
             };
             
@@ -2106,7 +2222,7 @@
             const stepPercent = stepTotal > 0 ? (stepProgress / stepTotal) * 100 : 0;
 
             // Mark previous steps as complete (100%)
-            for (let i = 1; i <= 7; i++) {
+            for (let i = 1; i <= 8; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
 
@@ -2153,7 +2269,7 @@
             }
 
             // Mark all steps as complete
-            for (let i = 1; i <= 7; i++) {
+            for (let i = 1; i <= 8; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
                 if (bar && text) {
@@ -2572,6 +2688,7 @@
                 cropFactor: document.getElementById('cropFactor').value,
                 fisheyeCropFactor: document.getElementById('fisheyeCropFactor').value,
                 holeFillQuality: document.getElementById('holeFillQuality').value,
+                applyUpscaling: document.getElementById('applyUpscaling').checked,
                 upscaleModel: document.getElementById('upscaleModel').value,
 
                 // Experimental features
@@ -2613,7 +2730,13 @@
                 if (settings.applyDistortion !== undefined) {
                     document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
                 }
-                
+                if (settings.applyUpscaling !== undefined) {
+                    document.getElementById('applyUpscaling').dispatchEvent(new Event('change'));
+                }
+
+                // Update optional step styling after loading settings
+                updateOptionalStepStyling();
+
             } catch (error) {
                 console.error('Error loading settings:', error);
             }
@@ -2643,7 +2766,8 @@
                 cropFactor: '1.0',
                 fisheyeCropFactor: '0.7',
                 holeFillQuality: 'fast',
-                upscaleModel: 'none'
+                applyUpscaling: false,
+                upscaleModel: 'x2'
             };
             
             Object.keys(defaults).forEach(key => {
@@ -2659,10 +2783,14 @@
             
             // Trigger change events
             document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
-            
+            document.getElementById('applyUpscaling').dispatchEvent(new Event('change'));
+
+            // Update optional step styling
+            updateOptionalStepStyling();
+
             // Clear saved settings
             localStorage.removeItem('stereoProjectorSettings');
-            
+
             alert('Settings reset to defaults');
         }
         
@@ -2672,7 +2800,7 @@
                 'startTime', 'endTime', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
                 'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'depthResolution', 'videoEncoder',
                 'preserveAudio', 'keepIntermediates', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
-                'fisheyeCropFactor', 'holeFillQuality', 'upscaleModel', 'experimentalFrameInterpolation'
+                'fisheyeCropFactor', 'holeFillQuality', 'applyUpscaling', 'upscaleModel', 'experimentalFrameInterpolation'
             ];
             
             settingsElements.forEach(id => {

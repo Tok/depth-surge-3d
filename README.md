@@ -14,6 +14,7 @@ Depth Surge 3D transforms flat videos into stereoscopic 3D for VR headsets using
 - **Dual Depth Models**:
   - **Depth Anything V3** (default): 50% lower VRAM, faster processing, optimized for modern GPUs
   - **Video-Depth-Anything V2**: Superior temporal consistency with 32-frame sliding windows
+- **AI Upscaling**: Optional Real-ESRGAN enhancement (2x/4x) for higher output resolution
 - **CUDA Hardware Acceleration**: NVENC H.265 encoding and GPU-accelerated frame decoding
 - **Configurable Depth Quality**: Adjustable depth map resolution (518px to 4K) for quality vs. speed
 - **Multiple VR Formats**: Side-by-side and over-under stereoscopic formats
