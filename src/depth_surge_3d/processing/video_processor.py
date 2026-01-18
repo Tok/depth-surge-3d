@@ -1537,20 +1537,21 @@ class VideoProcessor:
             print(f"Frame count mismatch: {len(left_files)} left, {len(right_files)} right")
             return False
 
-        # Create output directories
+        # Create output directories only if keeping intermediates
         left_upscaled = directories.get("left_upscaled")
         right_upscaled = directories.get("right_upscaled")
 
-        # If directories don't exist (keep_intermediates=False), create them temporarily for previews
-        if not left_upscaled:
-            left_upscaled = directories["base"] / INTERMEDIATE_DIRS["left_upscaled"]
-        if not right_upscaled:
-            right_upscaled = directories["base"] / INTERMEDIATE_DIRS["right_upscaled"]
+        if settings["keep_intermediates"]:
+            # Ensure directories exist when keeping intermediates
+            if not left_upscaled:
+                left_upscaled = directories["base"] / INTERMEDIATE_DIRS["left_upscaled"]
+            if not right_upscaled:
+                right_upscaled = directories["base"] / INTERMEDIATE_DIRS["right_upscaled"]
 
-        if left_upscaled:
-            left_upscaled.mkdir(exist_ok=True)
-        if right_upscaled:
-            right_upscaled.mkdir(exist_ok=True)
+            if left_upscaled:
+                left_upscaled.mkdir(exist_ok=True)
+            if right_upscaled:
+                right_upscaled.mkdir(exist_ok=True)
 
         # Process frames
         for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
@@ -1597,24 +1598,30 @@ class VideoProcessor:
         # Determine if we should send preview for this frame
         should_send_preview = (
             progress_tracker
-            and hasattr(progress_tracker, "send_preview_frame")
+            and hasattr(progress_tracker, "send_preview_frame_from_array")
             and (frame_idx % PREVIEW_FRAME_SAMPLE_RATE == 0 or frame_idx == total_frames - 1)
         )
 
-        # Save if keeping intermediates OR if we need to send a preview
-        if settings["keep_intermediates"] or should_send_preview:
+        # Send preview from memory if not keeping intermediates
+        if should_send_preview and not settings["keep_intermediates"]:
+            progress_tracker.send_preview_frame_from_array(
+                left_upscaled_img, "upscaled_left", frame_idx + 1
+            )
+
+        # Save files only if keeping intermediates
+        if settings["keep_intermediates"]:
             if left_upscaled:
                 left_upscaled_path = left_upscaled / f"{frame_name}.png"
                 cv2.imwrite(str(left_upscaled_path), left_upscaled_img)
 
-                # Send preview frame
-                if should_send_preview:
+                # Send preview from file if keeping intermediates
+                if should_send_preview and hasattr(progress_tracker, "send_preview_frame"):
                     progress_tracker.send_preview_frame(
                         left_upscaled_path, "upscaled_left", frame_idx + 1
                     )
 
-            if right_upscaled and settings["keep_intermediates"]:
-                # Only save right frame if keeping intermediates (preview uses left only)
+            if right_upscaled:
+                # Save right frame when keeping intermediates
                 cv2.imwrite(str(right_upscaled / f"{frame_name}.png"), right_upscaled_img)
 
         # Progress update (every frame since upscaling is slow)

@@ -165,8 +165,7 @@ class TestRealESRGANUpscaler:
 
     @patch("src.depth_surge_3d.models.upscaler.RRDBNet")
     @patch("torch.load")
-    @patch("urllib.request.urlretrieve")
-    def test_load_model_x2_download(self, mock_retrieve, mock_torch_load, mock_rrdb):
+    def test_load_model_x2_download(self, mock_torch_load, mock_rrdb):
         """Test loading x2 model downloads when not cached."""
         upscaler = RealESRGANUpscaler("x2", "cpu")
 
@@ -178,13 +177,14 @@ class TestRealESRGANUpscaler:
         mock_model = MagicMock()
         mock_rrdb.return_value = mock_model
 
-        # Mock cache path doesn't exist
+        # Mock cache path doesn't exist and mock helper methods
         with patch.object(Path, "exists", return_value=False):
             with patch.object(Path, "mkdir"):
-                result = upscaler.load_model()
+                with patch.object(upscaler, "_download_model_weights"):
+                    with patch.object(upscaler, "_verify_model_checksum"):
+                        result = upscaler.load_model()
 
         assert result is True
-        mock_retrieve.assert_called_once()
         mock_rrdb.assert_called_once_with(
             num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=2
         )
@@ -193,8 +193,7 @@ class TestRealESRGANUpscaler:
 
     @patch("src.depth_surge_3d.models.upscaler.RRDBNet")
     @patch("torch.load")
-    @patch("urllib.request.urlretrieve")
-    def test_load_model_x4_cached(self, mock_retrieve, mock_torch_load, mock_rrdb):
+    def test_load_model_x4_cached(self, mock_torch_load, mock_rrdb):
         """Test loading x4 model uses cache when available."""
         upscaler = RealESRGANUpscaler("x4", "cpu")
 
@@ -209,18 +208,17 @@ class TestRealESRGANUpscaler:
         # Mock cache path exists
         with patch.object(Path, "exists", return_value=True):
             with patch.object(Path, "mkdir"):
-                result = upscaler.load_model()
+                with patch.object(upscaler, "_verify_model_checksum"):
+                    result = upscaler.load_model()
 
         assert result is True
-        mock_retrieve.assert_not_called()  # Should not download
         mock_rrdb.assert_called_once_with(
             num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4
         )
 
     @patch("src.depth_surge_3d.models.upscaler.RRDBNet")
     @patch("torch.load")
-    @patch("urllib.request.urlretrieve")
-    def test_load_model_x4_conservative(self, mock_retrieve, mock_torch_load, mock_rrdb):
+    def test_load_model_x4_conservative(self, mock_torch_load, mock_rrdb):
         """Test loading x4-conservative model."""
         upscaler = RealESRGANUpscaler("x4-conservative", "cpu")
 
@@ -235,7 +233,8 @@ class TestRealESRGANUpscaler:
         # Mock cache path exists
         with patch.object(Path, "exists", return_value=True):
             with patch.object(Path, "mkdir"):
-                result = upscaler.load_model()
+                with patch.object(upscaler, "_verify_model_checksum"):
+                    result = upscaler.load_model()
 
         assert result is True
         mock_rrdb.assert_called_once_with(

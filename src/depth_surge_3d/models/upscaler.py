@@ -10,6 +10,7 @@ https://github.com/ai-forever/Real-ESRGAN (standalone, no basicsr dependency)
 
 from __future__ import annotations
 from typing import Literal
+import hashlib
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,6 +20,31 @@ import cv2
 from pathlib import Path
 
 UpscaleModel = Literal["none", "x2", "x4", "x4-conservative"]
+
+# Model SHA-256 checksums for security verification
+MODEL_CHECKSUMS = {
+    "RealESRGAN_x2plus.pth": "49fafd45f8fd7aa8d31ab2a22d14d91b536c577149c7e35f0f2a4c679683f0c3",
+    "RealESRGAN_x4plus.pth": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1",
+    "RealESRNet_x4plus.pth": "d0cc4d7c277a675c6c52a25d7bb823f4c53c799481e05c92b35b8a9f0bb00f47",
+}
+
+
+def verify_file_checksum(file_path: Path, expected_hash: str) -> bool:
+    """
+    Verify file SHA-256 checksum for security.
+
+    Args:
+        file_path: Path to file to verify
+        expected_hash: Expected SHA-256 hash (hex string)
+
+    Returns:
+        True if checksum matches, False otherwise
+    """
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest() == expected_hash
 
 
 # ============================================================================
@@ -197,11 +223,38 @@ class RealESRGANUpscaler(ImageUpscaler):
         self.model_name = model_name
         self.scale = int(model_name[1]) if model_name.startswith("x") else 4
 
+    def _download_model_weights(self, model_url: str, model_path: Path) -> None:
+        """Download model weights with timeout."""
+        import urllib.request
+        import socket
+
+        print(f"Downloading Real-ESRGAN weights ({model_path.name})...")
+        original_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(30)
+        try:
+            urllib.request.urlretrieve(model_url, model_path)
+        finally:
+            socket.setdefaulttimeout(original_timeout)
+        print("Download complete!")
+
+    def _verify_model_checksum(self, model_path: Path) -> None:
+        """Verify model checksum for security."""
+        expected_hash = MODEL_CHECKSUMS.get(model_path.name)
+        if expected_hash:
+            print(f"Verifying checksum for {model_path.name}...")
+            if not verify_file_checksum(model_path, expected_hash):
+                model_path.unlink()  # Delete corrupted file
+                raise ValueError(
+                    f"Checksum verification failed for {model_path.name}. "
+                    "File may be corrupted or tampered with."
+                )
+            print("Checksum verified!")
+        else:
+            print(f"Warning: No checksum available for {model_path.name}")
+
     def load_model(self) -> bool:
         """Load Real-ESRGAN model weights."""
         try:
-            import urllib.request
-
             # Model configurations
             if self.model_name == "x2":
                 model_url = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth"
@@ -222,17 +275,22 @@ class RealESRGANUpscaler(ImageUpscaler):
 
             # Download if not cached
             if not model_path.exists():
-                print(f"Downloading Real-ESRGAN weights ({model_filename})...")
-                urllib.request.urlretrieve(model_url, model_path)
-                print("Download complete!")
+                self._download_model_weights(model_url, model_path)
+
+            # Verify checksum for security
+            self._verify_model_checksum(model_path)
 
             # Create network
             self.model = RRDBNet(
                 num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=netscale
             )
 
-            # Load weights
-            loadnet = torch.load(model_path, map_location=self.device)
+            # Load weights with security flag (weights_only=True for torch >= 1.13)
+            try:
+                loadnet = torch.load(model_path, map_location=self.device, weights_only=True)
+            except TypeError:
+                # Fallback for older PyTorch versions
+                loadnet = torch.load(model_path, map_location=self.device)
             if "params_ema" in loadnet:
                 keyname = "params_ema"
             else:

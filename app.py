@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 import cv2
+import numpy as np
 
 # Set PyTorch memory allocator config BEFORE importing torch
 # This helps prevent memory fragmentation on GPU
@@ -334,10 +335,25 @@ class ProgressCallback:
             # Read frame
             frame = cv2.imread(str(frame_path))
             if frame is None:
+                vprint(f"Preview: Failed to read frame {frame_path}")
+                return
+
+            # Validate dimensions
+            height, width = frame.shape[:2]
+            if width <= 0 or height <= 0:
+                vprint(f"Preview: Invalid dimensions {width}x{height} for {frame_path}")
+                return
+
+            # Cap input size to prevent excessive processing
+            MAX_INPUT_DIM = 8192  # Reject frames larger than 8K
+            if width > MAX_INPUT_DIM or height > MAX_INPUT_DIM:
+                vprint(
+                    f"Preview: Frame too large ({width}x{height}), "
+                    f"exceeds max {MAX_INPUT_DIM}px"
+                )
                 return
 
             # Downscale for transmission
-            height, width = frame.shape[:2]
             scale = self.preview_downscale_width / width
             new_width = self.preview_downscale_width
             new_height = int(height * scale)
@@ -346,6 +362,16 @@ class ProgressCallback:
             # Encode to base64
             _, buffer = cv2.imencode(".png", frame_small)
             img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+            # Cap base64 payload size
+            MAX_PAYLOAD_KB = 500
+            payload_size_kb = len(img_base64) / 1024
+            if payload_size_kb > MAX_PAYLOAD_KB:
+                vprint(
+                    f"Preview: Payload too large ({payload_size_kb:.1f}KB), "
+                    f"skipping {frame_type} frame {frame_number}"
+                )
+                return
 
             # Send via socketio
             preview_data = {
@@ -360,8 +386,90 @@ class ProgressCallback:
             self.last_preview_time = current_time
 
         except Exception as e:
-            # Silent fail - don't interrupt processing
-            pass
+            # Log error but don't interrupt processing
+            vprint(
+                f"Preview: Error sending {frame_type} frame {frame_number}: "
+                f"{type(e).__name__}: {e}"
+            )
+
+    def send_preview_frame_from_array(
+        self,
+        frame_array: np.ndarray,
+        frame_type: str,
+        frame_number: int,
+    ) -> None:
+        """
+        Send preview frame directly from numpy array (no disk I/O).
+
+        Args:
+            frame_array: Frame as numpy array (BGR format)
+            frame_type: Type of frame ("depth_map", "stereo_left", "upscaled_left", etc)
+            frame_number: Frame number being processed
+        """
+        # Check if preview is enabled
+        if not self.enable_live_preview:
+            return
+
+        current_time = time.time()
+
+        # Throttle preview updates
+        if current_time - self.last_preview_time < self.preview_interval:
+            return
+
+        try:
+            # Validate dimensions
+            height, width = frame_array.shape[:2]
+            if width <= 0 or height <= 0:
+                vprint(f"Preview: Invalid dimensions {width}x{height}")
+                return
+
+            # Cap input size
+            MAX_INPUT_DIM = 8192
+            if width > MAX_INPUT_DIM or height > MAX_INPUT_DIM:
+                vprint(
+                    f"Preview: Frame too large ({width}x{height}), "
+                    f"exceeds max {MAX_INPUT_DIM}px"
+                )
+                return
+
+            # Downscale for transmission
+            scale = self.preview_downscale_width / width
+            new_width = self.preview_downscale_width
+            new_height = int(height * scale)
+            frame_small = cv2.resize(frame_array, (new_width, new_height))
+
+            # Encode to base64
+            _, buffer = cv2.imencode(".png", frame_small)
+            img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+            # Cap base64 payload size
+            MAX_PAYLOAD_KB = 500
+            payload_size_kb = len(img_base64) / 1024
+            if payload_size_kb > MAX_PAYLOAD_KB:
+                vprint(
+                    f"Preview: Payload too large ({payload_size_kb:.1f}KB), "
+                    f"skipping {frame_type} frame {frame_number}"
+                )
+                return
+
+            # Send via socketio
+            preview_data = {
+                "frame_type": frame_type,
+                "frame_number": frame_number,
+                "image_data": f"data:image/png;base64,{img_base64}",
+                "dimensions": {"width": new_width, "height": new_height},
+            }
+
+            socketio.emit("frame_preview", preview_data, room=self.session_id)
+
+            self.last_preview_time = current_time
+
+        except Exception as e:
+            # Log error but don't interrupt processing
+            vprint(
+                f"Preview: Error sending {frame_type} frame {frame_number}: "
+                f"{type(e).__name__}: {e}"
+            )
 
     def _calculate_eta(self, current_progress: float) -> str | None:
         """
@@ -412,11 +520,15 @@ class ProgressCallback:
         # Use the overall rate as a fallback for future steps
         if self.current_step_index < len(self.steps) - 1:
             # Calculate remaining work (by weight)
-            remaining_weight = sum(self.step_weights[self.current_step_index + 1:])
+            remaining_weight = sum(self.step_weights[self.current_step_index + 1 :])
 
             # Calculate current step's completion ratio
-            current_step_ratio = (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
-            remaining_current_step_weight = self.step_weights[self.current_step_index] * (1 - current_step_ratio)
+            current_step_ratio = (
+                (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
+            )
+            remaining_current_step_weight = self.step_weights[self.current_step_index] * (
+                1 - current_step_ratio
+            )
 
             total_remaining_weight = remaining_current_step_weight + remaining_weight
 
@@ -491,7 +603,7 @@ class ProgressCallback:
             self.current_step_name = step_name
             self.step_start_times[step_name] = current_time
             self.step_frame_times = []  # Reset frame times for new step
-            self.step_start_progress = progress if 'progress' in locals() else 0
+            self.step_start_progress = progress if "progress" in locals() else 0
 
             # Update step index
             if step_name in self.steps:
@@ -920,6 +1032,19 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     output_dir = Path(output_dir_str).resolve()  # Resolve to absolute path
     vprint(f"Processing request for output directory: {output_dir}")
 
+    # Security: Ensure output_dir is within OUTPUT_FOLDER (prevent path traversal)
+    allowed_base = Path(app.config["OUTPUT_FOLDER"]).resolve()
+    try:
+        output_dir.relative_to(allowed_base)
+    except ValueError:
+        vprint(f"ERROR: Path traversal attempt detected!")
+        vprint(f"  Requested path: {output_dir}")
+        vprint(f"  Allowed base: {allowed_base}")
+        return (
+            jsonify({"error": "Invalid output directory: must be within output folder"}),
+            403,
+        )
+
     if not output_dir.exists():
         vprint(f"ERROR: Output directory not found!")
         vprint(f"  Requested path: {output_dir_str}")
@@ -992,9 +1117,7 @@ def resume_processing():
 
     if not source_video:
         return (
-            jsonify(
-                {"error": "Could not find source video file in output directory for resuming"}
-            ),
+            jsonify({"error": "Could not find source video file in output directory for resuming"}),
             404,
         )
 

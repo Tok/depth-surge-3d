@@ -156,13 +156,16 @@ class TestUpscaling:
 
         assert result is False
 
-    def test_process_upscaling_frames_creates_temp_dirs(
+    def test_process_upscaling_frames_no_intermediates(
         self, temp_frame_dirs, mock_depth_estimator, mock_upscaler, mock_progress_tracker
     ):
-        """Test that temporary directories are created when keep_intermediates=False."""
+        """Test that temporary directories are NOT created when keep_intermediates=False."""
         processor = VideoProcessor(mock_depth_estimator)
         settings = {"keep_intermediates": False}
         directories = temp_frame_dirs  # No upscaled dirs
+
+        # Mock send_preview_frame_from_array to avoid AttributeError
+        mock_progress_tracker.send_preview_frame_from_array = Mock()
 
         result = processor._process_upscaling_frames(
             mock_upscaler,
@@ -174,11 +177,11 @@ class TestUpscaling:
         )
 
         assert result is True
-        # Check that temp directories were created
+        # Check that temp directories were NOT created
         left_upscaled = directories["base"] / "07_left_upscaled"
         right_upscaled = directories["base"] / "07_right_upscaled"
-        assert left_upscaled.exists()
-        assert right_upscaled.exists()
+        assert not left_upscaled.exists()
+        assert not right_upscaled.exists()
 
     def test_upscale_frame_pair_success(
         self, temp_frame_dirs, mock_depth_estimator, mock_upscaler, mock_progress_tracker

@@ -5,9 +5,10 @@ This module contains pure functions for image manipulation, depth processing,
 and geometric transformations without side effects.
 """
 
+from __future__ import annotations
+
 import cv2
 import numpy as np
-from typing import Tuple, Optional
 import math
 
 from ..core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE
@@ -155,7 +156,7 @@ def apply_center_crop(image: np.ndarray, crop_factor: float) -> np.ndarray:
 
 def calculate_fisheye_coordinates(
     width: int, height: int, fov_degrees: float, projection_type: str = "stereographic"
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate coordinate mappings for fisheye projection.
 
@@ -354,7 +355,7 @@ def _apply_high_quality_inpaint(image: np.ndarray, mask: np.ndarray, radius: int
 
 
 def hole_fill_image(
-    image: np.ndarray, mask: Optional[np.ndarray] = None, method: str = "fast"
+    image: np.ndarray, mask: np.ndarray | None = None, method: str = "fast"
 ) -> np.ndarray:
     """
     Fill holes in image using advanced inpainting with adaptive parameters.
