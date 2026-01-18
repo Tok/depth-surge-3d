@@ -1391,6 +1391,33 @@
             </div>
         </div>
 
+        <!-- Output Directory -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card mt-4" id="outputDirectoryCard" style="display: none;">
+                    <div class="card-header">
+                        <h5><i class="fas fa-folder-open"></i> Output Directory</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Processing output saved to:</strong><br>
+                                <code id="outputPath">--</code>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-primary" id="openDirectoryBtn">
+                                    <i class="fas fa-folder-open"></i> Open in File Explorer
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="copyPathBtn">
+                                    <i class="fas fa-copy"></i> Copy Path
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Progress Section -->
         <div class="row">
             <div class="col-12">
@@ -1525,33 +1552,6 @@
                                         </button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Output Directory -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card mt-4" id="outputDirectoryCard" style="display: none;">
-                    <div class="card-header">
-                        <h5><i class="fas fa-folder-open"></i> Output Directory</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>Processing output saved to:</strong><br>
-                                <code id="outputPath">--</code>
-                            </div>
-                            <div>
-                                <button type="button" class="btn btn-primary" id="openDirectoryBtn">
-                                    <i class="fas fa-folder-open"></i> Open in File Explorer
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" id="copyPathBtn">
-                                    <i class="fas fa-copy"></i> Copy Path
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -2423,39 +2423,35 @@
             document.getElementById('outputPath').textContent = data.output_dir;
             document.getElementById('outputDirectoryCard').style.display = 'block';
 
-            // Show success modal
+            // Reset upload state immediately (don't wait for modal dismiss)
+            uploadedFilename = null;
+            uploadedOutputDir = null;
+
+            // Reset file input to allow uploading new videos
+            const videoFile = document.getElementById('videoFile');
+            if (videoFile) {
+                videoFile.value = '';
+            }
+
+            // Hide video preview and info
+            const videoPreview = document.getElementById('videoPreview');
+            const videoInfo = document.getElementById('videoInfo');
+            if (videoPreview) videoPreview.style.display = 'none';
+            if (videoInfo) videoInfo.style.display = 'none';
+
+            // Reset upload button text
+            const uploadBtnText = document.getElementById('uploadBtnText');
+            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+            // Disable process button until new video is uploaded
+            if (processBtn) {
+                processBtn.disabled = true;
+            }
+
+            // Show success modal (after all state is reset)
             document.getElementById('successMessage').textContent = data.message;
             const successModal = new bootstrap.Modal(document.getElementById('successModal'));
             successModal.show();
-
-            // Reset upload state when modal is dismissed to allow new processing
-            document.getElementById('successModal').addEventListener('hidden.bs.modal', function resetAfterComplete() {
-                // Reset uploaded file variables
-                uploadedFilename = null;
-                uploadedOutputDir = null;
-
-                // Reset file input to allow uploading new videos
-                const videoFile = document.getElementById('videoFile');
-                if (videoFile) {
-                    videoFile.value = '';
-                }
-
-                // Hide video preview and info
-                const videoPreview = document.getElementById('videoPreview');
-                const videoInfo = document.getElementById('videoInfo');
-                if (videoPreview) videoPreview.style.display = 'none';
-                if (videoInfo) videoInfo.style.display = 'none';
-
-                // Reset upload button text
-                const uploadBtnText = document.getElementById('uploadBtnText');
-                if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
-
-                // Disable process button until new video is uploaded
-                const processBtn = document.getElementById('processBtn');
-                if (processBtn) {
-                    processBtn.disabled = true;
-                }
-            }, { once: true });
         }
 
         // Handle processing error
@@ -2490,39 +2486,36 @@
                 if (label) label.textContent = 'Frame: --';
             });
 
-            // Show error modal
+            // Reset upload state immediately (don't wait for modal dismiss)
+            uploadedFilename = null;
+            uploadedOutputDir = null;
+
+            // Reset file input to allow uploading new videos
+            const videoFile = document.getElementById('videoFile');
+            if (videoFile) {
+                videoFile.value = '';
+            }
+
+            // Hide video preview and info
+            const videoPreview = document.getElementById('videoPreview');
+            const videoInfo = document.getElementById('videoInfo');
+            if (videoPreview) videoPreview.style.display = 'none';
+            if (videoInfo) videoInfo.style.display = 'none';
+
+            // Reset upload button text
+            const uploadBtnText = document.getElementById('uploadBtnText');
+            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+
+            // Disable process button until new video is uploaded
+            const processBtnError = document.getElementById('processBtn');
+            if (processBtnError) {
+                processBtnError.disabled = true;
+            }
+
+            // Show error modal (after all state is reset)
             document.getElementById('errorMessage').textContent = data.error;
             const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
             errorModal.show();
-
-            // Reset upload state when modal is dismissed to allow new processing
-            document.getElementById('errorModal').addEventListener('hidden.bs.modal', function resetAfterError() {
-                // Reset uploaded file variables
-                uploadedFilename = null;
-                uploadedOutputDir = null;
-
-                // Reset file input to allow uploading new videos
-                const videoFile = document.getElementById('videoFile');
-                if (videoFile) {
-                    videoFile.value = '';
-                }
-
-                // Hide video preview and info
-                const videoPreview = document.getElementById('videoPreview');
-                const videoInfo = document.getElementById('videoInfo');
-                if (videoPreview) videoPreview.style.display = 'none';
-                if (videoInfo) videoInfo.style.display = 'none';
-
-                // Reset upload button text
-                const uploadBtnText = document.getElementById('uploadBtnText');
-                if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
-
-                // Disable process button until new video is uploaded
-                document.getElementById('processBtn').disabled = true;
-
-                // Remove this event listener to prevent multiple bindings
-                this.removeEventListener('hidden.bs.modal', resetAfterError);
-            }, { once: true });
         }
         
         // Handle processing stopped
