@@ -10,6 +10,12 @@ Completed tasks are archived in [docs/archive/completed-tasks.md](archive/comple
 
 The following items are planned for future releases but not critical for current functionality:
 
+### 🎨 UI/UX Improvements
+- [ ] Move format selection to VR Assembly step
+  - Currently in step 8 (Final Assembly)
+  - Should be in step 7 (VR Assembly) where it logically belongs
+  - Format selection (SBS/OU) is a VR-specific setting
+
 ### 🎯 VR Headset Presets
 - [ ] Fine-tune stereo parameters per VR headset
   - Presets for Quest 2/3, Vive, PSVR2, etc.

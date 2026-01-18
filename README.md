@@ -163,3 +163,7 @@ This tool converts monocular video to pseudo-stereo using AI depth estimation. R
 **Artifact Embracement**: Expect algorithmic stereo divergence, synthetic depth layers, and monocular hallucinations. These AI-generated depth discontinuities create a unique aesthetic - depth-drift, disparity shimmer, and temporal judder may become part of the experience.
 
 See the [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for detailed quality expectations and optimization tips.
+
+## Screenshots
+
+**[Full Application Walkthrough (v0.9.1)](docs/Depth-Surge-3D-0.9.1-screenshot.png)** - Complete web interface screenshot showing all processing steps (large file: 2.1 MB, 1371x8733px)
