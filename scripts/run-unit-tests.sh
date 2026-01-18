@@ -35,7 +35,7 @@ fi
 
 # Parse command line arguments
 PYTEST_ARGS="-v tests/unit"
-SHOW_COVERAGE=false
+SHOW_COVERAGE=true  # Show coverage by default
 
 for arg in "$@"; do
     case $arg in
