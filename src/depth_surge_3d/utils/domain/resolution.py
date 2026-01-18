@@ -12,7 +12,7 @@ from typing import Any
 from ...core.constants import VR_RESOLUTIONS
 
 
-def parse_custom_resolution(resolution_string: str) -> tuple[int, int | None]:
+def parse_custom_resolution(resolution_string: str) -> tuple[int, int] | None:
     """
     Parse custom resolution string into width and height.
 
@@ -192,7 +192,7 @@ def validate_resolution_settings(
     Returns:
         Dictionary with validation results and recommendations
     """
-    result = {
+    result: dict[str, Any] = {
         "valid": True,
         "warnings": [],
         "recommendations": [],

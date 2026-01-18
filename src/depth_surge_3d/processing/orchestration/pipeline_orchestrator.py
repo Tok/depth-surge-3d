@@ -69,7 +69,7 @@ class ProcessingOrchestrator:
         self.vr_assembler = vr_assembler
         self.video_encoder = video_encoder
         self.verbose = verbose
-        self._settings_file = None  # Track settings file for error handling
+        self._settings_file: Path | None = None  # Track settings file for error handling
         self._total_steps = 7  # Updated dynamically based on settings
 
     def process(
@@ -488,12 +488,12 @@ class ProcessingOrchestrator:
         """
         print(step_complete(f"Processed {num_items:04d} {item_type} in {duration:.2f}s"))
 
-    def _print_saved_to(self, directory: Path, message_prefix: str = "Saved to") -> None:
+    def _print_saved_to(self, directory: Path | None, message_prefix: str = "Saved to") -> None:
         """
         Print save location message.
 
         Args:
-            directory: Directory path
+            directory: Directory path or None
             message_prefix: Message prefix text
 
         Side effects:

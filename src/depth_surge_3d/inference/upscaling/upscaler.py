@@ -183,7 +183,7 @@ class ImageUpscaler:
             device: Device to use ('auto', 'cuda', 'cpu')
         """
         self.device = self._determine_device(device)
-        self.model = None
+        self.model: RRDBNet | None = None
 
     def _determine_device(self, device: str) -> str:
         """Determine best device for inference."""

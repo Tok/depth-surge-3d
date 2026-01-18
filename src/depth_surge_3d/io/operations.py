@@ -606,7 +606,7 @@ def can_resume_processing(output_dir: Path) -> dict[str, Any]:
     Side Effects:
         Reads files and directory structure from filesystem
     """
-    result = {
+    result: dict[str, Any] = {
         "can_resume": False,
         "settings_file": None,
         "batch_name": None,
@@ -677,7 +677,7 @@ def analyze_processing_progress(output_dir: Path, settings_data: dict[str, Any])
     Side Effects:
         Reads directory contents and counts files
     """
-    progress = {
+    progress: dict[str, Any] = {
         "frames_processed": 0,
         "vr_frames_created": 0,
         "intermediate_stages": {},

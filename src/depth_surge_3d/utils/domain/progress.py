@@ -58,13 +58,16 @@ class ConsoleProgressReporter(ProgressReporter):
         self.show_eta = show_eta
         self.use_tqdm = use_tqdm and HAS_TQDM
         self.start_time = time.time()
-        self.last_update_time = 0
+        self.last_update_time: float = 0.0
         self.current_pbar = None
-        self.current_phase = None
+        self.current_phase: str | None = None
 
     def _get_phase_description(self, phase: str) -> str:
         """Get a user-friendly description for a phase."""
-        return PROCESSING_PHASES.get(phase, {}).get("description", phase.replace("_", " ").title())
+        phase_info = PROCESSING_PHASES.get(phase, {})
+        if isinstance(phase_info, dict):
+            return str(phase_info.get("description", phase.replace("_", " ").title()))
+        return phase.replace("_", " ").title()
 
     def report_progress(self, current: int, total: int, message: str = "") -> None:
         """Report progress to console with optional tqdm support."""
@@ -282,7 +285,7 @@ class ProgressCallback:
         self.processing_mode = processing_mode
         self.callback_func = callback_func
         self.start_time = time.time()
-        self.last_update_time = 0
+        self.last_update_time: float = 0.0
         self.current_phase = "extraction"
 
         self.steps = PROCESSING_STEPS.copy()
