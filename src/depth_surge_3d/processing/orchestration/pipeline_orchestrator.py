@@ -159,6 +159,8 @@ class ProcessingOrchestrator:
         )
         if not frame_files:
             return False
+        print(step_complete(f"Step 1: Extracted {len(frame_files)} frames"))
+        self._print_saved_to(directories.get("frames"), "Extracted frames")
 
         fps = video_properties.get("fps", 30.0)
 
@@ -168,6 +170,8 @@ class ProcessingOrchestrator:
         )
         if depth_maps is None:
             return False
+        print(step_complete(f"Step 2: Generated {len(depth_maps)} depth maps"))
+        self._print_saved_to(directories.get("depth_maps"), "Depth maps")
 
         # Load frames for stereo generation
         frames = []
@@ -234,6 +238,9 @@ class ProcessingOrchestrator:
             frames, depth_maps, frame_files, directories, settings, progress_tracker
         ):
             return self._handle_step_error("Stereo pair creation failed")
+        print(step_complete(f"Step 3: Created {num_frames} stereo pairs"))
+        self._print_saved_to(directories.get("left_frames"), "Left frames")
+        self._print_saved_to(directories.get("right_frames"), "Right frames")
         current_step += 1
 
         # Step 4: Apply fisheye distortion (optional - delegated to distortion_processor)
@@ -250,6 +257,17 @@ class ProcessingOrchestrator:
                         left_files, right_files, directories, settings, progress_tracker
                     ):
                         return self._handle_step_error("Distortion failed")
+                    print(
+                        step_complete(
+                            f"Step 4: Applied {settings['fisheye_projection']} fisheye distortion"
+                        )
+                    )
+                    self._print_saved_to(
+                        directories.get("left_distorted"), "Distorted left frames"
+                    )
+                    self._print_saved_to(
+                        directories.get("right_distorted"), "Distorted right frames"
+                    )
             current_step += 1
 
         # Step 5: Crop frames (delegated to distortion_processor)
@@ -257,12 +275,26 @@ class ProcessingOrchestrator:
             directories, settings, progress_tracker, num_frames
         ):
             return self._handle_step_error("Frame cropping failed")
+        print(
+            step_complete(
+                f"Step 5: Cropped {num_frames} frames to {settings['per_eye_width']}x{settings['per_eye_height']}"
+            )
+        )
+        self._print_saved_to(directories.get("left_cropped"), "Cropped left frames")
+        self._print_saved_to(directories.get("right_cropped"), "Cropped right frames")
         current_step += 1
 
         # Step 6: Apply AI upscaling (optional - delegated to upscaler)
         if settings.get("upscale_model", "none") != "none":
             if not self.upscaler.apply_upscaling(directories, settings, progress_tracker):
                 return self._handle_step_error("Upscaling failed")
+            print(
+                step_complete(
+                    f"Step 6: Upscaled {num_frames} frames using {settings['upscale_model']}"
+                )
+            )
+            self._print_saved_to(directories.get("left_upscaled"), "Upscaled left frames")
+            self._print_saved_to(directories.get("right_upscaled"), "Upscaled right frames")
             current_step += 1
 
         # Step 7: Assemble VR frames (delegated to vr_assembler)
@@ -270,6 +302,12 @@ class ProcessingOrchestrator:
             directories, settings, progress_tracker, num_frames
         ):
             return self._handle_step_error("VR frame assembly failed")
+        print(
+            step_complete(
+                f"Step 7: Assembled {num_frames} {settings['vr_format']} VR frames at {settings['vr_output_width']}x{settings['vr_output_height']}"
+            )
+        )
+        self._print_saved_to(directories.get("vr_frames"), "VR frames")
         current_step += 1
 
         # Step 8: Create final video (delegated to video_encoder)
@@ -283,6 +321,15 @@ class ProcessingOrchestrator:
             video_path,
             settings,
         )
+
+        if success:
+            output_filename = generate_output_filename(
+                Path(video_path).name,
+                settings["vr_format"],
+                settings["vr_resolution"],
+            )
+            print(step_complete(f"Step 8: Created final video"))
+            self._print_saved_to(directories["base"], f"Final output: {output_filename}")
 
         # Finalize and cleanup
         if progress_tracker and hasattr(progress_tracker, "finish"):
