@@ -294,7 +294,7 @@ def main():  # noqa: C901
         return 0
 
     if args.cache_info:
-        from depth_surge_3d.utils.depth_cache import get_cache_size, get_cache_dir
+        from depth_surge_3d.utils.domain.depth_cache import get_cache_size, get_cache_dir
 
         cache_entries, cache_size_bytes = get_cache_size()
         cache_size_mb = cache_size_bytes / (1024 * 1024)
@@ -311,7 +311,7 @@ def main():  # noqa: C901
         return 0
 
     if args.cache_clear:
-        from depth_surge_3d.utils.depth_cache import clear_cache
+        from depth_surge_3d.utils.domain.depth_cache import clear_cache
 
         count = clear_cache()
         print(f"Cleared {count} cached video(s) from depth map cache")

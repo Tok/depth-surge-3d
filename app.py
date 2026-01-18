@@ -808,7 +808,7 @@ def process_video_async(  # noqa: C901
             processor = VideoProcessor(projector.depth_estimator)
 
         # Calculate resolution settings that VideoProcessor expects
-        from depth_surge_3d.utils.resolution import (
+        from depth_surge_3d.utils.domain.resolution import (
             get_resolution_dimensions,
             calculate_vr_output_dimensions,
             auto_detect_resolution,
