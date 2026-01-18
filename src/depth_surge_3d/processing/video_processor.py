@@ -1623,17 +1623,19 @@ class VideoProcessor:
                 left_img, right_img, settings
             )
 
-        # Save intermediate frames if requested
+        # Save cropped frames (always - needed for Step 6.5 upscaling)
         frame_name = left_file.stem
+        if "left_cropped" in directories:
+            cv2.imwrite(str(directories["left_cropped"] / f"{frame_name}.png"), left_cropped)
+        if "right_cropped" in directories:
+            cv2.imwrite(str(directories["right_cropped"] / f"{frame_name}.png"), right_cropped)
+
+        # Save final resized frames (only if keep_intermediates)
         if settings["keep_intermediates"]:
-            self._save_vr_intermediate_frames(
-                directories,
-                frame_name,
-                left_cropped,
-                right_cropped,
-                left_final,
-                right_final,
-            )
+            if "left_final" in directories:
+                cv2.imwrite(str(directories["left_final"] / f"{frame_name}.png"), left_final)
+            if "right_final" in directories:
+                cv2.imwrite(str(directories["right_final"] / f"{frame_name}.png"), right_final)
 
         # Create and save final VR frame
         vr_frame = create_vr_frame(left_final, right_final, settings["vr_format"])
