@@ -970,7 +970,7 @@ class VideoProcessor:
             frames_dir = directories["base"] / INTERMEDIATE_DIRS["frames"]
             frames_dir.mkdir(exist_ok=True)
 
-        # Calculate frame range
+        # Calculate frame range and timing
         total_frames = video_properties["frame_count"]
         fps = video_properties["fps"]
         start_frame, end_frame = calculate_frame_range(
@@ -978,7 +978,11 @@ class VideoProcessor:
         )
         expected_frames = end_frame - start_frame
 
-        # Try CUDA acceleration first, fall back to CPU if unavailable
+        # Convert frame numbers to timestamps for more efficient seeking
+        start_time = start_frame / fps if fps > 0 else 0
+        duration = expected_frames / fps if fps > 0 else 0
+
+        # Try CUDA hardware decoding with optimized seeking
         cmd_cuda = [
             "ffmpeg",
             "-y",
@@ -986,37 +990,41 @@ class VideoProcessor:
             "cuda",
             "-hwaccel_output_format",
             "cuda",
+            "-ss",
+            str(start_time),  # Seek before decoding (much faster)
             "-i",
             video_path,
+            "-t",
+            str(duration),  # Duration limit (more efficient than select filter)
             "-vf",
-            f"select=between(n\\,{start_frame}\\,{end_frame - 1}),hwdownload,format=nv12,format=rgb24",
+            "hwdownload,format=nv12,format=rgb24",
             "-pix_fmt",
             "rgb24",
-            "-frames:v",
-            str(expected_frames),
-            "-fps_mode",
-            "passthrough",
+            "-vsync",
+            "0",  # Pass through original timestamps
             str(frames_dir / "frame_%06d.png"),
         ]
 
         try:
             result = subprocess.run(cmd_cuda, capture_output=True, text=True)
             if result.returncode != 0:
-                # CUDA failed, try CPU fallback
+                # CUDA failed, try CPU fallback with optimized seeking
                 print("  CUDA frame extraction failed, falling back to CPU")
                 cmd_cpu = [
                     "ffmpeg",
                     "-y",
+                    "-ss",
+                    str(start_time),  # Seek before decoding
                     "-i",
                     video_path,
-                    "-vf",
-                    f"select=between(n\\,{start_frame}\\,{end_frame - 1})",
+                    "-t",
+                    str(duration),  # Duration limit
                     "-pix_fmt",
                     "rgb24",
-                    "-frames:v",
-                    str(expected_frames),
-                    "-fps_mode",
-                    "passthrough",
+                    "-vsync",
+                    "0",
+                    "-threads",
+                    "0",  # Auto-detect optimal thread count
                     str(frames_dir / "frame_%06d.png"),
                 ]
                 result_cpu = subprocess.run(cmd_cpu, capture_output=True, text=True)
