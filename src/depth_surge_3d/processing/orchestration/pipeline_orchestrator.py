@@ -161,6 +161,7 @@ class ProcessingOrchestrator:
             return False
         print(step_complete(f"Step 1: Extracted {len(frame_files)} frames"))
         self._print_saved_to(directories.get("frames"), "Extracted frames")
+        print()  # Blank line after step
 
         fps = video_properties.get("fps", 30.0)
 
@@ -172,6 +173,7 @@ class ProcessingOrchestrator:
             return False
         print(step_complete(f"Step 2: Generated {len(depth_maps)} depth maps"))
         self._print_saved_to(directories.get("depth_maps"), "Depth maps")
+        print()  # Blank line after step
 
         # Load frames for stereo generation
         frames = []
@@ -241,6 +243,7 @@ class ProcessingOrchestrator:
         print(step_complete(f"Step 3: Created {num_frames} stereo pairs"))
         self._print_saved_to(directories.get("left_frames"), "Left frames")
         self._print_saved_to(directories.get("right_frames"), "Right frames")
+        print()  # Blank line after left/right pair
         current_step += 1
 
         # Step 4: Apply fisheye distortion (optional - delegated to distortion_processor)
@@ -266,6 +269,7 @@ class ProcessingOrchestrator:
                     self._print_saved_to(
                         directories.get("right_distorted"), "Distorted right frames"
                     )
+                    print()  # Blank line after left/right pair
             current_step += 1
 
         # Step 5: Crop frames (delegated to distortion_processor)
@@ -280,6 +284,7 @@ class ProcessingOrchestrator:
         )
         self._print_saved_to(directories.get("left_cropped"), "Cropped left frames")
         self._print_saved_to(directories.get("right_cropped"), "Cropped right frames")
+        print()  # Blank line after left/right pair
         current_step += 1
 
         # Step 6: Apply AI upscaling (optional - delegated to upscaler)
@@ -293,6 +298,7 @@ class ProcessingOrchestrator:
             )
             self._print_saved_to(directories.get("left_upscaled"), "Upscaled left frames")
             self._print_saved_to(directories.get("right_upscaled"), "Upscaled right frames")
+            print()  # Blank line after left/right pair
             current_step += 1
 
         # Step 7: Assemble VR frames (delegated to vr_assembler)
@@ -306,6 +312,7 @@ class ProcessingOrchestrator:
             )
         )
         self._print_saved_to(directories.get("vr_frames"), "VR frames")
+        print()  # Blank line after step
         current_step += 1
 
         # Step 8: Create final video (delegated to video_encoder)
@@ -493,9 +500,7 @@ class ProcessingOrchestrator:
             - Console output
         """
         if directory:
-            print(saved_to(f"{message_prefix}: {directory}\n"))
-        else:
-            print()
+            print(saved_to(f"{message_prefix}: {directory}"))
 
     def _handle_step_error(self, error_msg: str) -> bool:
         """
