@@ -23,9 +23,9 @@ UpscaleModel = Literal["none", "x2", "x4", "x4-conservative"]
 
 # Model SHA-256 checksums for security verification
 MODEL_CHECKSUMS = {
-    "RealESRGAN_x2plus.pth": "49fafd45f8fd7aa8d31ab2a22d14d91b536c577149c7e35f0f2a4c679683f0c3",
+    "RealESRGAN_x2plus.pth": "49fafd45f8fd7aa8d31ab2a22d14d91b536c34494a5cfe31eb5d89c2fa266abb",
     "RealESRGAN_x4plus.pth": "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1",
-    "RealESRNet_x4plus.pth": "d0cc4d7c277a675c6c52a25d7bb823f4c53c799481e05c92b35b8a9f0bb00f47",
+    "RealESRNet_x4plus.pth": "a820b9bde89a874d7599d545567308ce6c128fc8754a53208eda016d40aa81df",
 }
 
 
