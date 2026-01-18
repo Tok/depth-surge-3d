@@ -56,6 +56,19 @@ python depth_surge_3d.py input_video.mp4
 python depth_surge_3d.py input_video.mp4 -s 01:30 -e 03:45 -f over_under --resolution 4k
 ```
 
+**UV Command Line**
+
+In WSL required to export a UV variable
+
+```bash
+export UV_LINK_MODE=copy
+```
+
+```bash
+# Basic usage
+uv run python depth_surge_3d.py input_video.mp4
+```
+
 **Quick Start Script:**
 ```bash
 # Process a clip with optimized settings

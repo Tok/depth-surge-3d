@@ -28,6 +28,10 @@ echo "[OK] Python $python_version found"
 if command_exists uv; then
     echo "[OK] uv package manager found - using for fast setup"
     use_uv=true
+
+    if [[ -d "/usr/lib/wsl" ]]; then
+        export UV_LINK_MODE=copy
+    fi
 else
     echo "[INFO] uv not found - using pip (consider installing uv for faster setup: curl -LsSf https://astral.sh/uv/install.sh | sh)"
     use_uv=false
@@ -45,18 +49,17 @@ else
     source venv/bin/activate
     pip install --upgrade pip
     pip install -r requirements.txt
-    #pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+    
+    if [[ -f "nvidia-smi" || -f "/usr/lib/wsl/lib/nvidia-smi" ]]; then
+        echo "Installing Cuda pytorch"
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+    elif [[ -f "rocminfo" ]]; then
+        echo "Installing ROC pytorch"
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/rocm6.4
+    fi
 fi
 
-if [[ -f "nvidia-smi" || -f "/usr/lib/wsl/lib/nvidia-smi" ]]; then
-    echo "Installing Cuda pytorch"
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
-elif [[ -f "rocminfo" ]]; then
-    echo "Installing ROC pytorch"
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/rocm6.4
-else
-    pip install torch torchvision
-fi
+
 
 
 # Download Video-Depth-Anything repository if not present
