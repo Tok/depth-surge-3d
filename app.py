@@ -134,7 +134,7 @@ def signal_handler(signum: int, frame: Any) -> None:
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "depth-surge-3d-secret"
-app.config["OUTPUT_FOLDER"] = "output"
+app.config["OUTPUT_FOLDER"] = str(Path("output").resolve())
 # Use threading async_mode and disable ping timeout for long-running tasks
 socketio = SocketIO(
     app,
@@ -895,7 +895,7 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
         {
             "success": True,
             "filename": video_path.name,
-            "output_dir": str(output_dir),
+            "output_dir": str(output_dir.resolve()),  # Ensure absolute path
             "video_info": video_info,
             "has_audio": audio_path is not None and audio_path.exists(),
         }
@@ -917,12 +917,16 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     if not output_dir_str:
         return jsonify({"error": "No output directory provided"}), 400
 
-    output_dir = Path(output_dir_str)
+    output_dir = Path(output_dir_str).resolve()  # Resolve to absolute path
+    vprint(f"Processing request for output directory: {output_dir}")
+
     if not output_dir.exists():
-        vprint(f"ERROR: Output directory not found: {output_dir_str}")
+        vprint(f"ERROR: Output directory not found!")
+        vprint(f"  Requested path: {output_dir_str}")
         vprint(f"  Resolved path: {output_dir}")
         vprint(f"  Exists: {output_dir.exists()}")
-        return jsonify({"error": f"Output directory not found: {output_dir_str}"}), 404
+        vprint(f"  Current working directory: {Path.cwd()}")
+        return jsonify({"error": f"Output directory not found: {output_dir}"}), 404
 
     # Find the source video file in output directory
     video_path = find_source_video(output_dir)
