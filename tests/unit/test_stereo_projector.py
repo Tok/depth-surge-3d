@@ -1080,9 +1080,7 @@ class TestValidateInputsDirectoryError:
     @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
     @patch("src.depth_surge_3d.rendering.stereo_projector.validate_video_file")
     @patch("pathlib.Path.mkdir")
-    def test_validate_inputs_directory_creation_fails(
-        self, mock_mkdir, mock_validate, mock_create
-    ):
+    def test_validate_inputs_directory_creation_fails(self, mock_mkdir, mock_validate, mock_create):
         """Test validate_inputs when directory creation fails."""
         mock_create.return_value = MagicMock()
         mock_validate.return_value = True
@@ -1163,9 +1161,7 @@ class TestCreateOutputVideoEdgeCases:
     @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
     @patch("pathlib.Path.glob")
     @patch("subprocess.run")
-    def test_create_output_video_with_numeric_target_fps(
-        self, mock_run, mock_glob, mock_create
-    ):
+    def test_create_output_video_with_numeric_target_fps(self, mock_run, mock_glob, mock_create):
         """Test create_output_video with numeric target_fps."""
         mock_create.return_value = MagicMock()
         mock_glob.return_value = [Path("/tmp/frame_000001.png")]
