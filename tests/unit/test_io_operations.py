@@ -228,16 +228,22 @@ class TestCreateOutputDirectories:
         with patch("pathlib.Path.mkdir") as mock_mkdir:
             result = create_output_directories(base_path, keep_intermediates=False)
 
-        # Should only create base directory
+        # Should create base directory
         assert "base" in result
         assert result["base"] == base_path
 
-        # Should not create intermediate directories
+        # Should not create early-stage intermediate directories
         assert "frames" not in result
         assert "depth_maps" not in result
-        assert "vr_frames" not in result
+        assert "left_frames" not in result
+        assert "right_frames" not in result
 
-        # Only base mkdir should be called
+        # Should still create necessary output directories (vr_frames, cropped frames)
+        # These are needed for final output even without intermediates
+        assert "vr_frames" in result
+        assert "left_cropped" in result or "right_cropped" in result
+
+        # mkdir should be called
         assert mock_mkdir.called
 
     def test_create_output_directories_default_intermediates(self):

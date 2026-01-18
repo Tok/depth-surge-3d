@@ -31,7 +31,7 @@ PROCESSING_PHASES = {
     "depth_estimation": {"weight": 30, "description": "Estimating depth"},
     "stereo_generation": {"weight": 20, "description": "Creating stereo pairs"},
     "distortion": {"weight": 10, "description": "Applying fisheye distortion"},
-    "upscaling": {"weight": 10, "description": "Upscaling frames"},
+    "upscaling": {"weight": 5, "description": "Upscaling frames"},
     "vr_assembly": {"weight": 5, "description": "Assembling VR frames"},
     "video_creation": {"weight": 5, "description": "Creating final video"},
 }

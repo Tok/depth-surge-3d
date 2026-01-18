@@ -28,7 +28,7 @@ class TestStereoProjector:
         assert projector.depth_model_version == "v2"
         assert projector.depth_estimator == mock_estimator
         assert projector._model_loaded is False
-        mock_create_v2.assert_called_once_with("models/test.pth", "cpu", False)
+        mock_create_v2.assert_called_once_with("models/test.pth", "cpu", False, 10)
 
     @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator_da3")
     def test_init_with_v3(self, mock_create_v3):
@@ -60,7 +60,7 @@ class TestStereoProjector:
         )
 
         assert projector.depth_model_version == "v2"
-        mock_create_v2.assert_called_once_with(None, "cpu", False)
+        mock_create_v2.assert_called_once_with(None, "cpu", False, 10)
 
     @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator_da3")
     def test_init_with_none_model_path_v3(self, mock_create_v3):
@@ -115,7 +115,7 @@ class TestCreateStereoProjector:
         projector = create_stereo_projector()
 
         assert isinstance(projector, StereoProjector)
-        mock_create_v2.assert_called_once_with(None, "auto", False)
+        mock_create_v2.assert_called_once_with(None, "auto", False, 10)
 
     @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator")
     def test_create_with_v2(self, mock_create_v2):
@@ -132,7 +132,7 @@ class TestCreateStereoProjector:
 
         assert isinstance(projector, StereoProjector)
         assert projector.depth_model_version == "v2"
-        mock_create_v2.assert_called_once_with("models/test.pth", "cpu", True)
+        mock_create_v2.assert_called_once_with("models/test.pth", "cpu", True, 10)
 
     @patch("src.depth_surge_3d.core.stereo_projector.create_video_depth_estimator_da3")
     def test_create_with_v3(self, mock_create_v3):
