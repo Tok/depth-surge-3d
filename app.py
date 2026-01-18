@@ -146,8 +146,8 @@ def _get_lime_color(position: float) -> str:
 
 def _print_banner_border(border_width: int, char: str, row_offset: int, total_rows: int) -> None:
     """Print border with diagonal gradient matching text"""
-    # Stretch gradient beyond borders by 10% on each side to avoid artifacts
-    margin = 0.1
+    # Stretch gradient beyond borders by 20% on each side to avoid artifacts
+    margin = 0.2
     max_diagonal = total_rows + border_width
 
     border = " " + _get_lime_color(0.0 - margin) + "█"  # Leading space
@@ -161,25 +161,20 @@ def _print_banner_border(border_width: int, char: str, row_offset: int, total_ro
 
 
 def _print_banner_line(line: str, row_idx: int, num_rows: int, max_diagonal: int) -> None:
-    """Print single banner line with gradient and white '3D' text"""
-    white = "\033[97m"
+    """Print single banner line with diagonal gradient"""
     reset = "\033[0m"
-    # Stretch gradient beyond borders by 10% on each side to avoid artifacts
-    margin = 0.1
+    # Stretch gradient beyond borders by 20% on each side to avoid artifacts
+    margin = 0.2
 
     # Left border with leading space
     left_pos = row_idx / (num_rows + 1)
     colored_line = f" {_get_lime_color(left_pos)}█{reset} "  # Leading space
 
-    # Apply diagonal gradient to text, but make "3D" part white
-    # "3D" starts around character 43-44 (including leading dots/spaces)
+    # Apply diagonal gradient to entire text
     for col_idx, char in enumerate(line):
-        if col_idx >= 43:  # "3D" section (includes separator)
-            colored_line += f"{white}{char}"
-        else:  # "DEPTH SURGE" section with gradient (stretched)
-            raw_pos = (row_idx + col_idx) / max_diagonal
-            stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
-            colored_line += f"{_get_lime_color(stretched_pos)}{char}"
+        raw_pos = (row_idx + col_idx) / max_diagonal
+        stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
+        colored_line += f"{_get_lime_color(stretched_pos)}{char}"
 
     # Right border
     right_pos = (row_idx + 1) / (num_rows + 1)
@@ -188,7 +183,7 @@ def _print_banner_line(line: str, row_idx: int, num_rows: int, max_diagonal: int
 
 
 def print_banner() -> None:
-    """Print Depth Surge 3D banner with lime gradient and white 3D text"""
+    """Print Depth Surge 3D banner with diagonal lime gradient"""
     version, git_commit = _get_version_info()
 
     blue_accent = "\033[38;5;39m"
