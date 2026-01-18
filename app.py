@@ -90,15 +90,14 @@ def vprint(*args: Any, **kwargs: Any) -> None:
 
 def print_banner() -> None:
     """Print Depth Surge 3D banner with lime gradient"""
-    # ANSI color codes for lime gradient (dark green -> bright lime)
+    # ANSI color codes for lime gradient (6 shades: dark green -> bright lime)
     colors = [
-        "\033[38;5;22m",  # Dark green
-        "\033[38;5;28m",  # Medium green
-        "\033[38;5;34m",  # Green
-        "\033[38;5;40m",  # Bright green
-        "\033[38;5;46m",  # Lime
-        "\033[38;5;82m",  # Bright lime
-        "\033[38;5;118m",  # Very bright lime
+        "\033[38;5;22m",  # Shade 1: Dark green
+        "\033[38;5;28m",  # Shade 2: Medium dark green
+        "\033[38;5;34m",  # Shade 3: Medium green
+        "\033[38;5;40m",  # Shade 4: Bright green
+        "\033[38;5;46m",  # Shade 5: Lime
+        "\033[38;5;82m",  # Shade 6: Bright lime
     ]
     reset = "\033[0m"
 
@@ -110,11 +109,15 @@ def print_banner() -> None:
     ]
 
     print()
-    # Apply gradient effect - each line gets progressively brighter
-    for i, line in enumerate(banner_lines):
-        # Distribute colors across lines
-        color_index = min(int((i / len(banner_lines)) * len(colors)), len(colors) - 1)
-        print(f"{colors[color_index]}{line}{reset}")
+    # Apply horizontal gradient across each line
+    for line in banner_lines:
+        colored_line = ""
+        line_length = len(line)
+        for i, char in enumerate(line):
+            # Map character position to color gradient (0 to 5)
+            color_index = min(int((i / line_length) * len(colors)), len(colors) - 1)
+            colored_line += f"{colors[color_index]}{char}"
+        print(f"{colored_line}{reset}")
     print()
 
 
