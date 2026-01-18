@@ -113,23 +113,50 @@ def _get_version_info() -> tuple[str, str]:
     return version, git_commit
 
 
+def _rgb_to_ansi256(r: int, g: int, b: int) -> int:
+    """Convert RGB (0-5 range) to ANSI 256 color code"""
+    return 16 + 36 * r + 6 * g + b
+
+
 def _get_lime_color(position: float) -> str:
-    """Get interpolated lime color for position 0.0 to 1.0 using 32 shades"""
-    # Mathematical interpolation from dark green (28) to bright lime (190)
-    # 32 evenly spaced steps for smooth gradient
-    start_code = 28
-    end_code = 190
-    color_code = int(start_code + (end_code - start_code) * position)
+    """Lerp between dark green and bright lime RGB values for smooth gradient"""
+    # Clamp position to valid range (handles stretched gradient beyond 0-1)
+    position = max(0.0, min(1.0, position))
+
+    # Define start and end colors in RGB (0-5 scale for ANSI 256)
+    # Dark green: no red, low-medium green, no blue
+    start_rgb = (0, 2, 0)  # Darker green
+    # Bright lime: medium red, full green, no blue
+    end_rgb = (3, 5, 0)  # Bright lime
+
+    # Lerp each RGB component with rounding for smoothness
+    r = round(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * position)
+    g = round(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * position)
+    b = round(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * position)
+
+    # Clamp to valid range
+    r = max(0, min(5, r))
+    g = max(0, min(5, g))
+    b = max(0, min(5, b))
+
+    # Convert to ANSI 256 color code
+    color_code = _rgb_to_ansi256(r, g, b)
     return f"\033[38;5;{color_code}m"
 
 
-def _print_banner_border(border_width: int, char: str) -> None:
-    """Print horizontal border with lime gradient"""
-    border = _get_lime_color(0.0) + "█"
+def _print_banner_border(border_width: int, char: str, row_offset: int, total_rows: int) -> None:
+    """Print border with diagonal gradient matching text"""
+    # Stretch gradient beyond borders by 10% on each side to avoid artifacts
+    margin = 0.1
+    max_diagonal = total_rows + border_width
+
+    border = " " + _get_lime_color(0.0 - margin) + "█"  # Leading space
     for i in range(border_width):
-        position = i / border_width
-        border += f"{_get_lime_color(position)}{char}"
-    border += _get_lime_color(1.0) + "█\033[0m"
+        # Calculate diagonal position with stretched gradient
+        raw_pos = (row_offset + i) / max_diagonal
+        stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
+        border += f"{_get_lime_color(stretched_pos)}{char}"
+    border += _get_lime_color(1.0 + margin) + "█\033[0m"
     print(border)
 
 
@@ -137,19 +164,22 @@ def _print_banner_line(line: str, row_idx: int, num_rows: int, max_diagonal: int
     """Print single banner line with gradient and white '3D' text"""
     white = "\033[97m"
     reset = "\033[0m"
+    # Stretch gradient beyond borders by 10% on each side to avoid artifacts
+    margin = 0.1
 
-    # Left border
+    # Left border with leading space
     left_pos = row_idx / (num_rows + 1)
-    colored_line = f"{_get_lime_color(left_pos)}█{reset} "
+    colored_line = f" {_get_lime_color(left_pos)}█{reset} "  # Leading space
 
     # Apply diagonal gradient to text, but make "3D" part white
-    # "3D" starts at character 46 in each line
+    # "3D" starts around character 43-44 (including leading dots/spaces)
     for col_idx, char in enumerate(line):
-        if col_idx >= 46:  # "3D" section
+        if col_idx >= 43:  # "3D" section (includes separator)
             colored_line += f"{white}{char}"
-        else:  # "DEPTH SURGE" section with gradient
-            diagonal_pos = (row_idx + col_idx) / max_diagonal
-            colored_line += f"{_get_lime_color(diagonal_pos)}{char}"
+        else:  # "DEPTH SURGE" section with gradient (stretched)
+            raw_pos = (row_idx + col_idx) / max_diagonal
+            stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
+            colored_line += f"{_get_lime_color(stretched_pos)}{char}"
 
     # Right border
     right_pos = (row_idx + 1) / (num_rows + 1)
@@ -179,20 +209,23 @@ def print_banner() -> None:
     line_length = len(banner_lines[0])
     max_diagonal = num_rows + line_length - 2
 
-    # Print banner with borders
-    _print_banner_border(border_width, "▀")
+    # Print banner with borders (diagonal gradient on borders too)
+    total_rows = num_rows + 2  # +2 for top and bottom borders
+    _print_banner_border(border_width, "▀", row_offset=0, total_rows=total_rows)
     for row_idx, line in enumerate(banner_lines):
-        _print_banner_line(line, row_idx, num_rows, max_diagonal)
-    _print_banner_border(border_width, "▄")
+        _print_banner_line(
+            line, row_idx + 1, num_rows, max_diagonal
+        )  # +1 to account for top border
+    _print_banner_border(border_width, "▄", row_offset=num_rows + 1, total_rows=total_rows)
 
-    # GitHub repo link
+    # GitHub repo link (with leading space for alignment)
     repo_link = "https://github.com/Tok/depth-surge-3d"
-    padding = (border_width - len(repo_link)) // 2
+    padding = (border_width - len(repo_link)) // 2 + 1  # +1 for leading space
     print(f"{' ' * padding}{blue_accent}{repo_link}{reset}")
 
-    # Version and commit info
+    # Version and commit info (with leading space for alignment)
     version_info = f"v{version} [{git_commit}]"
-    version_padding = (border_width - len(version_info)) // 2
+    version_padding = (border_width - len(version_info)) // 2 + 1  # +1 for leading space
     print(
         f"{' ' * version_padding}v{bright_blue}{version}{reset} [{bright_blue}{git_commit}{reset}]"
     )
