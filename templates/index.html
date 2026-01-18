@@ -1341,6 +1341,56 @@
             </div>
         </div>
 
+        <!-- Live Preview Panel -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card" id="livePreviewCard" style="display: none;">
+                    <div class="card-header">
+                        <h5><i class="fas fa-eye"></i> Live Preview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Depth Map Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong>Depth Map</strong></div>
+                                    <img id="depthMapPreview"
+                                         src=""
+                                         alt="Depth map preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="depthMapFrame">Frame: --</small>
+                                </div>
+                            </div>
+
+                            <!-- Stereo Left Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong>Left Eye</strong></div>
+                                    <img id="stereoLeftPreview"
+                                         src=""
+                                         alt="Left eye preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="stereoLeftFrame">Frame: --</small>
+                                </div>
+                            </div>
+
+                            <!-- VR Frame Preview -->
+                            <div class="col-md-4">
+                                <div class="preview-item">
+                                    <div class="preview-label mb-2"><strong>VR Output</strong></div>
+                                    <img id="vrFramePreview"
+                                         src=""
+                                         alt="VR frame preview"
+                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
+                                    <small class="text-muted d-block mt-1" id="vrFrameFrame">Frame: --</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Progress Section -->
         <div class="row">
             <div class="col-12">
@@ -1474,56 +1524,6 @@
                                             <i class="fas fa-folder-open"></i> Open Directory
                                         </button>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Live Preview Panel -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card" id="livePreviewCard" style="display: none;">
-                    <div class="card-header">
-                        <h5><i class="fas fa-eye"></i> Live Preview</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <!-- Depth Map Preview -->
-                            <div class="col-md-4">
-                                <div class="preview-item">
-                                    <div class="preview-label mb-2"><strong>Depth Map</strong></div>
-                                    <img id="depthMapPreview"
-                                         src=""
-                                         alt="Depth map preview"
-                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
-                                    <small class="text-muted d-block mt-1" id="depthMapFrame">Frame: --</small>
-                                </div>
-                            </div>
-
-                            <!-- Stereo Left Preview -->
-                            <div class="col-md-4">
-                                <div class="preview-item">
-                                    <div class="preview-label mb-2"><strong>Left Eye</strong></div>
-                                    <img id="stereoLeftPreview"
-                                         src=""
-                                         alt="Left eye preview"
-                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
-                                    <small class="text-muted d-block mt-1" id="stereoLeftFrame">Frame: --</small>
-                                </div>
-                            </div>
-
-                            <!-- VR Frame Preview -->
-                            <div class="col-md-4">
-                                <div class="preview-item">
-                                    <div class="preview-label mb-2"><strong>VR Output</strong></div>
-                                    <img id="vrFramePreview"
-                                         src=""
-                                         alt="VR frame preview"
-                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
-                                    <small class="text-muted d-block mt-1" id="vrFrameFrame">Frame: --</small>
                                 </div>
                             </div>
                         </div>
@@ -2401,7 +2401,7 @@
             document.getElementById('stopBtn').style.display = 'none';
             const processBtn = document.getElementById('processBtn');
             processBtn.style.display = 'inline-block';
-            processBtn.disabled = false;  // Enable for new processing
+            // Note: processBtn remains disabled until new video is uploaded (handled in modal dismiss)
             hideCurrentBatchDirectory();
             currentSessionId = null;
 
