@@ -100,6 +100,7 @@ class VideoProcessor:
         return self.orchestrator.process(
             Path(video_path),
             Path(output_dir),
+            video_properties,
             settings,
             progress_tracker=progress_callback,
         )

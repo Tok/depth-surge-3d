@@ -10,6 +10,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+import cv2
+import numpy as np
+
 from ...io.operations import (
     create_output_directories,
     save_processing_settings,
@@ -73,6 +76,7 @@ class ProcessingOrchestrator:
         self,
         video_path: Path,
         output_dir: Path,
+        video_properties: dict[str, Any],
         settings: dict[str, Any],
         progress_tracker=None,
     ) -> bool:
@@ -82,6 +86,7 @@ class ProcessingOrchestrator:
         Args:
             video_path: Input video path
             output_dir: Output directory
+            video_properties: Video metadata (frame_count, fps, etc.)
             settings: Processing settings
             progress_tracker: Optional progress tracker
 
@@ -96,7 +101,7 @@ class ProcessingOrchestrator:
         try:
             # Setup processing environment
             output_path, directories, self._settings_file = self._setup_processing(
-                str(video_path), str(output_dir), settings, {}
+                str(video_path), str(output_dir), settings, video_properties
             )
 
             # Execute processing pipeline
@@ -104,6 +109,7 @@ class ProcessingOrchestrator:
                 str(video_path),
                 output_path,
                 directories,
+                video_properties,
                 settings,
                 progress_tracker,
             )
@@ -121,6 +127,7 @@ class ProcessingOrchestrator:
         video_path: str,
         output_path: Path,
         directories: dict[str, Path],
+        video_properties: dict[str, Any],
         settings: dict[str, Any],
         progress_tracker=None,
     ) -> bool:
@@ -131,6 +138,7 @@ class ProcessingOrchestrator:
             video_path: Input video path
             output_path: Output directory path
             directories: Dictionary of processing directories
+            video_properties: Video metadata (frame_count, fps, etc.)
             settings: Processing settings
             progress_tracker: Optional progress tracker
 
@@ -145,12 +153,14 @@ class ProcessingOrchestrator:
         # Calculate total steps based on settings
         self._total_steps = self._get_total_steps(settings)
 
-        # Step 1: Extract frames (delegated to depth_processor)
-        frame_files, fps = self.depth_processor.extract_frames(
-            video_path, directories, settings, progress_tracker
+        # Step 1: Extract frames (delegated to video_encoder)
+        frame_files = self.video_encoder.extract_frames(
+            video_path, directories, video_properties, settings
         )
         if not frame_files:
             return False
+
+        fps = video_properties.get("fps", 30.0)
 
         # Step 2: Generate depth maps (delegated to depth_processor)
         depth_maps = self.depth_processor.generate_depth_maps(
@@ -159,10 +169,22 @@ class ProcessingOrchestrator:
         if depth_maps is None:
             return False
 
+        # Load frames for stereo generation
+        frames = []
+        for frame_file in frame_files:
+            img = cv2.imread(str(frame_file))
+            if img is not None:
+                frames.append(img)
+        frames = np.array(frames) if frames else None
+        if frames is None:
+            return False
+
         # Execute steps 3-8
         return self._execute_remaining_steps(
             directories,
             settings,
+            frames,
+            depth_maps,
             frame_files,
             fps,
             video_path,
@@ -170,10 +192,12 @@ class ProcessingOrchestrator:
             progress_tracker,
         )
 
-    def _execute_remaining_steps(
+    def _execute_remaining_steps(  # noqa: C901
         self,
         directories: dict[str, Path],
         settings: dict[str, Any],
+        frames: np.ndarray,
+        depth_maps: np.ndarray,
         frame_files: list[Path],
         fps: float,
         video_path: str,
@@ -182,11 +206,13 @@ class ProcessingOrchestrator:
         current_step: int = 3,
     ) -> bool:
         """
-        Execute remaining pipeline steps after frame extraction.
+        Execute remaining pipeline steps after depth map generation.
 
         Args:
             directories: Dictionary of processing directories
             settings: Processing settings
+            frames: Frame images as numpy array
+            depth_maps: Depth map images as numpy array
             frame_files: List of extracted frame files
             fps: Video frames per second
             video_path: Input video path
@@ -198,57 +224,64 @@ class ProcessingOrchestrator:
             True if successful, False otherwise
 
         Side effects:
-            - Executes steps 2-8 of pipeline
+            - Executes steps 3-8 of pipeline
             - Progress updates
         """
         num_frames = len(frame_files)
 
         # Step 3: Create stereo pairs (delegated to stereo_generator)
         if not self.stereo_generator.create_stereo_pairs(
-            frame_files, directories, settings, progress_tracker, current_step, self._total_steps
+            frames, depth_maps, frame_files, directories, settings, progress_tracker
         ):
             return self._handle_step_error("Stereo pair creation failed")
         current_step += 1
 
         # Step 4: Apply fisheye distortion (optional - delegated to distortion_processor)
         if settings.get("apply_distortion", True):
-            if not self.distortion_processor.apply_distortion(
-                directories, settings, progress_tracker, current_step, self._total_steps
-            ):
-                return self._handle_step_error("Distortion failed")
+            # Get left/right frame files
+            left_dir = directories.get("left_frames")
+            right_dir = directories.get("right_frames")
+            if left_dir and right_dir:
+                left_files = sorted(left_dir.glob("*.png"))
+                right_files = sorted(right_dir.glob("*.png"))
+
+                if left_files and right_files:
+                    if not self.distortion_processor.apply_distortion(
+                        left_files, right_files, directories, settings, progress_tracker
+                    ):
+                        return self._handle_step_error("Distortion failed")
             current_step += 1
 
-        # Step 5: Crop frames (delegated to vr_assembler)
-        if not self.vr_assembler.crop_frames(
-            directories, settings, progress_tracker, current_step, self._total_steps, num_frames
+        # Step 5: Crop frames (delegated to distortion_processor)
+        if not self.distortion_processor.crop_frames(
+            directories, settings, progress_tracker, num_frames
         ):
             return self._handle_step_error("Frame cropping failed")
         current_step += 1
 
         # Step 6: Apply AI upscaling (optional - delegated to upscaler)
         if settings.get("upscale_model", "none") != "none":
-            if not self.upscaler.apply_upscaling(
-                directories, settings, progress_tracker, current_step, self._total_steps
-            ):
+            if not self.upscaler.apply_upscaling(directories, settings, progress_tracker):
                 return self._handle_step_error("Upscaling failed")
             current_step += 1
 
         # Step 7: Assemble VR frames (delegated to vr_assembler)
         if not self.vr_assembler.assemble_vr_frames(
-            directories, settings, progress_tracker, current_step, self._total_steps, num_frames
+            directories, settings, progress_tracker, num_frames
         ):
             return self._handle_step_error("VR frame assembly failed")
         current_step += 1
 
         # Step 8: Create final video (delegated to video_encoder)
-        success = self.video_encoder.create_output_video(
-            directories,
-            output_path,
+        vr_frames_dir = directories.get("vr_frames")
+        if not vr_frames_dir:
+            return self._handle_step_error("VR frames directory not found")
+
+        success = self.video_encoder.create_video(
+            vr_frames_dir,
+            directories["base"],
             video_path,
             settings,
-            progress_tracker,
-            current_step,
-            self._total_steps,
         )
 
         # Finalize and cleanup
