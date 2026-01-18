@@ -88,6 +88,141 @@ def vprint(*args: Any, **kwargs: Any) -> None:
         print(*args, **kwargs)
 
 
+def _get_version_info() -> tuple[str, str]:
+    """Get version and git commit ID"""
+    try:
+        from depth_surge_3d import __version__
+
+        version = __version__
+    except ImportError:
+        version = "dev"
+
+    try:
+        git_commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1,
+        ).stdout.strip()
+        if not git_commit:
+            git_commit = "unknown"
+    except Exception:
+        git_commit = "unknown"
+
+    return version, git_commit
+
+
+def _rgb_to_ansi256(r: int, g: int, b: int) -> int:
+    """Convert RGB (0-5 range) to ANSI 256 color code"""
+    return 16 + 36 * r + 6 * g + b
+
+
+def _get_lime_color(position: float) -> str:
+    """Lerp between dark green and brand lime (#39ff14) for smooth gradient"""
+    # Brand lime color from CSS: #39ff14 = RGB(57, 255, 20)
+    # Converted to ANSI 0-5 scale: (1, 5, 0)
+    # Create gradient from dark green to brand lime
+    start_rgb = (0, 3, 0)  # Dark green
+    end_rgb = (1, 5, 0)  # Brand lime (#39ff14)
+
+    # Lerp each RGB component with rounding for smoothness
+    r = round(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * position)
+    g = round(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * position)
+    b = round(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * position)
+
+    # Clamp to valid range (0-5)
+    r = max(0, min(5, r))
+    g = max(0, min(5, g))
+    b = max(0, min(5, b))
+
+    # Convert to ANSI 256 color code
+    color_code = _rgb_to_ansi256(r, g, b)
+    return f"\033[38;5;{color_code}m"
+
+
+def _print_banner_border(border_width: int, char: str, row_offset: int, total_rows: int) -> None:
+    """Print border with diagonal gradient matching text"""
+    margin = 0.0  # No margin - let gradient span full banner
+    max_diagonal = total_rows + border_width
+
+    border = " " + _get_lime_color(0.0 - margin) + "█"  # Leading space
+    for i in range(border_width):
+        # Calculate diagonal position with stretched gradient
+        raw_pos = (row_offset + i) / max_diagonal
+        stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
+        border += f"{_get_lime_color(stretched_pos)}{char}"
+    border += _get_lime_color(1.0 + margin) + "█\033[0m"
+    print(border)
+
+
+def _print_banner_line(line: str, row_idx: int, num_rows: int, max_diagonal: int) -> None:
+    """Print single banner line with diagonal gradient"""
+    reset = "\033[0m"
+    margin = 0.0  # No margin - let gradient span full banner
+
+    # Left border with leading space
+    left_pos = row_idx / (num_rows + 1)
+    colored_line = f" {_get_lime_color(left_pos)}█{reset} "  # Leading space
+
+    # Apply diagonal gradient to entire text
+    for col_idx, char in enumerate(line):
+        raw_pos = (row_idx + col_idx) / max_diagonal
+        stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
+        colored_line += f"{_get_lime_color(stretched_pos)}{char}"
+
+    # Right border
+    right_pos = (row_idx + 1) / (num_rows + 1)
+    colored_line += f"{reset} {_get_lime_color(right_pos)}█{reset}"
+    print(colored_line)
+
+
+def print_banner() -> None:
+    """Print Depth Surge 3D banner with diagonal lime gradient"""
+    version, git_commit = _get_version_info()
+
+    blue_accent = "\033[38;5;39m"
+    bright_blue = "\033[38;5;51m"
+    reset = "\033[0m"
+
+    banner_lines = [
+        "░█▀▄░█▀▀░█▀█░▀█▀░█░█░░░█▀▀░█░█░█▀▄░█▀▀░█▀▀░░░▀▀█░█▀▄░",
+        "░█░█░█▀▀░█▀▀░░█░░█▀█░░░▀▀█░█░█░█▀▄░█░█░█▀▀░░░░▀▄░█░█░",
+        "░▀▀░░▀▀▀░▀░░░░▀░░▀░▀░░░▀▀▀░▀▀▀░▀░▀░▀▀▀░▀▀▀░░░▀▀░░▀▀░░",
+    ]
+
+    print()
+
+    # Calculate dimensions
+    border_width = len(banner_lines[0]) + 2
+    num_rows = len(banner_lines)
+    line_length = len(banner_lines[0])
+    max_diagonal = num_rows + line_length - 2
+
+    # Print banner with borders (diagonal gradient on borders too)
+    total_rows = num_rows + 2  # +2 for top and bottom borders
+    _print_banner_border(border_width, "▀", row_offset=0, total_rows=total_rows)
+    for row_idx, line in enumerate(banner_lines):
+        _print_banner_line(
+            line, row_idx + 1, num_rows, max_diagonal
+        )  # +1 to account for top border
+    _print_banner_border(border_width, "▄", row_offset=num_rows + 1, total_rows=total_rows)
+
+    # GitHub repo link (with leading space for alignment)
+    repo_link = "https://github.com/Tok/depth-surge-3d"
+    padding = (border_width - len(repo_link)) // 2 + 1  # +1 for leading space
+    print(f"{' ' * padding}{blue_accent}{repo_link}{reset}")
+
+    # Version and commit info (with leading space for alignment)
+    version_info = f"v{version} [{git_commit}]"
+    version_padding = (border_width - len(version_info)) // 2 + 1  # +1 for leading space
+    print(
+        f"{' ' * version_padding}v{bright_blue}{version}{reset} [{bright_blue}{git_commit}{reset}]"
+    )
+
+    print()
+
+
 def cleanup_processes() -> None:
     """Clean up any active processing threads or subprocesses"""
     global SHUTDOWN_FLAG
@@ -1535,7 +1670,10 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # Only print startup message if not already printed by run_ui.sh
+    # Always print banner on startup
+    print_banner()
+
+    # Only print additional startup message if not already printed by run_ui.sh
     if not os.environ.get("DEPTH_SURGE_UI_SCRIPT"):
         print("Starting Depth Surge 3D Web UI...")
         print(f"Navigate to http://localhost:{args.port}")

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Tok/depth-surge-3d/actions/workflows/ci.yml/badge.svg)](https://github.com/Tok/depth-surge-3d/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/Tok/depth-surge-3d/branch/main/graph/badge.svg)](https://codecov.io/gh/Tok/depth-surge-3d)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9-3.12](https://img.shields.io/badge/python-3.9--3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Convert 2D videos to 3D VR format using AI depth estimation.**
@@ -79,7 +79,7 @@ uv run python depth_surge_3d.py input_video.mp4
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.9, 3.10, 3.11, or 3.12 (Python 3.13+ not yet supported due to dependency limitations)
 - FFmpeg
 - CUDA 13.0+ (required for GPU acceleration)
 - CUDA-compatible GPU (optional but strongly recommended)
@@ -90,6 +90,8 @@ uv run python depth_surge_3d.py input_video.mp4
 - **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions and troubleshooting
 - **[Usage Guide](docs/USAGE.md)** - Complete usage examples and workflows
 - **[Parameters Reference](docs/PARAMETERS.md)** - All command-line options and settings explained
+- **[VR Headset Compatibility](docs/VR_HEADSET_COMPATIBILITY.md)** - Specs and optimal settings for top 10 VR devices
+- **[Performance Benchmarks](docs/PERFORMANCE.md)** - GPU benchmarks, VRAM usage, and optimization guide
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and performance tips
 
 **Technical Documentation:**

@@ -7,6 +7,7 @@ Handles AI-based frame upscaling using Real-ESRGAN or similar models.
 from __future__ import annotations
 
 import cv2
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +61,7 @@ class FrameUpscalerProcessor:
             from ...inference import create_upscaler
 
             # Get source directories (cropped frames)
-            source_left, source_right = self._get_upscaling_source_dirs(directories, settings)
+            source_left, source_right = self._get_upscaling_source_dirs(directories, settings)  # type: ignore[misc]
             if source_left is None or source_right is None:
                 return False
 
@@ -86,7 +87,6 @@ class FrameUpscalerProcessor:
 
         except Exception as e:
             print(f"Error applying upscaling: {e}")
-            import traceback
 
             traceback.print_exc()
             return False
@@ -253,4 +253,4 @@ class FrameUpscalerProcessor:
         if "left_cropped" in directories and "right_cropped" in directories:
             return directories["left_cropped"], directories["right_cropped"]
         else:
-            return None, None
+            return None, None  # type: ignore[return-value]

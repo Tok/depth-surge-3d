@@ -7,6 +7,7 @@ Applies fisheye distortion and cropping to stereo frames for VR viewing.
 from __future__ import annotations
 
 import cv2
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -170,7 +171,6 @@ class DistortionProcessor:
 
         except Exception as e:
             print(f"Error cropping frames: {e}")
-            import traceback
 
             traceback.print_exc()
             return False

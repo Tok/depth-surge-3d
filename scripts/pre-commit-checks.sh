@@ -21,7 +21,7 @@ OVERALL_STATUS=0
 # =============================================================================
 # Step 1: Black Formatting Check
 # =============================================================================
-echo "📝 Step 1/3: Checking code formatting (black)..."
+echo "📝 Step 1/4: Checking code formatting (black)..."
 echo "   Command: black --check src/ tests/ app.py"
 echo ""
 
@@ -45,7 +45,7 @@ echo ""
 # =============================================================================
 # Step 2: Flake8 Linting
 # =============================================================================
-echo "🔎 Step 2/3: Running code linting (flake8)..."
+echo "🔎 Step 2/4: Running code linting (flake8)..."
 echo "   Command: flake8 src/ tests/ app.py --count --show-source --statistics"
 echo ""
 
@@ -66,9 +66,32 @@ echo "---"
 echo ""
 
 # =============================================================================
-# Step 3: Unit Tests with Coverage
+# Step 3: Type Checking (mypy)
 # =============================================================================
-echo "🧪 Step 3/3: Running unit tests with coverage..."
+echo "🔍 Step 3/4: Running type checking (mypy)..."
+echo "   Command: mypy src/depth_surge_3d --ignore-missing-imports"
+echo ""
+
+mypy src/depth_surge_3d --ignore-missing-imports
+
+MYPY_EXIT=$?
+if [ $MYPY_EXIT -eq 0 ]; then
+    echo "✅ Mypy type checking passed (0 errors)"
+else
+    echo "❌ Mypy type checking failed"
+    echo ""
+    echo "💡 Fix all type errors above before committing"
+    OVERALL_STATUS=1
+fi
+
+echo ""
+echo "---"
+echo ""
+
+# =============================================================================
+# Step 4: Unit Tests with Coverage
+# =============================================================================
+echo "🧪 Step 4/4: Running unit tests with coverage..."
 echo "   Command: pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=term --cov-fail-under=85"
 echo ""
 
@@ -104,6 +127,7 @@ else
     echo "Summary:"
     [ $BLACK_EXIT -ne 0 ] && echo "   ❌ Black formatting"
     [ $FLAKE8_EXIT -ne 0 ] && echo "   ❌ Flake8 linting"
+    [ $MYPY_EXIT -ne 0 ] && echo "   ❌ Type checking (mypy)"
     [ $PYTEST_EXIT -ne 0 ] && echo "   ❌ Unit tests/coverage"
     echo ""
     echo "💡 Fix the issues above and run this script again"

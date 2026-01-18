@@ -368,7 +368,7 @@ class DepthMapProcessor:
         self._clear_gpu_memory()
 
         # Process all chunks
-        all_depth_maps = []
+        all_depth_maps: list[Any] = []
         num_frames = len(frame_files)
         total_chunks = (num_frames + chunk_size - 1) // chunk_size
 
@@ -388,7 +388,7 @@ class DepthMapProcessor:
                 chunk_depth_maps = self._process_chunk_depth(
                     chunk_frames, chunk_files, settings, directories, input_size, progress_tracker
                 )
-                all_depth_maps.extend(chunk_depth_maps)
+                all_depth_maps.extend(chunk_depth_maps)  # type: ignore[arg-type]
 
                 # Clear references and GPU cache
                 del chunk_frames

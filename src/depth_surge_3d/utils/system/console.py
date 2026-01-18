@@ -89,3 +89,39 @@ def title_bar(text: str) -> str:
             f"{Colors.LIME_GREEN}==={Colors.RESET} {content} {Colors.LIME_GREEN}==={Colors.RESET}"
         )
     return text
+
+
+def completion_banner(
+    output_file: str, processing_time: str, num_frames: int, vr_format: str
+) -> None:
+    """
+    Print a colored completion banner with processing summary.
+
+    Args:
+        output_file: Path to the output video file
+        processing_time: Human-readable processing time (e.g., "1h 23m 45s")
+        num_frames: Number of frames processed
+        vr_format: VR format used (side_by_side or over_under)
+    """
+    lime = Colors.LIME_GREEN
+    blue = Colors.ELECTRIC_BLUE
+    bold = Colors.BOLD
+    reset = Colors.RESET
+
+    # Top border
+    print(f"\n{lime}{'═' * 70}{reset}")
+
+    # Success message with checkmark
+    print(f"{lime}  ✓ {bold}PROCESSING COMPLETE{reset}")
+
+    # Separator
+    print(f"{lime}  {'─' * 66}{reset}")
+
+    # Output information
+    print(f"{lime}  Output:{reset} {blue}{output_file}{reset}")
+    print(f"{lime}  Format:{reset} {vr_format}")
+    print(f"{lime}  Frames:{reset} {num_frames}")
+    print(f"{lime}  Time:{reset}   {processing_time}")
+
+    # Bottom border
+    print(f"{lime}{'═' * 70}{reset}\n")

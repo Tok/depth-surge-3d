@@ -10,6 +10,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import subprocess
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -61,7 +62,7 @@ class StereoProjector:
             self.depth_estimator = create_video_depth_estimator_da3(model_name, device, metric)
         else:
             # Use Video-Depth-Anything V2 (default)
-            self.depth_estimator = create_video_depth_estimator(
+            self.depth_estimator = create_video_depth_estimator(  # type: ignore[assignment]
                 model_path, device, metric, temporal_window_overlap
             )
 
@@ -254,8 +255,6 @@ class StereoProjector:
 
         except Exception as e:
             print(f"Error during image processing: {e}")
-            import traceback
-
             traceback.print_exc()
             return False
 

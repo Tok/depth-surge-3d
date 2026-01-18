@@ -8,7 +8,7 @@ Extracted from app.py to keep it under 500 LOC
 
 import numpy as np
 from pathlib import Path
-from collections.abc import Callable
+from typing import Any
 from ...core.constants import INTERMEDIATE_DIRS
 
 
@@ -26,7 +26,7 @@ def _get_cv2():
 
 
 def process_video_serial(
-    projector, callback: Callable, frame_files: list[Path], output_path: Path, **kwargs
+    projector: Any, callback: Any, frame_files: list[Path], output_path: Path, **kwargs: Any
 ) -> bool:
     """
     Process video in serial mode (frame-by-frame, complete pipeline per frame).
@@ -102,7 +102,7 @@ def process_video_serial(
 
 
 def process_video_batch(
-    projector, callback: Callable, frame_files: list[Path], output_path: Path, **kwargs
+    projector: Any, callback: Any, frame_files: list[Path], output_path: Path, **kwargs: Any
 ) -> bool:
     """
     Process video in batch mode (phase-by-phase, all frames per phase).
@@ -203,18 +203,18 @@ def _create_intermediate_directories(output_path: Path, **kwargs) -> dict[str, P
 
 
 def _process_single_frame_complete(
-    projector,
-    callback,
-    original_image,
-    frame_idx,
-    total_frames,
-    directories,
-    frame_name,
-    super_sample_width,
-    super_sample_height,
-    apply_distortion,
-    **kwargs,
-):
+    projector: Any,
+    callback: Any,
+    original_image: Any,
+    frame_idx: int,
+    total_frames: int,
+    directories: dict[str, Path],
+    frame_name: str,
+    super_sample_width: int,
+    super_sample_height: int,
+    apply_distortion: bool,
+    **kwargs: Any,
+) -> bool:
     """Process a single frame through the complete pipeline (serial mode)."""
 
     # Get cv2 for this function
@@ -292,7 +292,14 @@ def _process_single_frame_complete(
     return vr_frame
 
 
-def _process_supersample_frame(projector, frame_file, directories, width, height, **kwargs):
+def _process_supersample_frame(
+    projector: Any,
+    frame_file: Path,
+    directories: dict[str, Path],
+    width: int,
+    height: int,
+    **kwargs: Any,
+) -> None:
     """Process super sampling for a single frame (batch mode)."""
     cv2 = _get_cv2()
     frame_name = frame_file.stem
@@ -308,7 +315,9 @@ def _process_supersample_frame(projector, frame_file, directories, width, height
         cv2.imwrite(str(directories["supersampled"] / f"{frame_name}.png"), image)
 
 
-def _process_depth_frame(projector, frame_file, directories, **kwargs):
+def _process_depth_frame(
+    projector: Any, frame_file: Path, directories: dict[str, Path], **kwargs: Any
+) -> None:
     """Process depth estimation for a single frame (batch mode)."""
     cv2 = _get_cv2()
     frame_name = frame_file.stem
@@ -335,7 +344,9 @@ def _process_depth_frame(projector, frame_file, directories, **kwargs):
         cv2.imwrite(str(directories["depth_maps"] / f"{frame_name}.png"), depth_vis)
 
 
-def _process_stereo_frame(projector, frame_file, directories, **kwargs):
+def _process_stereo_frame(
+    projector: Any, frame_file: Path, directories: dict[str, Path], **kwargs: Any
+) -> None:
     """Process stereo generation for a single frame (batch mode)."""
     cv2 = _get_cv2()
     frame_name = frame_file.stem
@@ -367,7 +378,9 @@ def _process_stereo_frame(projector, frame_file, directories, **kwargs):
         cv2.imwrite(str(directories["right_frames"] / f"{frame_name}.png"), right_img)
 
 
-def _process_fisheye_frame(projector, frame_file, directories, **kwargs):
+def _process_fisheye_frame(
+    projector: Any, frame_file: Path, directories: dict[str, Path], **kwargs: Any
+) -> None:
     """Process fisheye distortion for a single frame (batch mode)."""
     cv2 = _get_cv2()
     frame_name = frame_file.stem
@@ -392,7 +405,13 @@ def _process_fisheye_frame(projector, frame_file, directories, **kwargs):
         cv2.imwrite(str(directories["right_distorted"] / f"{frame_name}.png"), right_distorted)
 
 
-def _process_vr_assembly_frame(projector, frame_file, directories, apply_distortion, **kwargs):
+def _process_vr_assembly_frame(
+    projector: Any,
+    frame_file: Path,
+    directories: dict[str, Path],
+    apply_distortion: bool,
+    **kwargs: Any,
+) -> None:
     """Process VR assembly for a single frame (batch mode)."""
     cv2 = _get_cv2()
     frame_name = frame_file.stem

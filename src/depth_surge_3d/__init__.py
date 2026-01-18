@@ -5,9 +5,25 @@ This package provides tools for creating stereoscopic VR content from monocular 
 using state-of-the-art depth estimation models.
 """
 
-__version__ = "0.9.0"
+import sys
+
+__version__ = "0.9.1"
 __author__ = "Depth Surge 3D Team"
 __description__ = "Convert 2D videos to immersive 3D VR format using AI depth estimation"
+
+# Python version check - must be done early before any heavy imports
+if sys.version_info >= (3, 13):
+    raise RuntimeError(
+        f"Depth Surge 3D requires Python 3.9-3.12, but you are using Python {sys.version_info[0]}.{sys.version_info[1]}.\n"
+        f"Python 3.13+ is not yet supported due to dependency limitations (specifically 'open3d' in Depth-Anything V3).\n"
+        f"Please use Python 3.12 or earlier. See https://github.com/Tok/depth-surge-3d/issues/11 for updates."
+    )
+
+if sys.version_info < (3, 9):
+    raise RuntimeError(
+        f"Depth Surge 3D requires Python 3.9 or newer, but you are using Python {sys.version_info[0]}.{sys.version_info[1]}.\n"
+        f"Please upgrade to Python 3.9-3.12."
+    )
 
 
 # Lazy imports to avoid loading heavy dependencies at package import time

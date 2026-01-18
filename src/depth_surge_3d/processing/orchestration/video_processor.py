@@ -13,7 +13,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...inference import VideoDepthEstimator
 from ..frames.depth_processor import DepthMapProcessor
 from ..frames.stereo_generator import StereoPairGenerator
 from ..frames.distortion_processor import DistortionProcessor
@@ -40,12 +39,12 @@ class VideoProcessor:
     - ProcessingOrchestrator: Pipeline coordination
     """
 
-    def __init__(self, depth_estimator: VideoDepthEstimator, verbose: bool = False):
+    def __init__(self, depth_estimator: Any, verbose: bool = False):
         """
         Initialize video processor with specialized modules.
 
         Args:
-            depth_estimator: Depth estimation model instance
+            depth_estimator: Depth estimation model instance (VideoDepthEstimator or VideoDepthEstimatorDA3)
             verbose: Enable verbose output
         """
         self.depth_estimator = depth_estimator

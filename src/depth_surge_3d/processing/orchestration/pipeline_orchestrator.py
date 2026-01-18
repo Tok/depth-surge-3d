@@ -23,7 +23,7 @@ from ...utils import (
     step_complete,
     saved_to,
     title_bar,
-    success as console_success,
+    completion_banner,
 )
 
 
@@ -69,8 +69,9 @@ class ProcessingOrchestrator:
         self.vr_assembler = vr_assembler
         self.video_encoder = video_encoder
         self.verbose = verbose
-        self._settings_file = None  # Track settings file for error handling
+        self._settings_file: Path | None = None  # Track settings file for error handling
         self._total_steps = 7  # Updated dynamically based on settings
+        self._start_time: float = 0.0  # Track processing start time
 
     def process(
         self,
@@ -99,6 +100,9 @@ class ProcessingOrchestrator:
             - Delegates to all processor modules
         """
         try:
+            # Start timer
+            self._start_time = time.time()
+
             # Setup processing environment
             output_path, directories, self._settings_file = self._setup_processing(
                 str(video_path), str(output_dir), settings, video_properties
@@ -181,7 +185,7 @@ class ProcessingOrchestrator:
             img = cv2.imread(str(frame_file))
             if img is not None:
                 frames.append(img)
-        frames = np.array(frames) if frames else None
+        frames = np.array(frames) if frames else None  # type: ignore[assignment]
         if frames is None:
             return False
 
@@ -189,7 +193,7 @@ class ProcessingOrchestrator:
         return self._execute_remaining_steps(
             directories,
             settings,
-            frames,
+            frames,  # type: ignore[arg-type]
             depth_maps,
             frame_files,
             fps,
@@ -403,19 +407,35 @@ class ProcessingOrchestrator:
             - Console output
         """
         if success:
-            print(console_success("Processing complete!"))
+            # Calculate processing time
+            elapsed_time = time.time() - self._start_time
+            formatted_time = self._format_processing_time(elapsed_time)
+
+            # Generate output filename
+            output_filename = generate_output_filename(
+                Path(video_path).name,
+                settings["vr_format"],
+                settings["vr_resolution"],
+            )
+            output_file_path = str(output_path / output_filename)
+
+            # Display colored completion banner
+            completion_banner(
+                output_file=output_file_path,
+                processing_time=formatted_time,
+                num_frames=num_frames,
+                vr_format=settings["vr_format"],
+            )
+
+            # Update settings file
             if self._settings_file:
-                output_filename = generate_output_filename(
-                    Path(video_path).name,
-                    settings["vr_format"],
-                    settings["vr_resolution"],
-                )
                 update_processing_status(
                     self._settings_file,
                     "completed",
                     {
-                        "final_output": str(output_path / output_filename),
+                        "final_output": output_file_path,
                         "frames_processed": num_frames,
+                        "processing_time_seconds": elapsed_time,
                     },
                 )
         elif self._settings_file:
@@ -440,6 +460,31 @@ class ProcessingOrchestrator:
         if settings.get("upscale_model", "none") != "none":
             total += 1  # Add Step 6: Upscaling
         return total  # 6-8 steps total
+
+    @staticmethod
+    def _format_processing_time(seconds: float) -> str:
+        """
+        PURE: Format processing time as human-readable string.
+
+        Args:
+            seconds: Processing time in seconds
+
+        Returns:
+            Formatted time string (e.g., "1h 23m 45s", "5m 30s", "45s")
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+        if secs > 0 or not parts:  # Always show seconds if no other parts
+            parts.append(f"{secs}s")
+
+        return " ".join(parts)
 
     def _update_step_progress(
         self,
@@ -488,12 +533,12 @@ class ProcessingOrchestrator:
         """
         print(step_complete(f"Processed {num_items:04d} {item_type} in {duration:.2f}s"))
 
-    def _print_saved_to(self, directory: Path, message_prefix: str = "Saved to") -> None:
+    def _print_saved_to(self, directory: Path | None, message_prefix: str = "Saved to") -> None:
         """
         Print save location message.
 
         Args:
-            directory: Directory path
+            directory: Directory path or None
             message_prefix: Message prefix text
 
         Side effects:

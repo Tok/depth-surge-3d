@@ -18,6 +18,7 @@ from .system import (
     title_bar,
     step_complete,
     saved_to,
+    completion_banner,
 )
 
 # Domain utilities
@@ -79,6 +80,7 @@ __all__ = [
     "title_bar",
     "step_complete",
     "saved_to",
+    "completion_banner",
     # Domain utilities
     "get_cache_dir",
     "compute_cache_key",

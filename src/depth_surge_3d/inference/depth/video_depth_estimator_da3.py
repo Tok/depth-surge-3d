@@ -146,8 +146,8 @@ class VideoDepthEstimatorDA3:
             print(f"Loading Depth Anything V3 model: {hf_model_id}")
             with suppress_output():
                 self.model = DepthAnything3.from_pretrained(hf_model_id)
-                self.model = self.model.to(device=self.device)
-                self.model.eval()
+                self.model = self.model.to(device=self.device)  # type: ignore[attr-defined]
+                self.model.eval()  # type: ignore[attr-defined]
 
             model_variant = "Metric-" if self.metric else ""
             print(f"Loaded {model_variant}Depth-Anything-V3 ({self.model_name}) on {self.device}")

@@ -19,6 +19,7 @@ from .console import (
     title_bar,
     step_complete,
     saved_to,
+    completion_banner,
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     "title_bar",
     "step_complete",
     "saved_to",
+    "completion_banner",
 ]

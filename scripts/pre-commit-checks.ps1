@@ -31,7 +31,7 @@ $overallStatus = 0
 # =============================================================================
 # Step 1: Black Formatting Check
 # =============================================================================
-Write-Host "📝 Step 1/3: Checking code formatting (black)..." -ForegroundColor Yellow
+Write-Host "📝 Step 1/4: Checking code formatting (black)..." -ForegroundColor Yellow
 Write-Host "   Command: black --check src/ tests/ app.py"
 Write-Host ""
 
@@ -56,7 +56,7 @@ Write-Host ""
 # =============================================================================
 # Step 2: Flake8 Linting
 # =============================================================================
-Write-Host "🔎 Step 2/3: Running code linting (flake8)..." -ForegroundColor Yellow
+Write-Host "🔎 Step 2/4: Running code linting (flake8)..." -ForegroundColor Yellow
 Write-Host "   Command: flake8 src/ tests/ app.py --count --show-source --statistics"
 Write-Host ""
 
@@ -78,9 +78,33 @@ Write-Host "---"
 Write-Host ""
 
 # =============================================================================
-# Step 3: Unit Tests with Coverage
+# Step 3: Type Checking (mypy)
 # =============================================================================
-Write-Host "🧪 Step 3/3: Running unit tests with coverage..." -ForegroundColor Yellow
+Write-Host "🔍 Step 3/4: Running type checking (mypy)..." -ForegroundColor Yellow
+Write-Host "   Command: mypy src/depth_surge_3d --ignore-missing-imports"
+Write-Host ""
+
+mypy src/depth_surge_3d --ignore-missing-imports
+
+$mypyExit = $LASTEXITCODE
+if ($mypyExit -eq 0) {
+    Write-Host "✅ Mypy type checking passed (0 errors)" -ForegroundColor Green
+}
+else {
+    Write-Host "❌ Mypy type checking failed" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "💡 Fix all type errors above before committing" -ForegroundColor Yellow
+    $overallStatus = 1
+}
+
+Write-Host ""
+Write-Host "---"
+Write-Host ""
+
+# =============================================================================
+# Step 4: Unit Tests with Coverage
+# =============================================================================
+Write-Host "🧪 Step 4/4: Running unit tests with coverage..." -ForegroundColor Yellow
 Write-Host "   Command: pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=term --cov-fail-under=85"
 Write-Host ""
 
@@ -118,6 +142,7 @@ else {
     Write-Host "Summary:"
     if ($blackExit -ne 0) { Write-Host "   ❌ Black formatting" -ForegroundColor Red }
     if ($flake8Exit -ne 0) { Write-Host "   ❌ Flake8 linting" -ForegroundColor Red }
+    if ($mypyExit -ne 0) { Write-Host "   ❌ Type checking (mypy)" -ForegroundColor Red }
     if ($pytestExit -ne 0) { Write-Host "   ❌ Unit tests/coverage" -ForegroundColor Red }
     Write-Host ""
     Write-Host "💡 Fix the issues above and run this script again" -ForegroundColor Yellow
