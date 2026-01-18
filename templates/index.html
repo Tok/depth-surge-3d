@@ -33,16 +33,18 @@
         body::before {
             content: '';
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: -20%;
+            left: -10%;
+            width: 120%;
+            height: 140%;
             background-image:
                 repeating-linear-gradient(0deg, transparent, transparent 16px, rgba(255, 255, 255, 0.08) 16px, rgba(255, 255, 255, 0.08) 17px),
                 repeating-linear-gradient(90deg, transparent, transparent 16px, rgba(255, 255, 255, 0.08) 16px, rgba(255, 255, 255, 0.08) 17px);
             pointer-events: none;
             z-index: 0;
             opacity: 1;
+            transform-origin: center top;
+            transform: perspective(1200px) rotateX(35deg) scale(1.1);
         }
 
 
