@@ -41,6 +41,7 @@ dependencies = [
     "imageio>=2.30.0",
     "imageio-ffmpeg>=0.4.7",
     "decord>=0.6.0",
+    "depth-anything-3",
 ]
 
 [project.scripts]
@@ -62,6 +63,9 @@ dev-dependencies = [
     "flake8>=7.2.0",
     "mypy>=1.0.0",
 ]
+
+[tool.uv.sources]
+depth-anything-3 = { git = "https://github.com/ByteDance-Seed/Depth-Anything-3" }
 
 [tool.black]
 line-length = 100
