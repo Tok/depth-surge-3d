@@ -112,7 +112,7 @@ Can be significant for long/high-resolution videos:
 If you encounter issues not covered here:
 
 1. **Check the logs**: Look for error messages in the terminal output
-2. **Verify installation**: Run `./test.sh` to check system setup
+2. **Verify installation**: Run `./test.sh` to check system setup (CUDA, dependencies, models)
 3. **Try a minimal example**: Test with a short, simple video clip
 4. **Report issues**: Open an issue on GitHub with:
    - Full error message

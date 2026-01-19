@@ -151,11 +151,13 @@ python depth_surge_3d.py --list-resolutions
 ## Testing Your Installation
 
 Run `./test.sh` to verify your installation:
-- ✓ Python dependencies
-- ✓ CUDA availability
+- ✓ Python dependencies (PyTorch, OpenCV, NumPy)
+- ✓ CUDA availability and GPU detection
+- ✓ Video-Depth-Anything module
 - ✓ Model files
-- ✓ Input video
 - ✓ FFmpeg
+
+For developers: Run `./scripts/run-unit-tests.sh` for full test suite (770+ tests)
 
 ---
 

@@ -290,8 +290,7 @@
         }
 
         .step-optional .step-number {
-            font-size: 0.618em; /* Golden ratio: 1/1.618 */
-            vertical-align: super;
+            /* Same size as regular steps */
         }
 
         .frame-update-indicator {
@@ -1167,16 +1166,7 @@
                             <h6 class="step-title">VR Assembly</h6>
                         </div>
                         <div class="alert alert-info">
-                            <i class="fas fa-vr-cardboard"></i> Assembles left and right frames into final VR format (configured in Step 8)
-                        </div>
-                        <div class="step-indicator">Combines upscaled/cropped frames into side-by-side or over-under format</div>
-                    </div>
-
-                    <!-- Step 8: VR Format & Output -->
-                    <div class="pipeline-step">
-                        <div class="step-header">
-                            <span class="step-number">8</span>
-                            <h6 class="step-title">VR Format & Output</h6>
+                            <i class="fas fa-vr-cardboard"></i> Assembles left and right frames into final VR format
                         </div>
                         <div class="mb-3">
                             <label class="form-label">VR Format <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Side-by-Side (SBS): Most common. Left and right views placed horizontally. Final output is 2× width (e.g., 1920×1080 per eye → 3840×1080 total). Over-Under: Stacked vertically. Better for ultra-wide/cinema. Final output is 2× height."></i></label>
@@ -1251,6 +1241,18 @@
                                 </div>
                             </div>
                             <small class="form-text text-muted">Specify custom width × height per eye (e.g., 1920 × 1080)</small>
+                        </div>
+                        <div class="step-indicator">Combines upscaled/cropped frames into side-by-side or over-under format</div>
+                    </div>
+
+                    <!-- Step 8: Video Encoding & Output -->
+                    <div class="pipeline-step">
+                        <div class="step-header">
+                            <span class="step-number">8</span>
+                            <h6 class="step-title">Video Encoding & Output</h6>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-file-video"></i> Encode assembled VR frames into final video file with audio
                         </div>
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="checkbox" id="preserveAudio" checked>
