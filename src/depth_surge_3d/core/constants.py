@@ -13,7 +13,7 @@ DEFAULT_OUTPUT_DIR = "./output"
 
 # Model configuration (Video-Depth-Anything only)
 DEFAULT_MODEL_PATH = "models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth"
-VIDEO_DEPTH_ANYTHING_REPO_DIR = "video_depth_anything_repo"
+VIDEO_DEPTH_ANYTHING_REPO_DIR = "vendor/Video-Depth-Anything"
 
 # Depth estimation model parameters
 DEPTH_MODEL_INPUT_SIZE = 518  # Input resolution for depth estimation model

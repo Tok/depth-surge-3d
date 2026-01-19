@@ -143,6 +143,120 @@ def update_resolution(settings: DepthSettings, new_res: int) -> DepthSettings:
 
 ---
 
+## File Size and Modularization
+
+**Lines of Code (LOC) Limits:**
+- **Target**: 500 LOC per file (excluding tests)
+- **Hard limit**: 600 LOC per file
+- **Rationale**:
+  - Reduces cognitive load and improves maintainability
+  - Minimizes context waste in modern AI-assisted development
+  - Forces clear separation of concerns
+  - Makes code review more manageable
+
+**When a file exceeds 500 LOC:**
+1. Identify natural domain boundaries
+2. Extract cohesive groups of functions into separate modules
+3. Follow existing patterns (e.g., `io_operations.py`, `image_processing.py`)
+4. Maintain clear, single-responsibility modules
+5. Document dependencies explicitly
+
+**Module Organization:**
+- Group by **functional domain**, not by data flow
+- Separate side effects from pure logic
+- Use descriptive module names (e.g., `depth_processor.py`, not `utils.py`)
+- Avoid "God modules" that do everything
+
+**Example Refactoring:**
+```python
+# Before: video_processor.py (2000 LOC)
+class VideoProcessor:
+    # 50 methods handling everything
+
+# After: Split into specialized modules
+depth_processor.py (400 LOC)
+stereo_generator.py (120 LOC)
+vr_assembler.py (180 LOC)
+video_encoder.py (180 LOC)
+pipeline_orchestrator.py (350 LOC)
+```
+
+### Test Coverage Policy
+
+**Coverage Targets:**
+- **Minimum (enforced)**: 85% test coverage
+- **Goal (documented)**: 90% test coverage
+- **Rationale**: Balance between quality assurance and development velocity
+
+**Implementation:**
+- Pre-commit checks enforce 85% minimum coverage
+- Team aims for 90%+ coverage when writing new modules
+- Coverage gaps should be documented in commit messages if < 90%
+- Edge cases and integration tests may be added iteratively
+
+**Why separate minimum and goal?**
+- 85% ensures core functionality is tested
+- 90% is achievable but allows flexibility for rapid prototyping
+- Prevents blocking on perfect coverage for non-critical paths
+
+**Separation of Side Effects from Pure Logic:**
+
+When refactoring or writing new code, always separate pure logic from side effects:
+
+**Pure Logic** (predictable, testable, no side effects):
+- Mathematical calculations
+- Data transformations
+- Business logic
+- Validation rules
+
+**Side Effects** (I/O, state changes, external interactions):
+- File I/O (reading/writing)
+- Network requests
+- Database operations
+- GPU operations
+- Logging
+- State mutations
+
+**Pattern:**
+```python
+# Bad - Mixed side effects and logic
+def process_and_save_depth(frame_path: str, output_path: str) -> None:
+    frame = cv2.imread(frame_path)  # SIDE EFFECT
+    depth = estimate_depth(frame)    # PURE (if model is passed)
+    normalized = normalize_depth(depth)  # PURE
+    cv2.imwrite(output_path, normalized)  # SIDE EFFECT
+    # Hard to test, unclear responsibilities
+
+# Good - Separated concerns
+@staticmethod
+def normalize_depth(depth: np.ndarray) -> np.ndarray:
+    """PURE: Normalize depth map to 0-255 range."""
+    return ((depth - depth.min()) / (depth.max() - depth.min()) * 255).astype(np.uint8)
+
+def load_and_estimate_depth(frame_path: str, model) -> np.ndarray:
+    """Load frame and estimate depth (side effect + computation)."""
+    frame = cv2.imread(frame_path)  # SIDE EFFECT
+    return model.estimate_depth(frame)  # Delegates to model
+
+def save_normalized_depth(depth: np.ndarray, output_path: str) -> None:
+    """Save normalized depth map (orchestrates pure logic + I/O)."""
+    normalized = normalize_depth(depth)  # PURE
+    cv2.imwrite(output_path, normalized)  # SIDE EFFECT
+
+# Orchestrator composes the pieces
+def process_depth_pipeline(frame_path: str, output_path: str, model) -> None:
+    depth = load_and_estimate_depth(frame_path, model)
+    save_normalized_depth(depth, output_path)
+```
+
+**Benefits:**
+- Pure functions are trivial to test (no mocks needed)
+- Clear documentation of what has side effects
+- Easier to reason about and debug
+- Better composability and reusability
+
+---
+
 ## Python-Specific Standards (STRICT REQUIREMENTS)
 
 ### 1. Complexity Limit (ENFORCED)

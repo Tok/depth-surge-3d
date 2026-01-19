@@ -8,7 +8,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
-from src.depth_surge_3d.utils.depth_cache import (
+from src.depth_surge_3d.utils.domain.depth_cache import (
     get_cache_dir,
     compute_cache_key,
     get_cached_depth_maps,
@@ -103,7 +103,7 @@ class TestComputeCacheKey:
 class TestGetCachedDepthMaps:
     """Test get_cached_depth_maps function."""
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_miss_no_directory(self, mock_cache_dir, tmp_path):
         """Test cache miss when directory doesn't exist."""
         mock_cache_dir.return_value = tmp_path / "cache"
@@ -116,7 +116,7 @@ class TestGetCachedDepthMaps:
 
         assert result is None
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_miss_no_metadata(self, mock_cache_dir, tmp_path):
         """Test cache miss when metadata file missing."""
         cache_dir = tmp_path / "cache"
@@ -136,7 +136,7 @@ class TestGetCachedDepthMaps:
 
         assert result is None
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_miss_frame_count_mismatch(self, mock_cache_dir, tmp_path):
         """Test cache miss when frame count doesn't match."""
         cache_dir = tmp_path / "cache"
@@ -161,7 +161,7 @@ class TestGetCachedDepthMaps:
 
         assert result is None
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_hit_success(self, mock_cache_dir, tmp_path):
         """Test successful cache hit."""
         cache_dir = tmp_path / "cache"
@@ -199,7 +199,7 @@ class TestGetCachedDepthMaps:
 class TestSaveDepthMapsToCache:
     """Test save_depth_maps_to_cache function."""
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_save_success(self, mock_cache_dir, tmp_path):
         """Test successful save to cache."""
         cache_dir = tmp_path / "cache"
@@ -231,7 +231,7 @@ class TestSaveDepthMapsToCache:
         assert (cache_entry / "depth_000001.png").exists()
         assert (cache_entry / "depth_000002.png").exists()
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_save_metadata_content(self, mock_cache_dir, tmp_path):
         """Test metadata content is correct."""
         cache_dir = tmp_path / "cache"
@@ -267,7 +267,7 @@ class TestSaveDepthMapsToCache:
 class TestClearCache:
     """Test clear_cache function."""
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_clear_empty_cache(self, mock_cache_dir, tmp_path):
         """Test clearing empty cache."""
         cache_dir = tmp_path / "cache"
@@ -277,7 +277,7 @@ class TestClearCache:
 
         assert count == 0
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_clear_cache_with_entries(self, mock_cache_dir, tmp_path):
         """Test clearing cache with entries."""
         cache_dir = tmp_path / "cache"
@@ -300,7 +300,7 @@ class TestClearCache:
 class TestGetCacheSize:
     """Test get_cache_size function."""
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_size_empty(self, mock_cache_dir, tmp_path):
         """Test cache size for empty cache."""
         cache_dir = tmp_path / "cache"
@@ -311,7 +311,7 @@ class TestGetCacheSize:
         assert num_entries == 0
         assert total_size == 0
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_size_with_entries(self, mock_cache_dir, tmp_path):
         """Test cache size with entries."""
         cache_dir = tmp_path / "cache"
@@ -350,7 +350,7 @@ class TestEdgeCases:
         assert len(cache_key) == 32
         assert all(c in "0123456789abcdef" for c in cache_key)
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_hit_missing_depth_file(self, mock_cache_dir, tmp_path):
         """Test cache miss when depth file is missing."""
         cache_dir = tmp_path / "cache"
@@ -383,7 +383,7 @@ class TestEdgeCases:
         # Should return None (cache miss)
         assert result is None
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_hit_corrupted_depth_file(self, mock_cache_dir, tmp_path):
         """Test cache miss when depth file is corrupted."""
         cache_dir = tmp_path / "cache"
@@ -418,7 +418,7 @@ class TestEdgeCases:
         # Should return None (cache miss due to corrupted file)
         assert result is None
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     def test_cache_hit_invalid_metadata(self, mock_cache_dir, tmp_path):
         """Test cache miss when metadata is invalid JSON."""
         cache_dir = tmp_path / "cache"
@@ -442,7 +442,7 @@ class TestEdgeCases:
         # Should return None (cache miss)
         assert result is None
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     @patch("cv2.imwrite")
     def test_save_failure_exception(self, mock_imwrite, mock_cache_dir, tmp_path):
         """Test save_depth_maps_to_cache handles exceptions gracefully."""
@@ -464,7 +464,7 @@ class TestEdgeCases:
         # Should return False (graceful failure)
         assert success is False
 
-    @patch("src.depth_surge_3d.utils.depth_cache.get_cache_dir")
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
     @patch("shutil.rmtree")
     def test_clear_cache_exception(self, mock_rmtree, mock_cache_dir, tmp_path):
         """Test clear_cache handles exceptions gracefully."""

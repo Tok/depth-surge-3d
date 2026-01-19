@@ -6,7 +6,7 @@ Basic tests to verify the modular architecture is working correctly.
 
 import unittest
 
-from src.depth_surge_3d.utils.resolution import (
+from src.depth_surge_3d.utils.domain.resolution import (
     parse_custom_resolution,
     get_resolution_dimensions,
     calculate_vr_output_dimensions,

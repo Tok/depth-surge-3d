@@ -4,7 +4,7 @@ Unit tests for VRAM management utilities.
 
 from unittest.mock import patch
 
-from src.depth_surge_3d.utils.vram_manager import (
+from src.depth_surge_3d.utils.system.vram_manager import (
     get_available_vram,
     get_total_vram,
     estimate_frame_vram_usage,
@@ -74,35 +74,35 @@ class TestEstimateFrameVRAMUsage:
 class TestCalculateOptimalChunkSize:
     """Test calculate_optimal_chunk_size function."""
 
-    @patch("src.depth_surge_3d.utils.vram_manager.get_available_vram", return_value=8.0)
+    @patch("src.depth_surge_3d.utils.system.vram_manager.get_available_vram", return_value=8.0)
     def test_optimal_chunk_size_8gb(self, mock_vram):
         """Test optimal chunk size with 8GB VRAM."""
         chunk_size = calculate_optimal_chunk_size(1920, 1080, 518, "v3", "base")
         assert chunk_size >= 4
         assert chunk_size <= 32
 
-    @patch("src.depth_surge_3d.utils.vram_manager.get_available_vram", return_value=16.0)
+    @patch("src.depth_surge_3d.utils.system.vram_manager.get_available_vram", return_value=16.0)
     def test_optimal_chunk_size_16gb(self, mock_vram):
         """Test optimal chunk size with 16GB VRAM."""
         chunk_size = calculate_optimal_chunk_size(1920, 1080, 518, "v3", "base")
         assert chunk_size >= 4
         assert chunk_size <= 32
 
-    @patch("src.depth_surge_3d.utils.vram_manager.get_available_vram", return_value=2.0)
+    @patch("src.depth_surge_3d.utils.system.vram_manager.get_available_vram", return_value=2.0)
     def test_optimal_chunk_size_low_vram(self, mock_vram):
         """Test optimal chunk size with low VRAM."""
         chunk_size = calculate_optimal_chunk_size(1920, 1080, 518, "v3", "base")
         # Should return minimum chunk size (can be as low as 2)
         assert chunk_size >= 2
 
-    @patch("src.depth_surge_3d.utils.vram_manager.get_available_vram", return_value=0.0)
+    @patch("src.depth_surge_3d.utils.system.vram_manager.get_available_vram", return_value=0.0)
     def test_optimal_chunk_size_no_cuda(self, mock_vram):
         """Test optimal chunk size without CUDA."""
         chunk_size = calculate_optimal_chunk_size(1920, 1080, 518, "v3", "base")
         # Should return minimum chunk size
         assert chunk_size >= 4
 
-    @patch("src.depth_surge_3d.utils.vram_manager.get_available_vram", return_value=8.0)
+    @patch("src.depth_surge_3d.utils.system.vram_manager.get_available_vram", return_value=8.0)
     def test_chunk_size_large_model(self, mock_vram):
         """Test chunk size with large model uses fewer frames."""
         chunk_small = calculate_optimal_chunk_size(1920, 1080, 518, "v3", "small")
@@ -110,7 +110,7 @@ class TestCalculateOptimalChunkSize:
         # Large model should process fewer frames per chunk
         assert chunk_large <= chunk_small
 
-    @patch("src.depth_surge_3d.utils.vram_manager.get_available_vram", return_value=8.0)
+    @patch("src.depth_surge_3d.utils.system.vram_manager.get_available_vram", return_value=8.0)
     def test_chunk_size_4k_vs_1080p(self, mock_vram):
         """Test chunk size for 4K vs 1080p."""
         chunk_1080p = calculate_optimal_chunk_size(1920, 1080, 518, "v3", "base")

@@ -4,7 +4,7 @@ import time
 from unittest.mock import Mock, patch, MagicMock
 from io import StringIO
 
-from src.depth_surge_3d.utils.progress import (
+from src.depth_surge_3d.utils.domain.progress import (
     ProgressReporter,
     ConsoleProgressReporter,
     ProgressTracker,
@@ -649,8 +649,8 @@ class TestConsoleProgressReporterEdgeCases:
         assert "ETA" not in output
         assert "50.0%" in output
 
-    @patch("src.depth_surge_3d.utils.progress.HAS_TQDM", True)
-    @patch("src.depth_surge_3d.utils.progress.tqdm")
+    @patch("src.depth_surge_3d.utils.domain.progress.HAS_TQDM", True)
+    @patch("src.depth_surge_3d.utils.domain.progress.tqdm")
     def test_report_progress_with_tqdm(self, mock_tqdm_class):
         """Test progress reporting with tqdm enabled."""
         mock_pbar = MagicMock()
@@ -793,6 +793,6 @@ class TestTqdmImportHandling:
 
     def test_has_tqdm_constant(self):
         """Test that HAS_TQDM constant is defined."""
-        from src.depth_surge_3d.utils.progress import HAS_TQDM
+        from src.depth_surge_3d.utils.domain.progress import HAS_TQDM
 
         assert isinstance(HAS_TQDM, bool)

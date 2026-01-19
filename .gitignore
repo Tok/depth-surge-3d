@@ -206,9 +206,8 @@ Thumbs.db
 *.sublime-project
 *.sublime-workspace
 
-# External repositories and dependencies (auto-downloaded)
-video_depth_anything_repo/
-Video-Depth-Anything/
+# External repositories and dependencies (vendored)
+vendor/
 
 # Legacy files
 depth_surge_3d_legacy.py

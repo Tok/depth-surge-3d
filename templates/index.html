@@ -30,21 +30,15 @@
             position: relative;
         }
 
-        body::before {
-            content: '';
+        #background-grid {
             position: fixed;
-            top: -20%;
-            left: -10%;
-            width: 120%;
-            height: 140%;
-            background-image:
-                repeating-linear-gradient(0deg, transparent, transparent 16px, rgba(255, 255, 255, 0.08) 16px, rgba(255, 255, 255, 0.08) 17px),
-                repeating-linear-gradient(90deg, transparent, transparent 16px, rgba(255, 255, 255, 0.08) 16px, rgba(255, 255, 255, 0.08) 17px);
+            top: -50px;
+            left: -10px;
+            width: calc(100vw + 20px);
+            height: calc(100vh + 50px);
             pointer-events: none;
             z-index: 0;
-            opacity: 1;
-            transform-origin: center top;
-            transform: perspective(1200px) rotateX(35deg) scale(1.1);
+            opacity: 0.6;
         }
 
 
@@ -115,22 +109,22 @@
 
         /* Drag and Drop Zone Styles */
         .drop-zone {
-            border: 2px dashed rgba(var(--bs-success-rgb), 0.4);
+            border: 2px dashed rgba(57, 255, 20, 0.4);
             border-radius: 8px;
             padding: 3rem 2rem;
             text-align: center;
             transition: all 0.3s ease;
-            background: rgba(var(--bs-success-rgb), 0.05);
+            background: rgba(57, 255, 20, 0.05);
         }
 
         .drop-zone:hover {
-            border-color: rgba(var(--bs-success-rgb), 0.6);
-            background: rgba(var(--bs-success-rgb), 0.08);
+            border-color: rgba(57, 255, 20, 0.6);
+            background: rgba(57, 255, 20, 0.08);
         }
 
         .drop-zone.dragover {
-            border-color: var(--bs-success);
-            background: rgba(var(--bs-success-rgb), 0.15);
+            border-color: var(--accent-lime);
+            background: rgba(57, 255, 20, 0.15);
             border-width: 3px;
             transform: scale(1.02);
         }
@@ -590,6 +584,8 @@
         .nav-tabs {
             border-bottom: 1px solid var(--bs-border-color);
             margin-bottom: 1.5rem;
+            background-color: #111111;
+            padding: 0;
         }
 
         .nav-tabs .nav-link {
@@ -652,6 +648,27 @@
     </style>
 </head>
 <body style="padding-top: 0;">
+    <!-- SVG Grid with gravitational lens distortion -->
+    <svg id="background-grid" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision">
+        <defs>
+            <!-- Grid pattern -->
+            <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.8"/>
+            </pattern>
+
+            <!-- Create displacement map using turbulence -->
+            <filter id="gravitational-lens" x="-50%" y="-50%" width="200%" height="200%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.003 0.003" numOctaves="4" result="turbulence" seed="5">
+                    <animate attributeName="baseFrequency" values="0.002 0.002;0.004 0.004;0.002 0.002" dur="100s" repeatCount="indefinite"/>
+                </feTurbulence>
+                <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="80" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+        </defs>
+
+        <!-- Apply grid pattern with filter -->
+        <rect width="100%" height="100%" fill="url(#grid)" filter="url(#gravitational-lens)"/>
+    </svg>
+
     <div class="container-fluid" style="margin-top: 0.5rem;">
         <div class="row">
             <div class="col-12">
@@ -2089,7 +2106,7 @@
 
         // Start processing
         document.getElementById('processBtn').addEventListener('click', function() {
-            if (!uploadedFilename) {
+            if (!uploadedFilename || !uploadedOutputDir) {
                 alert('Please upload a video first');
                 return;
             }
@@ -2403,7 +2420,7 @@
             document.getElementById('stopBtn').style.display = 'none';
             const processBtn = document.getElementById('processBtn');
             processBtn.style.display = 'inline-block';
-            // Note: processBtn remains disabled until new video is uploaded (handled in modal dismiss)
+            processBtn.disabled = true;  // Disable until new video is uploaded
             hideCurrentBatchDirectory();
             currentSessionId = null;
 
@@ -2461,7 +2478,22 @@
 
             // Show success modal (after all state is reset)
             document.getElementById('successMessage').textContent = data.message;
-            const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+            const successModalEl = document.getElementById('successModal');
+            const successModal = new bootstrap.Modal(successModalEl, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+
+            // Ensure backdrop is removed when modal closes
+            successModalEl.addEventListener('hidden.bs.modal', function () {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }, { once: true });
+
             successModal.show();
         }
 
@@ -2534,7 +2566,22 @@
 
             // Show error modal (after all state is reset)
             document.getElementById('errorMessage').textContent = data.error;
-            const errorModal = new bootstrap.Modal(document.getElementById('errorModal'));
+            const errorModalEl = document.getElementById('errorModal');
+            const errorModal = new bootstrap.Modal(errorModalEl, {
+                backdrop: true,
+                keyboard: true,
+                focus: true
+            });
+
+            // Ensure backdrop is removed when modal closes
+            errorModalEl.addEventListener('hidden.bs.modal', function () {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                backdrops.forEach(backdrop => backdrop.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }, { once: true });
+
             errorModal.show();
         }
         

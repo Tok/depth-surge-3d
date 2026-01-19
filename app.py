@@ -19,18 +19,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 import cv2
+import numpy as np
 
 # Set PyTorch memory allocator config BEFORE importing torch
 # This helps prevent memory fragmentation on GPU
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # Suppress warnings from dependencies
-import warnings
+import warnings  # noqa: E402
 
 warnings.filterwarnings("ignore", category=SyntaxWarning)  # moviepy old regex patterns
 
 # Import our constants and utilities
-from src.depth_surge_3d.core.constants import (
+from src.depth_surge_3d.core.constants import (  # noqa: E402
     INTERMEDIATE_DIRS,
     MODEL_PATHS,
     MODEL_PATHS_METRIC,
@@ -62,18 +63,18 @@ from src.depth_surge_3d.core.constants import (
     DEFAULT_SERVER_HOST,
     SIGNAL_SHUTDOWN_TIMEOUT,
 )
-from src.depth_surge_3d.utils.console import warning as console_warning
+from src.depth_surge_3d.utils.system.console import warning as console_warning  # noqa: E402
 
-from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO
+from flask import Flask, render_template, request, jsonify  # noqa: E402
+from flask_socketio import SocketIO  # noqa: E402
 
 # NOTE: torch is imported later (line ~960) to avoid CUDA initialization issues
 
 # Add src to path for package imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from depth_surge_3d.core.stereo_projector import create_stereo_projector
-from depth_surge_3d.processing.video_processor import VideoProcessor
+from depth_surge_3d.rendering import create_stereo_projector  # noqa: E402
+from depth_surge_3d.processing import VideoProcessor  # noqa: E402
 
 # Global flags and state
 VERBOSE = False
@@ -87,9 +88,144 @@ def vprint(*args: Any, **kwargs: Any) -> None:
         print(*args, **kwargs)
 
 
+def _get_version_info() -> tuple[str, str]:
+    """Get version and git commit ID"""
+    try:
+        from depth_surge_3d import __version__
+
+        version = __version__
+    except ImportError:
+        version = "dev"
+
+    try:
+        git_commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1,
+        ).stdout.strip()
+        if not git_commit:
+            git_commit = "unknown"
+    except Exception:
+        git_commit = "unknown"
+
+    return version, git_commit
+
+
+def _rgb_to_ansi256(r: int, g: int, b: int) -> int:
+    """Convert RGB (0-5 range) to ANSI 256 color code"""
+    return 16 + 36 * r + 6 * g + b
+
+
+def _get_lime_color(position: float) -> str:
+    """Lerp between dark green and brand lime (#39ff14) for smooth gradient"""
+    # Brand lime color from CSS: #39ff14 = RGB(57, 255, 20)
+    # Converted to ANSI 0-5 scale: (1, 5, 0)
+    # Create gradient from dark green to brand lime
+    start_rgb = (0, 3, 0)  # Dark green
+    end_rgb = (1, 5, 0)  # Brand lime (#39ff14)
+
+    # Lerp each RGB component with rounding for smoothness
+    r = round(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * position)
+    g = round(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * position)
+    b = round(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * position)
+
+    # Clamp to valid range (0-5)
+    r = max(0, min(5, r))
+    g = max(0, min(5, g))
+    b = max(0, min(5, b))
+
+    # Convert to ANSI 256 color code
+    color_code = _rgb_to_ansi256(r, g, b)
+    return f"\033[38;5;{color_code}m"
+
+
+def _print_banner_border(border_width: int, char: str, row_offset: int, total_rows: int) -> None:
+    """Print border with diagonal gradient matching text"""
+    margin = 0.0  # No margin - let gradient span full banner
+    max_diagonal = total_rows + border_width
+
+    border = " " + _get_lime_color(0.0 - margin) + "█"  # Leading space
+    for i in range(border_width):
+        # Calculate diagonal position with stretched gradient
+        raw_pos = (row_offset + i) / max_diagonal
+        stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
+        border += f"{_get_lime_color(stretched_pos)}{char}"
+    border += _get_lime_color(1.0 + margin) + "█\033[0m"
+    print(border)
+
+
+def _print_banner_line(line: str, row_idx: int, num_rows: int, max_diagonal: int) -> None:
+    """Print single banner line with diagonal gradient"""
+    reset = "\033[0m"
+    margin = 0.0  # No margin - let gradient span full banner
+
+    # Left border with leading space
+    left_pos = row_idx / (num_rows + 1)
+    colored_line = f" {_get_lime_color(left_pos)}█{reset} "  # Leading space
+
+    # Apply diagonal gradient to entire text
+    for col_idx, char in enumerate(line):
+        raw_pos = (row_idx + col_idx) / max_diagonal
+        stretched_pos = (raw_pos * (1 + 2 * margin)) - margin
+        colored_line += f"{_get_lime_color(stretched_pos)}{char}"
+
+    # Right border
+    right_pos = (row_idx + 1) / (num_rows + 1)
+    colored_line += f"{reset} {_get_lime_color(right_pos)}█{reset}"
+    print(colored_line)
+
+
+def print_banner() -> None:
+    """Print Depth Surge 3D banner with diagonal lime gradient"""
+    version, git_commit = _get_version_info()
+
+    blue_accent = "\033[38;5;39m"
+    bright_blue = "\033[38;5;51m"
+    reset = "\033[0m"
+
+    banner_lines = [
+        "░█▀▄░█▀▀░█▀█░▀█▀░█░█░░░█▀▀░█░█░█▀▄░█▀▀░█▀▀░░░▀▀█░█▀▄░",
+        "░█░█░█▀▀░█▀▀░░█░░█▀█░░░▀▀█░█░█░█▀▄░█░█░█▀▀░░░░▀▄░█░█░",
+        "░▀▀░░▀▀▀░▀░░░░▀░░▀░▀░░░▀▀▀░▀▀▀░▀░▀░▀▀▀░▀▀▀░░░▀▀░░▀▀░░",
+    ]
+
+    print()
+
+    # Calculate dimensions
+    border_width = len(banner_lines[0]) + 2
+    num_rows = len(banner_lines)
+    line_length = len(banner_lines[0])
+    max_diagonal = num_rows + line_length - 2
+
+    # Print banner with borders (diagonal gradient on borders too)
+    total_rows = num_rows + 2  # +2 for top and bottom borders
+    _print_banner_border(border_width, "▀", row_offset=0, total_rows=total_rows)
+    for row_idx, line in enumerate(banner_lines):
+        _print_banner_line(
+            line, row_idx + 1, num_rows, max_diagonal
+        )  # +1 to account for top border
+    _print_banner_border(border_width, "▄", row_offset=num_rows + 1, total_rows=total_rows)
+
+    # GitHub repo link (with leading space for alignment)
+    repo_link = "https://github.com/Tok/depth-surge-3d"
+    padding = (border_width - len(repo_link)) // 2 + 1  # +1 for leading space
+    print(f"{' ' * padding}{blue_accent}{repo_link}{reset}")
+
+    # Version and commit info (with leading space for alignment)
+    version_info = f"v{version} [{git_commit}]"
+    version_padding = (border_width - len(version_info)) // 2 + 1  # +1 for leading space
+    print(
+        f"{' ' * version_padding}v{bright_blue}{version}{reset} [{bright_blue}{git_commit}{reset}]"
+    )
+
+    print()
+
+
 def cleanup_processes() -> None:
     """Clean up any active processing threads or subprocesses"""
-    global ACTIVE_PROCESSES, SHUTDOWN_FLAG
+    global SHUTDOWN_FLAG
 
     SHUTDOWN_FLAG = True
     vprint("Cleaning up active processes...")
@@ -97,7 +233,7 @@ def cleanup_processes() -> None:
     # Kill any ffmpeg processes related to this app
     try:
         subprocess.run(["pkill", "-f", "ffmpeg.*depth-surge"], check=False, capture_output=True)
-    except:
+    except Exception:
         pass
 
     # Clean up any tracked processes
@@ -107,7 +243,7 @@ def cleanup_processes() -> None:
                 proc.terminate()
             elif hasattr(proc, "kill"):
                 proc.kill()
-        except:
+        except Exception:
             pass
 
     ACTIVE_PROCESSES.clear()
@@ -116,7 +252,6 @@ def cleanup_processes() -> None:
 
 def signal_handler(signum: int, frame: Any) -> None:
     """Handle shutdown signals"""
-    global current_processing
     print(f"\nReceived signal {signum}, shutting down gracefully...")
 
     # Stop any active processing
@@ -134,7 +269,7 @@ def signal_handler(signum: int, frame: Any) -> None:
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "depth-surge-3d-secret"
-app.config["OUTPUT_FOLDER"] = "output"
+app.config["OUTPUT_FOLDER"] = str(Path("output").resolve())
 # Use threading async_mode and disable ping timeout for long-running tasks
 socketio = SocketIO(
     app,
@@ -334,10 +469,25 @@ class ProgressCallback:
             # Read frame
             frame = cv2.imread(str(frame_path))
             if frame is None:
+                vprint(f"Preview: Failed to read frame {frame_path}")
+                return
+
+            # Validate dimensions
+            height, width = frame.shape[:2]
+            if width <= 0 or height <= 0:
+                vprint(f"Preview: Invalid dimensions {width}x{height} for {frame_path}")
+                return
+
+            # Cap input size to prevent excessive processing
+            MAX_INPUT_DIM = 8192  # Reject frames larger than 8K
+            if width > MAX_INPUT_DIM or height > MAX_INPUT_DIM:
+                vprint(
+                    f"Preview: Frame too large ({width}x{height}), "
+                    f"exceeds max {MAX_INPUT_DIM}px"
+                )
                 return
 
             # Downscale for transmission
-            height, width = frame.shape[:2]
             scale = self.preview_downscale_width / width
             new_width = self.preview_downscale_width
             new_height = int(height * scale)
@@ -346,6 +496,16 @@ class ProgressCallback:
             # Encode to base64
             _, buffer = cv2.imencode(".png", frame_small)
             img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+            # Cap base64 payload size
+            MAX_PAYLOAD_KB = 500
+            payload_size_kb = len(img_base64) / 1024
+            if payload_size_kb > MAX_PAYLOAD_KB:
+                vprint(
+                    f"Preview: Payload too large ({payload_size_kb:.1f}KB), "
+                    f"skipping {frame_type} frame {frame_number}"
+                )
+                return
 
             # Send via socketio
             preview_data = {
@@ -360,8 +520,90 @@ class ProgressCallback:
             self.last_preview_time = current_time
 
         except Exception as e:
-            # Silent fail - don't interrupt processing
-            pass
+            # Log error but don't interrupt processing
+            vprint(
+                f"Preview: Error sending {frame_type} frame {frame_number}: "
+                f"{type(e).__name__}: {e}"
+            )
+
+    def send_preview_frame_from_array(
+        self,
+        frame_array: np.ndarray,
+        frame_type: str,
+        frame_number: int,
+    ) -> None:
+        """
+        Send preview frame directly from numpy array (no disk I/O).
+
+        Args:
+            frame_array: Frame as numpy array (BGR format)
+            frame_type: Type of frame ("depth_map", "stereo_left", "upscaled_left", etc)
+            frame_number: Frame number being processed
+        """
+        # Check if preview is enabled
+        if not self.enable_live_preview:
+            return
+
+        current_time = time.time()
+
+        # Throttle preview updates
+        if current_time - self.last_preview_time < self.preview_interval:
+            return
+
+        try:
+            # Validate dimensions
+            height, width = frame_array.shape[:2]
+            if width <= 0 or height <= 0:
+                vprint(f"Preview: Invalid dimensions {width}x{height}")
+                return
+
+            # Cap input size
+            MAX_INPUT_DIM = 8192
+            if width > MAX_INPUT_DIM or height > MAX_INPUT_DIM:
+                vprint(
+                    f"Preview: Frame too large ({width}x{height}), "
+                    f"exceeds max {MAX_INPUT_DIM}px"
+                )
+                return
+
+            # Downscale for transmission
+            scale = self.preview_downscale_width / width
+            new_width = self.preview_downscale_width
+            new_height = int(height * scale)
+            frame_small = cv2.resize(frame_array, (new_width, new_height))
+
+            # Encode to base64
+            _, buffer = cv2.imencode(".png", frame_small)
+            img_base64 = base64.b64encode(buffer).decode("utf-8")
+
+            # Cap base64 payload size
+            MAX_PAYLOAD_KB = 500
+            payload_size_kb = len(img_base64) / 1024
+            if payload_size_kb > MAX_PAYLOAD_KB:
+                vprint(
+                    f"Preview: Payload too large ({payload_size_kb:.1f}KB), "
+                    f"skipping {frame_type} frame {frame_number}"
+                )
+                return
+
+            # Send via socketio
+            preview_data = {
+                "frame_type": frame_type,
+                "frame_number": frame_number,
+                "image_data": f"data:image/png;base64,{img_base64}",
+                "dimensions": {"width": new_width, "height": new_height},
+            }
+
+            socketio.emit("frame_preview", preview_data, room=self.session_id)
+
+            self.last_preview_time = current_time
+
+        except Exception as e:
+            # Log error but don't interrupt processing
+            vprint(
+                f"Preview: Error sending {frame_type} frame {frame_number}: "
+                f"{type(e).__name__}: {e}"
+            )
 
     def _calculate_eta(self, current_progress: float) -> str | None:
         """
@@ -411,15 +653,6 @@ class ProgressCallback:
         # 2. Estimate time for remaining steps using weight-based projection
         # Use the overall rate as a fallback for future steps
         if self.current_step_index < len(self.steps) - 1:
-            # Calculate remaining work (by weight)
-            remaining_weight = sum(self.step_weights[self.current_step_index + 1:])
-
-            # Calculate current step's completion ratio
-            current_step_ratio = (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
-            remaining_current_step_weight = self.step_weights[self.current_step_index] * (1 - current_step_ratio)
-
-            total_remaining_weight = remaining_current_step_weight + remaining_weight
-
             # Estimate time based on overall average rate (fallback for steps we haven't measured)
             if current_progress > 5:  # Need some progress to estimate
                 avg_time_per_percent = elapsed / current_progress
@@ -459,7 +692,7 @@ class ProgressCallback:
             minutes = int((seconds % 3600) // 60)
             return f"{hours}h {minutes}m"
 
-    def update_progress(
+    def update_progress(  # noqa: C901
         self,
         stage: str,
         frame_num: int | None = None,
@@ -468,7 +701,6 @@ class ProgressCallback:
         step_progress: int | None = None,
         step_total: int | None = None,
     ) -> None:
-        global current_processing
         import time
 
         # Check if stop has been requested
@@ -491,7 +723,7 @@ class ProgressCallback:
             self.current_step_name = step_name
             self.step_start_times[step_name] = current_time
             self.step_frame_times = []  # Reset frame times for new step
-            self.step_start_progress = progress if 'progress' in locals() else 0
+            self.step_start_progress = 0  # Reset progress for new step
 
             # Update step index
             if step_name in self.steps:
@@ -596,11 +828,10 @@ class ProgressCallback:
             print(console_warning(f"Error emitting completion: {e}"))
 
 
-def process_video_async(
+def process_video_async(  # noqa: C901
     session_id: str, video_path: str | Path, settings: dict[str, Any], output_dir: str | Path
 ) -> None:
     """Process video in background thread"""
-    global current_processing
     import torch  # Import here to avoid CUDA initialization issues in main thread
 
     try:
@@ -712,7 +943,7 @@ def process_video_async(
             processor = VideoProcessor(projector.depth_estimator)
 
         # Calculate resolution settings that VideoProcessor expects
-        from depth_surge_3d.utils.resolution import (
+        from depth_surge_3d.utils.domain.resolution import (
             get_resolution_dimensions,
             calculate_vr_output_dimensions,
             auto_detect_resolution,
@@ -811,6 +1042,8 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     """Handle video upload - saves directly to output directory with audio extraction"""
+    from src.depth_surge_3d.utils.path_utils import sanitize_filename
+
     if "video" not in request.files:
         return jsonify({"error": "No video file provided"}), 400
 
@@ -818,17 +1051,20 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     if file.filename == "":
         return jsonify({"error": "No file selected"}), 400
 
-    # Create timestamped output directory
-    original_filename = file.filename
+    # Create timestamped output directory with sanitized filename
+    original_filename = sanitize_filename(file.filename)
     video_name = Path(original_filename).stem
-    file_ext = Path(original_filename).suffix
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(app.config["OUTPUT_FOLDER"]) / f"{int(time.time())}_{video_name}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
+    vprint(f"Created output directory: {output_dir}")
+    vprint(f"  Directory exists: {output_dir.exists()}")
 
     # Save video to output directory preserving original filename
     video_path = output_dir / original_filename
+    vprint(f"Saving video as: {video_path.name}")
     file.save(video_path)
+    vprint(f"  Video saved: {video_path.exists()}")
 
     # Get video information
     video_info = get_video_info(video_path)
@@ -859,9 +1095,11 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 
         if probe_result.stdout.strip() == "audio":
             # Video has audio, extract it
+            print(f"Extracting audio to: {audio_path}")
             result = subprocess.run(
                 [
                     "ffmpeg",
+                    "-y",  # Overwrite existing files
                     "-i",
                     str(video_path),
                     "-vn",  # No video
@@ -878,6 +1116,13 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
             if result.returncode != 0:
                 print(f"Warning: Audio extraction failed: {result.stderr}")
                 audio_path = None
+            elif audio_path.exists():
+                print(f"Audio successfully extracted: {audio_path}")
+            else:
+                print(
+                    f"Warning: Audio extraction reported success but file not found at: {audio_path}"
+                )
+                audio_path = None
         else:
             # No audio stream in video
             audio_path = None
@@ -889,7 +1134,7 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
         {
             "success": True,
             "filename": video_path.name,
-            "output_dir": str(output_dir),
+            "output_dir": str(output_dir.resolve()),  # Ensure absolute path
             "video_info": video_info,
             "has_audio": audio_path is not None and audio_path.exists(),
         }
@@ -899,8 +1144,6 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 @app.route("/process", methods=["POST"])
 def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     """Start video processing"""
-    global current_processing
-
     if current_processing["active"]:
         return jsonify({"error": "Processing already in progress"}), 400
 
@@ -911,9 +1154,29 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
     if not output_dir_str:
         return jsonify({"error": "No output directory provided"}), 400
 
-    output_dir = Path(output_dir_str)
+    output_dir = Path(output_dir_str).resolve()  # Resolve to absolute path
+    vprint(f"Processing request for output directory: {output_dir}")
+
+    # Security: Ensure output_dir is within OUTPUT_FOLDER (prevent path traversal)
+    allowed_base = Path(app.config["OUTPUT_FOLDER"]).resolve()
+    try:
+        output_dir.relative_to(allowed_base)
+    except ValueError:
+        vprint("ERROR: Path traversal attempt detected!")
+        vprint(f"  Requested path: {output_dir}")
+        vprint(f"  Allowed base: {allowed_base}")
+        return (
+            jsonify({"error": "Invalid output directory: must be within output folder"}),
+            403,
+        )
+
     if not output_dir.exists():
-        return jsonify({"error": "Output directory not found"}), 404
+        vprint("ERROR: Output directory not found!")
+        vprint(f"  Requested path: {output_dir_str}")
+        vprint(f"  Resolved path: {output_dir}")
+        vprint(f"  Exists: {output_dir.exists()}")
+        vprint(f"  Current working directory: {Path.cwd()}")
+        return jsonify({"error": f"Output directory not found: {output_dir}"}), 404
 
     # Find the source video file in output directory
     video_path = find_source_video(output_dir)
@@ -939,8 +1202,6 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 @app.route("/stop", methods=["POST"])
 def stop_processing() -> dict[str, Any]:
     """Stop current processing"""
-    global current_processing
-
     data = request.json
     session_id = data.get("session_id")
 
@@ -959,8 +1220,6 @@ def stop_processing() -> dict[str, Any]:
 @app.route("/resume", methods=["POST"])
 def resume_processing():
     """Resume processing from a previous interrupted batch"""
-    global current_processing
-
     if current_processing["active"]:
         return jsonify({"error": "Processing already in progress"}), 400
 
@@ -979,9 +1238,7 @@ def resume_processing():
 
     if not source_video:
         return (
-            jsonify(
-                {"error": "Could not find source video file in output directory for resuming"}
-            ),
+            jsonify({"error": "Could not find source video file in output directory for resuming"}),
             404,
         )
 
@@ -1119,7 +1376,7 @@ def open_directory():
         return jsonify({"success": False, "error": str(e)})
 
 
-def analyze_batch_directory(batch_path):
+def analyze_batch_directory(batch_path):  # noqa: C901
     """Analyze batch directory to determine available processing stages and settings"""
     analysis = {
         "frame_count": 0,
@@ -1208,7 +1465,7 @@ def analyze_batch_directory(batch_path):
     return analysis
 
 
-def create_video_from_batch(batch_path, settings):
+def create_video_from_batch(batch_path, settings):  # noqa: C901
     """Create video from batch frames using FFmpeg"""
     frame_source = settings.get("frame_source", "auto")
     quality = settings.get("quality", "medium")
@@ -1348,7 +1605,6 @@ def handle_connect():
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    global current_processing
     vprint(f"Client disconnected: {request.sid}")
 
     # Only stop processing if there are no other connected clients
@@ -1414,9 +1670,10 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    import torch  # Import here to avoid issues during startup
+    # Always print banner on startup
+    print_banner()
 
-    # Only print startup message if not already printed by run_ui.sh
+    # Only print additional startup message if not already printed by run_ui.sh
     if not os.environ.get("DEPTH_SURGE_UI_SCRIPT"):
         print("Starting Depth Surge 3D Web UI...")
         print(f"Navigate to http://localhost:{args.port}")

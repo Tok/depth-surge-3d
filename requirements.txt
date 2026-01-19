@@ -1,3 +1,7 @@
+# IMPORTANT: Depth Surge 3D requires Python 3.9-3.12 (NOT Python 3.13+)
+# Python 3.13 is not yet supported due to open3d dependency in Depth-Anything V3
+# See: https://github.com/Tok/depth-surge-3d/issues/11
+
 # Core dependencies - install these first
 numpy>=1.24.0,<2.0.0
 opencv-python>=4.8.0

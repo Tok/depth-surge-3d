@@ -12,21 +12,23 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from depth_surge_3d.core.stereo_projector import create_stereo_projector
-from depth_surge_3d.core.constants import (
+from depth_surge_3d.rendering import create_stereo_projector  # noqa: E402
+from depth_surge_3d.core.constants import (  # noqa: E402
     DEFAULT_SETTINGS,
     VR_RESOLUTIONS,
     FISHEYE_PROJECTIONS,
     HOLE_FILL_METHODS,
     VALIDATION_RANGES,
 )
-from depth_surge_3d.utils.resolution import get_available_resolutions
-from depth_surge_3d.processing.io_operations import (
+from depth_surge_3d.utils import (  # noqa: E402
+    get_available_resolutions,
+    warning as console_warning,
+)
+from depth_surge_3d.io.operations import (  # noqa: E402
     validate_video_file,
     can_resume_processing,
     load_processing_settings,
 )
-from depth_surge_3d.utils.console import warning as console_warning
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -281,7 +283,7 @@ def list_available_resolutions():
     print("  auto            - Automatically detect optimal resolution")
 
 
-def main():
+def main():  # noqa: C901
     """Main entry point."""
     parser = create_argument_parser()
     args = parser.parse_args()
@@ -292,7 +294,7 @@ def main():
         return 0
 
     if args.cache_info:
-        from depth_surge_3d.utils.depth_cache import get_cache_size, get_cache_dir
+        from depth_surge_3d.utils.domain.depth_cache import get_cache_size, get_cache_dir
 
         cache_entries, cache_size_bytes = get_cache_size()
         cache_size_mb = cache_size_bytes / (1024 * 1024)
@@ -309,7 +311,7 @@ def main():
         return 0
 
     if args.cache_clear:
-        from depth_surge_3d.utils.depth_cache import clear_cache
+        from depth_surge_3d.utils.domain.depth_cache import clear_cache
 
         count = clear_cache()
         print(f"Cleared {count} cached video(s) from depth map cache")
@@ -479,7 +481,7 @@ def main():
         try:
             if "projector" in locals():
                 projector.unload_model()
-        except:
+        except Exception:  # noqa: E722
             pass
 
 

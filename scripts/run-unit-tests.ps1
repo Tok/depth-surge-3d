@@ -55,7 +55,7 @@ catch {}
 
 # Parse command line arguments
 $pytestArgs = "-v tests/unit"
-$showCoverage = $false
+$showCoverage = $true  # Show coverage by default
 
 foreach ($arg in $args) {
     switch ($arg) {

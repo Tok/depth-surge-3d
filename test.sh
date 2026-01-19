@@ -33,8 +33,8 @@ python -c "
 import sys
 from pathlib import Path
 
-# Add the video_depth_anything_repo to path
-repo_path = Path('video_depth_anything_repo')
+# Add the vendored Video-Depth-Anything repo to path
+repo_path = Path('vendor/Video-Depth-Anything')
 if repo_path.exists():
     sys.path.insert(0, str(repo_path))
 

@@ -21,31 +21,43 @@ python depth_surge_3d.py input.mp4 --vr-resolution 16x9-1080p -s 1:00 -e 2:00
 
 ## Code Quality (CRITICAL - ALWAYS DO THIS BEFORE COMMIT)
 
-**MANDATORY pre-commit checklist:**
+**MANDATORY pre-commit quality gate:**
+
+```bash
+# Run ALL checks at once (RECOMMENDED - mirrors CI exactly)
+./scripts/pre-commit-checks.sh          # Linux/macOS
+# OR
+.\scripts\pre-commit-checks.ps1         # Windows
+
+# This runs:
+# 1. Black formatting check (--check mode)
+# 2. Flake8 linting (must have 0 errors)
+# 3. Unit tests with coverage (must be ≥ 85%)
+```
+
+**Alternative: Run checks individually**
 
 ```bash
 # 1. Format code (required, no exceptions)
-black src/ tests/
+black src/ tests/ app.py
 
 # 2. Lint code (must pass with 0 errors)
-flake8 src/ tests/ --count --show-source --statistics
+flake8 src/ tests/ app.py --count --show-source --statistics
 
 # 3. Run unit tests (MUST pass, no exceptions)
-./scripts/run-unit-tests.sh              # Linux/macOS
+./scripts/run-unit-tests.sh              # Linux/macOS (includes coverage)
 # OR
-.\scripts\run-unit-tests.ps1             # Windows
-# OR
-pytest tests/unit -v                     # Direct pytest
+.\scripts\run-unit-tests.ps1             # Windows (includes coverage)
 ```
 
-**DO NOT commit if any of these fail. No exceptions.**
+**DO NOT commit if pre-commit checks fail. No exceptions.**
 
 **Complete coding standards**: See [CODING_GUIDE.md](CODING_GUIDE.md)
 - Functional programming patterns
 - Type hints (modern Python 3.10+ syntax: `dict`, `list`, `X | None`)
 - Max complexity: 10 (enforced by flake8)
 - Pure functions, immutability, composition
-- Current coverage: 89.45% (target: 90%, gap: 14 lines)
+- Current coverage: 92% (minimum: 85% enforced, goal: 90%+)
 
 **Git Commit Format:**
 ```
@@ -107,16 +119,21 @@ output/videoname_timestamp/
 ## Common Commands
 
 ```bash
+# Pre-commit quality gate (RECOMMENDED - run before every commit)
+./scripts/pre-commit-checks.sh            # Linux/macOS (all checks at once)
+.\scripts\pre-commit-checks.ps1           # Windows (all checks at once)
+
 # Development
-black src/ tests/                          # Format code
-flake8 src/ tests/                         # Lint code
-pytest tests/unit -v --cov                 # Unit tests with coverage
+black src/ tests/ app.py                   # Format code
+flake8 src/ tests/ app.py                  # Lint code
+./scripts/run-unit-tests.sh               # Unit tests with coverage (Linux/macOS)
+.\scripts\run-unit-tests.ps1              # Unit tests with coverage (Windows)
 pytest tests/integration -v -m integration # Integration tests (requires GPU)
 
 # CI checks (what runs in GitHub Actions)
-black --check src/ tests/                  # Check formatting
-flake8 src/ tests/ --count --show-source --statistics
-pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=xml
+black --check src/ tests/ app.py           # Check formatting
+flake8 src/ tests/ app.py --count --show-source --statistics
+pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=xml --cov-fail-under=85
 
 # Debugging
 radon cc src/depth_surge_3d/ -a -nc        # Find complex functions (>10)

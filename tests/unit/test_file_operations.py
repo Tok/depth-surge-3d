@@ -12,7 +12,7 @@ from src.depth_surge_3d.utils.path_utils import (
     estimate_output_size,
     format_time_duration,
 )
-from src.depth_surge_3d.processing.io_operations import (
+from src.depth_surge_3d.io.operations import (
     validate_video_file,
     validate_image_file,
 )

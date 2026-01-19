@@ -28,5 +28,5 @@ $modelFile="models/Video-Depth-Anything-Large/video_depth_anything_vitl.pth"
 
 if (-not (Test-Path -Path $modelFile -PathType Leaf)) {
     Write-Host "Downloading Video-Depth-Anything-Large model (~1.3GB, this may take a while)..."
-    Invoke-WebRequest -Uri "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth" -OutFile $model_path
+    Invoke-WebRequest -Uri "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth" -OutFile $modelFile
 }

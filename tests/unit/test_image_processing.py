@@ -1,7 +1,7 @@
 """Unit tests for image processing utilities."""
 
 import numpy as np
-from src.depth_surge_3d.utils.image_processing import (
+from src.depth_surge_3d.utils.imaging.image_processing import (
     normalize_depth_map,
     depth_to_disparity,
     resize_image,
@@ -640,7 +640,7 @@ class TestHoleFillImage:
 
     def test_empty_mask_handling(self):
         """Test that empty mask is handled correctly."""
-        from src.depth_surge_3d.utils.image_processing import _create_hole_mask
+        from src.depth_surge_3d.utils.imaging.image_processing import _create_hole_mask
 
         # Create image with no black pixels
         image = np.random.randint(1, 255, (50, 50, 3), dtype=np.uint8)
@@ -651,7 +651,7 @@ class TestHoleFillImage:
 
     def test_adaptive_radius_calculation(self):
         """Test adaptive radius calculation with various hole sizes."""
-        from src.depth_surge_3d.utils.image_processing import (
+        from src.depth_surge_3d.utils.imaging.image_processing import (
             _create_hole_mask,
             _calculate_adaptive_radius,
         )
@@ -673,7 +673,7 @@ class TestHoleFillImage:
 
     def test_adaptive_radius_empty_mask(self):
         """Test adaptive radius with empty mask (no holes)."""
-        from src.depth_surge_3d.utils.image_processing import _calculate_adaptive_radius
+        from src.depth_surge_3d.utils.imaging.image_processing import _calculate_adaptive_radius
 
         # Empty mask (all zeros, only background)
         empty_mask = np.zeros((100, 100), dtype=np.uint8)
@@ -686,7 +686,7 @@ class TestHoleFillImage:
         """Test high quality inpainting that triggers second pass."""
         import cv2
         from unittest.mock import patch
-        from src.depth_surge_3d.utils.image_processing import (
+        from src.depth_surge_3d.utils.imaging.image_processing import (
             _create_hole_mask,
             _apply_high_quality_inpaint,
         )
