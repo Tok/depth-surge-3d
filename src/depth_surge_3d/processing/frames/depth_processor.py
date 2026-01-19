@@ -108,14 +108,15 @@ class DepthMapProcessor:
 
         print("Step 2/7: Generating depth maps (temporal consistency enabled)...")
         print("  Using memory-efficient chunked processing...")
-        progress_tracker.update_progress(
-            "Generating depth maps",
-            phase="depth_estimation",
-            frame_num=0,
-            step_name="Depth Map Generation",
-            step_progress=0,
-            step_total=len(frame_files),
-        )
+        if progress_tracker:
+            progress_tracker.update_progress(
+                "Generating depth maps",
+                phase="depth_estimation",
+                frame_num=0,
+                step_name="Depth Map Generation",
+                step_progress=0,
+                step_total=len(frame_files),
+            )
 
         depth_maps = self._generate_depth_maps_chunked(
             frame_files, settings, directories, progress_tracker
@@ -396,14 +397,15 @@ class DepthMapProcessor:
                 self._clear_gpu_memory()
 
                 # Update progress
-                progress_tracker.update_progress(
-                    f"Chunk {chunk_num}/{total_chunks}: Depth maps {chunk_end}/{num_frames}",
-                    phase="depth_estimation",
-                    frame_num=chunk_end,
-                    step_name="Depth Map Generation",
-                    step_progress=chunk_end,
-                    step_total=num_frames,
-                )
+                if progress_tracker:
+                    progress_tracker.update_progress(
+                        f"Chunk {chunk_num}/{total_chunks}: Depth maps {chunk_end}/{num_frames}",
+                        phase="depth_estimation",
+                        frame_num=chunk_end,
+                        step_name="Depth Map Generation",
+                        step_progress=chunk_end,
+                        step_total=num_frames,
+                    )
 
             except Exception as e:
                 print(f"Error processing chunk {chunk_start}-{chunk_end}: {e}")

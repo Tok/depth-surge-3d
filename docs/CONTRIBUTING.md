@@ -1,260 +1,259 @@
 # Contributing to Depth Surge 3D
 
-Thank you for your interest in contributing to Depth Surge 3D! This guide will help you set up your development environment and understand our workflow.
+Thank you for your interest in contributing! This guide is organized by contributor type.
 
-## Development Setup
+---
 
-### Initial Setup
+## 👥 For Human Contributors
+
+**TL;DR:** Don't stress about the strict rules below - they're mainly for our AI coding assistants. Submit your PR even if some tests fail or formatting is off. We appreciate your contribution and may have bots tidy things up later.
+
+### Philosophy
+
+The strict code quality requirements (Black, Flake8, complexity limits, etc.) are **primarily enforced for AI contributors** to maintain consistency and prevent AI-generated code bloat.
+
+**As a human contributor:**
+- ✅ Your expertise and ideas are valued
+- ✅ It's OK to submit a PR that doesn't pass all checks
+- ✅ We understand manual coding is different from AI-generated code
+- ⚠️ Your PR might be refactored by AI tools after merge
+- ⚠️ Code may be restructured multiple times as patterns evolve
+
+We'd rather have your contribution with imperfect formatting than no contribution at all. The bots can handle the cleanup.
+
+### Quick Start
 
 ```bash
 git clone https://github.com/Tok/depth-surge-3d.git
 cd depth-surge-3d
 ./setup.sh
+./test.sh  # Verify setup
 ```
 
-### Code Quality Requirements
+### Development Workflow
 
-**Before every commit, you MUST run:**
+1. **Create a branch** from `dev`:
+   ```bash
+   git checkout dev
+   git pull
+   git checkout -b feature/your-feature-name
+   ```
 
-```bash
-black src/ tests/              # Format code (required, no exceptions)
-flake8 src/ tests/             # Lint code (must pass)
-pytest tests/unit -v           # Run unit tests (must pass)
+2. **Make your changes**:
+   - Write code that works
+   - Add comments where logic isn't obvious
+   - Try to follow existing patterns when possible
+
+3. **Test your changes** (if you can):
+   ```bash
+   ./test.sh                        # Basic verification
+   pytest tests/unit -v             # Run unit tests (optional)
+   ```
+
+4. **Optional formatting** (helpful but not required):
+   ```bash
+   black src/ tests/                # Auto-format code
+   flake8 src/ tests/               # Check for issues
+   ```
+
+5. **Submit PR** to `dev` branch:
+   - Describe what you changed and why
+   - Mention any tests you ran
+   - Note any checks that fail (we'll handle it)
+
+### Commit Message Format
+
+Try to follow this format (but don't stress if you forget):
+
+```
+type: brief description
+
+Detailed explanation if needed.
 ```
 
-All pull requests must pass CI checks which include:
-- Black formatting (line length: 100)
-- Flake8 linting (max complexity: 10, max line length: 127)
-- MyPy type checking (continue-on-error)
-- Unit and integration tests
-- Code coverage reporting
+**Types:** `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+
+**Example:**
+```
+fix: handle null progress_tracker in CLI mode
+
+Added null checks before calling update_progress() to prevent
+crashes when running without web interface.
+
+Fixes #14
+```
+
+### What Happens After You Submit?
+
+1. CI runs automatically (tests, formatting checks)
+2. Maintainers review your changes
+3. If CI fails:
+   - We may fix minor issues ourselves
+   - We may ask you to update (with specific guidance)
+   - We may merge and let AI tools clean up formatting
+4. Your contribution gets merged!
+5. Bots may refactor code later (don't take it personally!)
+
+### Areas Where We'd Love Help
+
+- **Bug reports** with reproduction steps
+- **Performance optimizations** (especially GPU memory)
+- **Documentation improvements** (examples, guides, typo fixes)
+- **New VR headset presets** (if you have specific hardware)
+- **Test coverage** for edge cases you encounter
+
+### Questions?
+
+- **Stuck?** Open an issue or discussion
+- **Not sure if something is a bug?** Open an issue anyway
+- **Want to add a feature?** Propose it in an issue first
+- **Documentation unclear?** Let us know what confused you
+
+---
+
+## 🤖 For AI Contributors (Claude, GPT, etc.)
+
+**This section is for AI coding assistants and autonomous agents.**
+
+### Required Reading
+
+All AI contributors MUST read and follow **[docs/CLAUDE.md](CLAUDE.md)** for:
+- Code quality requirements (Black, Flake8, complexity limits)
+- Testing requirements (unit tests, coverage ≥85%)
+- Development workflow
+- Commit message format
+- Architecture guidelines
+
+**Note:** While `CLAUDE.md` is named for Claude Code, it's written generically and can be used by any AI coding assistant (GPT Engineer, Cursor, Aider, etc.).
+
+### Strict Requirements for AI
+
+Unlike human contributors, AI tools are expected to:
+- ✅ **Format all code** with Black (line length: 100)
+- ✅ **Pass all Flake8 checks** (complexity ≤10, max line: 127)
+- ✅ **Maintain coverage** ≥85% for all new code
+- ✅ **Add type hints** to all functions
+- ✅ **Write docstrings** for public functions
+- ✅ **Run pre-commit checks** before every commit:
+  ```bash
+  ./scripts/pre-commit-checks.sh
+  ```
+
+### Why Stricter for AI?
+
+AI can:
+- Generate perfectly formatted code consistently
+- Write comprehensive tests automatically
+- Refactor without fatigue
+- Follow complex rules without cognitive load
+- Self-check against multiple criteria
+
+Humans shouldn't be held to the same standard because manual coding has different constraints.
+
+### AI Workflow
+
+1. **Read CLAUDE.md** thoroughly before starting
+2. **Check git status** to understand current state
+3. **Run tests** before making changes
+4. **Make changes** following all quality rules
+5. **Run pre-commit checks**:
+   ```bash
+   ./scripts/pre-commit-checks.sh
+   ```
+6. **Verify all checks pass** (no exceptions)
+7. **Commit with proper format**:
+   ```bash
+   git commit -m "type: description
+
+   Co-Authored-By: AI Assistant <ai@example.com>"
+   ```
+
+### AI-Specific Guidelines
+
+- **Don't skip steps** - run all checks every time
+- **Don't commit failing code** - fix issues before committing
+- **Don't add unnecessary complexity** - keep functions simple (≤10 complexity)
+- **Don't leave TODOs** - complete tasks fully or don't start them
+- **Don't break existing tests** - ensure all 770+ tests still pass
+- **Do refactor existing code** - improve what you touch
+- **Do maintain consistency** - follow existing patterns
+- **Do write comprehensive docstrings** - explain the "why", not just the "what"
+
+### Integration with Other AI Tools
+
+If you're not Claude Code but another AI assistant:
+
+1. **Read CLAUDE.md** - it's tool-agnostic
+2. **Adapt to your workflow** - use your own commands for running tests
+3. **Follow the same standards** - formatting, complexity, coverage
+4. **Report issues** - if guidelines are unclear, open an issue
+
+### Pre-Commit Checklist for AI
+
+Before every commit, verify:
+- [ ] Black formatting applied to all changed files
+- [ ] Flake8 reports 0 errors (warnings OK)
+- [ ] All unit tests pass
+- [ ] Coverage ≥85% for changed modules
+- [ ] Type hints added to all new functions
+- [ ] Docstrings added to all public functions
+- [ ] No functions with complexity >10
+- [ ] Commit message follows conventional format
+
+---
+
+## Development Resources
+
+### Documentation Structure
+
+- **[CLAUDE.md](CLAUDE.md)** - Development guide (AI-focused but useful for all)
+- **[CODING_GUIDE.md](CODING_GUIDE.md)** - Detailed coding standards
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design overview
+- **[INSTALLATION.md](INSTALLATION.md)** - Setup instructions
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues
+- **[TODO.md](TODO.md)** - Roadmap and planned features
 
 ### Running Tests
 
 ```bash
-# Unit tests with coverage
-pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=term
+# Quick verification (end users)
+./test.sh
 
-# Integration tests
-pytest tests/integration -v -m integration
+# Unit tests with coverage (developers)
+./scripts/run-unit-tests.sh
 
-# All tests
-pytest tests/ -v
+# Pre-commit checks (required for AI)
+./scripts/pre-commit-checks.sh
 ```
 
-## CI/CD Setup
+### Code Quality Tools
 
-### Codecov Integration
+```bash
+# Format code
+black src/ tests/ app.py
 
-The project uses Codecov for code coverage reporting. To enable codecov badges and reports:
+# Lint code
+flake8 src/ tests/ app.py --count --show-source --statistics
 
-1. **Get Codecov Token**:
-   - Go to [codecov.io](https://codecov.io/) and sign in with GitHub
-   - Add your forked repository
-   - Copy the repository upload token
+# Type checking
+mypy src/depth_surge_3d/ --ignore-missing-imports
 
-2. **Add Token to GitHub Secrets**:
-   - Go to your GitHub repository settings
-   - Navigate to **Settings → Secrets and variables → Actions**
-   - Click **New repository secret**
-   - Name: `CODECOV_TOKEN`
-   - Value: Paste your Codecov token
-   - Click **Add secret**
+# Find complex functions
+radon cc src/depth_surge_3d/ -a -nc
 
-3. **Verify Setup**:
-   - Push a commit to trigger CI
-   - Check the "Upload coverage to Codecov" step in GitHub Actions
-   - Verify the badge in README.md shows coverage percentage
-
-### Workflow Triggers
-
-CI runs automatically on:
-- Pushes to `main`, `dev`, or `depth-anything-v3` branches
-- Pull requests targeting `main` or `dev`
-
-## Coding Standards
-
-### Type Hints
-
-All functions must have complete type annotations:
-
-```python
-from typing import Optional, List, Dict, Tuple
-
-def process_frames(
-    frames: List[np.ndarray],
-    settings: Dict[str, Any],
-    verbose: bool = False,
-) -> Tuple[List[np.ndarray], Dict[str, float]]:
-    """Process video frames with depth estimation."""
-    pass
+# Find dead code
+vulture src/depth_surge_3d/
 ```
 
-### Complexity Limit
-
-All functions must have McCabe complexity ≤ 10:
-- Break down complex functions into smaller helpers
-- Extract nested loops and conditionals
-- Prefer composition over deeply nested logic
-
-### Error Handling
-
-Use specific exceptions with context:
-
-```python
-try:
-    result = risky_operation()
-except FileNotFoundError as e:
-    logger.error(f"Configuration file not found: {e}")
-    raise ConfigurationError(f"Missing config: {e}") from e
-except Exception as e:
-    logger.error(f"Unexpected error: {e}")
-    raise
-```
-
-### Documentation
-
-All functions require docstrings:
-
-```python
-def estimate_depth(
-    frames: np.ndarray,
-    model_name: str = "large",
-) -> np.ndarray:
-    """
-    Estimate depth maps from video frames.
-
-    Args:
-        frames: Input frames (shape: [N, H, W, 3], BGR format)
-        model_name: Model size (small, base, large)
-
-    Returns:
-        Depth maps (shape: [N, H, W], normalized 0-1 range)
-
-    Raises:
-        RuntimeError: If model is not loaded
-        ValueError: If frame format is invalid
-    """
-    pass
-```
-
-## Git Workflow
-
-### Branch Strategy
-
-- `main`: Stable releases only
-- `dev`: Active development branch
-- Feature branches: `feature/description`
-- Bug fixes: `bugfix/description`
-
-### Commit Messages
-
-Use conventional commits format:
-
-```
-type(scope): brief description
-
-Detailed explanation if needed.
-
-Co-Authored-By: Your Name <email@example.com>
-```
-
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code formatting (no logic changes)
-- `refactor`: Code restructuring
-- `perf`: Performance improvements
-- `test`: Test additions/changes
-- `chore`: Build process, dependencies
-
-**Examples:**
-```
-feat(depth): add Depth Anything V3 support
-
-- Implemented DA3 wrapper with improved memory efficiency
-- Added configurable depth resolution UI setting
-- Updated documentation with DA3 usage examples
-
-fix(encoder): correct FFmpeg NVENC usage
-
-Previously used hevc_nvenc as decoder, causing errors.
-Now properly detects NVENC availability and uses as encoder.
-
-Fixes #42
-```
-
-### Pull Request Process
-
-1. Create feature branch from `dev`
-2. Make changes following code quality standards
-3. Run all tests and formatters locally
-4. Push and create PR to `dev` (not `main`)
-5. Ensure CI passes (all checks green)
-6. Request review from maintainers
-7. Address review feedback
-8. Merge when approved
-
-## Testing Guidelines
-
-### Unit Tests
-
-Test individual functions in isolation:
-
-```python
-def test_normalize_depth_maps():
-    """Test depth map normalization to 0-1 range."""
-    depths = np.array([[10, 20], [30, 40]])
-    normalized = normalize_depths(depths)
-
-    assert normalized.min() == 0.0
-    assert normalized.max() == 1.0
-    assert normalized.shape == depths.shape
-```
-
-### Integration Tests
-
-Test component interactions:
-
-```python
-@pytest.mark.integration
-def test_depth_estimation_pipeline():
-    """Test complete depth estimation workflow."""
-    frames = load_test_frames()
-    estimator = VideoDepthEstimatorDA3()
-    estimator.load_model()
-
-    depth_maps = estimator.estimate_depth_batch(frames)
-
-    assert depth_maps.shape[0] == frames.shape[0]
-    assert depth_maps.dtype == np.float32
-```
-
-### Test Organization
-
-```
-tests/
-├── unit/                  # Fast, isolated tests
-│   ├── test_core.py
-│   ├── test_models.py
-│   └── test_utils.py
-└── integration/          # Slower, multi-component tests
-    ├── test_pipeline.py
-    └── test_video_processing.py
-```
-
-## Performance Considerations
-
-- Process frames in batches to manage memory
-- Use `torch.no_grad()` for inference
-- Clear GPU cache after heavy operations
-- Profile before optimizing (use `cProfile` or `line_profiler`)
+---
 
 ## Questions or Issues?
 
 - **Bug reports**: Open an issue with minimal reproduction steps
 - **Feature requests**: Open an issue with use case description
-- **Questions**: Check docs/ first, then open a discussion
+- **Documentation issues**: PR fixes directly or open an issue
+- **General questions**: Check docs first, then open a discussion
 
-Thank you for contributing to Depth Surge 3D!
+**Thank you for contributing to Depth Surge 3D!**
+
+Whether you're human or AI, we appreciate your help in making this project better. 🚀

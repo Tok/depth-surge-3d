@@ -9,8 +9,8 @@
 
 ```bash
 ./setup.sh          # Initial setup
+./test.sh           # Verify installation (CUDA, dependencies, models)
 ./run_ui.sh         # Launch web UI (http://localhost:5000)
-./test.sh           # Verify installation
 
 # CLI usage
 python depth_surge_3d.py input.mp4

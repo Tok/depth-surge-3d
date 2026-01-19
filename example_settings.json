@@ -1,43 +1,58 @@
 {
   "metadata": {
-    "batch_name": "sample_video_1703123456",
+    "batch_name": "sample_video_1768849183",
     "source_video": "/home/user/videos/sample_video.mp4",
     "source_video_name": "sample_video.mp4",
-    "created_at": "2024-01-20 15:30:56",
-    "created_timestamp": 1703088656.0,
-    "project_version": "1.0.0",
+    "created_at": "2026-01-19 19:59:43",
+    "created_timestamp": 1768849183.324937,
+    "project_version": "0.9.2",
     "processing_status": "completed",
-    "last_updated": "2024-01-20 15:43:30",
-    "completed_at": "2024-01-20 15:43:30",
-    "processing_duration_seconds": 754.0,
-    "processing_duration_formatted": "12m 34s"
+    "last_updated": "2026-01-19 20:00:30",
+    "last_updated_timestamp": 1768849230.4349878,
+    "completed_at": "2026-01-19 20:00:30",
+    "completed_timestamp": 1768849230.4349885,
+    "processing_duration_seconds": 47.11005187034607,
+    "processing_duration_formatted": "00:00:47"
   },
   "video_properties": {
     "width": 1920,
     "height": 1080,
     "fps": 30.0,
-    "frame_count": 1800,
     "duration": 60.0,
-    "format": "mp4",
-    "bitrate": 5000000
+    "frame_count": 1800,
+    "aspect_ratio": 1.778,
+    "aspect_ratio_text": "1920:1080"
   },
   "processing_settings": {
+    "start_time": null,
+    "end_time": null,
+    "resolution": "original",
+    "target_fps": null,
+    "vr_format": "side_by_side",
+    "vr_resolution": "auto",
     "baseline": 0.065,
     "focal_length": 1000,
-    "vr_format": "side_by_side",
-    "vr_resolution": "16x9-1080p",
-    "processing_mode": "serial",
-    "fisheye_projection": "stereographic",
-    "fisheye_fov": 105,
-    "crop_factor": 1.0,
-    "fisheye_crop_factor": 1.0,
-    "hole_fill_quality": "fast",
-    "super_sample": "auto",
-    "target_fps": 60,
-    "min_resolution": "1080p",
     "preserve_audio": true,
     "keep_intermediates": true,
+    "video_encoder": "auto",
+    "device": "auto",
+    "model_size": "vitb",
+    "depth_model_version": "v3",
+    "depth_resolution": "auto",
+    "use_metric_depth": true,
+    "temporal_window_size": 32,
+    "temporal_window_overlap": 10,
+    "super_sample": "none",
     "apply_distortion": true,
+    "fisheye_projection": "stereographic",
+    "fisheye_fov": 180,
+    "crop_factor": 1,
+    "fisheye_crop_factor": 0.7,
+    "hole_fill_quality": "advanced",
+    "upscale_model": "none",
+    "experimental_frame_interpolation": false,
+    "enable_live_preview": true,
+    "preview_update_interval": 2,
     "per_eye_width": 1920,
     "per_eye_height": 1080,
     "vr_output_width": 3840,
@@ -47,14 +62,12 @@
     "source_fps": 30.0
   },
   "output_info": {
-    "output_directory": "/home/user/workspace/depth-surge-3d/output/sample_video_1703123456",
-    "expected_output_filename": "sample_video_side-by-side_16x9-1080p_serial.mp4"
+    "output_directory": "/home/user/workspace/depth-surge-3d/output/sample_video_1768849183",
+    "expected_output_filename": "sample_video_3D_side-by-side_auto.mp4"
   },
   "runtime_info": {
-    "final_output": "/home/user/workspace/depth-surge-3d/output/sample_video_1703123456/sample_video_side-by-side_16x9-1080p_serial.mp4",
+    "final_output": "/home/user/workspace/depth-surge-3d/output/sample_video_1768849183/sample_video_3D_side-by-side_auto.mp4",
     "frames_processed": 1800,
-    "device_used": "cuda",
-    "model_type": "vitl",
-    "peak_memory_usage": "4.2 GB"
+    "processing_time_seconds": 47.11057233810425
   }
-} 
+}
