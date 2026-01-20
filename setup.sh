@@ -24,6 +24,11 @@ fi
 
 echo "[OK] Python $python_version found"
 
+
+# Force Wheelnext UV installation. For automatic GPU variabt torch installation.
+curl -LsSf https://astral.sh/uv/install.sh | INSTALLER_DOWNLOAD_URL=https://wheelnext.astral.sh sh
+
+
 # Check for uv package manager
 if command_exists uv; then
     echo "[OK] uv package manager found - using for fast setup"
@@ -37,9 +42,14 @@ else
     use_uv=false
 fi
 
+use_uv=true
+
 # Setup virtual environment and dependencies
 if [ "$use_uv" = true ]; then
     echo "Setting up environment with uv..."
+    # Install required python 3.12
+    uv python install 3.12
+    uv python pin 3.12
     uv sync
 else
     echo "Setting up environment with pip..."

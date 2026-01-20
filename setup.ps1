@@ -1,15 +1,13 @@
-$gpu = Get-WmiObject Win32_VideoController | Select-Object -ExpandProperty Name
+#winget install --id=astral-sh.uv -e
+$env:INSTALLER_DOWNLOAD_URL='https://wheelnext.astral.sh'; 
+irm https://astral.sh/uv/install.ps1 | iex
 
-python -m venv venv
-venv\Scripts\activate
-pip install --upgrade pip
-pip install -r requirements.txt
+$env:UV_LINK_MODE='copy';
 
-if ($gpu -match "NVIDIA") {
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
-} else {
-    pip install torch torchvision
-}
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User") 
+uv python install 3.12
+uv python pin 3.12
+uv sync
 
 
 $depthAnythingDir = "video_depth_anything_repo"
