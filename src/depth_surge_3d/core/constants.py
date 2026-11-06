@@ -20,6 +20,13 @@ DEPTH_MODEL_INPUT_SIZE = 518  # Input resolution for depth estimation model
 DEPTH_MODEL_CHUNK_SIZE = 32  # Number of frames to process in one batch (temporal window)
 DEPTH_MODEL_CHUNK_OVERLAP = 10  # Number of frames to overlap between chunks
 DEPTH_MODEL_DEFAULT_FPS = 30  # Default FPS for depth estimation when original cannot be determined
+# Chunking for temporally consistent depth models (RAM-bound, not VRAM-bound)
+DEPTH_CHUNK_RAM_BUDGET_BYTES = 2 * 1024**3  # extra RAM a chunk may use
+# Measured ~28 B/px: frame copies (BGR, array, RGB) plus VDA's full-resolution float32 depth,
+# its aligned copy and the stacked result
+DEPTH_CHUNK_BYTES_PER_PIXEL = 32
+DEPTH_CHUNK_MIN_FRAMES = 32  # VDA pads shorter inputs to its 32-frame window anyway
+DEPTH_CHUNK_MAX_FRAMES = 512
 
 # Video model configurations
 MODEL_CONFIGS = {
@@ -250,7 +257,7 @@ STEREO_NEAR_PLANE_M = 1.0
 MAX_STEREO_WORKERS = 16
 
 # Bump whenever the meaning of cached depth maps changes (invalidates the global depth cache)
-DEPTH_CACHE_FORMAT_VERSION = 2
+DEPTH_CACHE_FORMAT_VERSION = 3
 
 # Progress reporting
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every N frames processed

@@ -47,6 +47,9 @@ class VideoDepthEstimatorDA3:
     making it better suited for GPUs with limited VRAM (e.g., 6GB RTX cards).
     """
 
+    # Monocular: every frame has its own relative scale/shift
+    temporally_consistent = False
+
     def __init__(
         self,
         model_name: str = DEFAULT_DA3_MODEL,
@@ -185,6 +188,7 @@ class VideoDepthEstimatorDA3:
         target_fps: int = 30,
         input_size: int = 518,
         fp32: bool = False,
+        normalize: bool = True,
     ) -> np.ndarray:
         """
         Estimate depth for a batch of video frames.
@@ -196,9 +200,11 @@ class VideoDepthEstimatorDA3:
             target_fps: Target frame rate (unused in DA3, kept for API compatibility)
             input_size: Processing resolution for DA3 (controls quality vs speed)
             fp32: Use FP32 instead of FP16 (unused in DA3)
+            normalize: Return per-frame 0-1 normalized inverse depth. If False, return
+                raw inverse depth (each frame with its own relative scale).
 
         Returns:
-            Depth maps array (shape: [N, H, W], normalized 0-1 range)
+            Inverse depth maps array (shape: [N, H, W], larger = nearer)
         """
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
@@ -251,26 +257,27 @@ class VideoDepthEstimatorDA3:
                 else:
                     resized_depth_maps.append(depth_map)
 
-            # Normalize depth maps to 0-1 range
-            return self._normalize_depths(np.array(resized_depth_maps))
+            depths = np.array(resized_depth_maps)
+            return self._normalize_depths(depths) if normalize else self._to_inverse_depth(depths)
 
         except Exception as e:
             raise RuntimeError(f"DA3 depth estimation failed: {e}")
 
-    def _normalize_depths(self, depths: np.ndarray) -> np.ndarray:
+    def _to_inverse_depth(self, depths: Any) -> np.ndarray:
         """
-        Convert DA3 depth maps to normalized inverse depth (0-1 range, 1 = nearest).
+        Convert DA3 depth maps to raw inverse depth (float32, larger = nearer).
 
         DA3 outputs depth (larger = farther); the stereo pipeline expects inverse depth,
         the same convention Video-Depth-Anything uses.
         """
-        # Convert to numpy if torch tensor
         if torch.is_tensor(depths):
             depths = depths.cpu().numpy()
+        return np.stack([depth_to_inverse_depth(d) for d in depths]).astype(np.float32)
 
+    def _normalize_depths(self, depths: Any) -> np.ndarray:
+        """Convert to inverse depth and normalize each frame to 0-1 (1 = nearest)."""
         normalized_depths = []
-        for raw_depth in depths:
-            depth = depth_to_inverse_depth(raw_depth)
+        for depth in self._to_inverse_depth(depths):
             if depth.max() == depth.min():
                 normalized = np.zeros_like(depth)
             else:

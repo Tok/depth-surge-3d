@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Depth flicker / temporal consistency**: Video-Depth-Anything's temporal consistency was undone
+  by the pipeline. Videos were cut into independent ~32-frame chunks, each with its own
+  depth scale, and every frame was then normalized to 0-1 separately. On a 10 s test clip the
+  largest frame-to-frame depth jump drops from 0.0148 to 0.0021 (7x) and the 99th percentile from
+  0.0079 to 0.0020 (4x), with peak RAM unchanged.
+  - Temporally consistent models (VDA) now get long, RAM-sized chunks; consecutive chunks overlap
+    by `temporal_window_overlap` frames (the web UI slider now has an effect), are scale/shift
+    aligned on the overlap and crossfaded.
+  - Per-frame models (DA3) align every frame to a running reference: about 23% less frame-to-frame
+    flicker on the same clip.
+  - One robust normalization range (0.5th-99.5th percentile) for the whole video replaces
+    per-frame min-max. Old depth cache entries are invalidated (cache format version 3).
+  - Removed the VDA wrapper's own 32-frame chunking, which also skipped alignment;
+    Video-Depth-Anything handles long inputs itself with constant VRAM.
+
 ## [0.10.0] - 2026-11-06
 
 ### Fixed

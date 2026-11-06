@@ -69,10 +69,9 @@ class TestVideoDepthEstimator:
         assert estimator._get_model_type(estimator.model_path) == "vitl"
 
     def test_normalize_depths(self):
-        """Test depth map normalization."""
+        """One normalization range for the whole sequence (no per-frame rescaling)."""
         estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
 
-        # Create test depth maps
         depths = np.array(
             [
                 [[0.0, 0.5, 1.0], [0.2, 0.8, 0.6]],
@@ -82,16 +81,22 @@ class TestVideoDepthEstimator:
 
         normalized = estimator._normalize_depths(depths)
 
-        # Check shape is preserved
         assert normalized.shape == depths.shape
+        assert np.all(normalized >= 0.0) and np.all(normalized <= 1.0)
+        # frame 0 is entirely nearer-is-smaller than frame 1, so it stays darker
+        assert normalized[0].max() < normalized[1].max()
+        assert normalized[0].mean() < normalized[1].mean()
 
-        # Check all values are in [0, 1]
-        assert np.all(normalized >= 0.0)
-        assert np.all(normalized <= 1.0)
+    def test_temporally_consistent_flag(self):
+        assert VideoDepthEstimator.temporally_consistent is True
 
-        # Check each depth map is normalized independently
-        assert np.isclose(normalized[0].min(), 0.0)
-        assert np.isclose(normalized[0].max(), 1.0)
+    def test_metric_output_inverted(self):
+        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu", metric=True)
+        depths = np.array([[[1.0, 2.0], [4.0, 8.0]]], dtype=np.float32)
+
+        inverse = estimator._to_inverse_depth(depths)
+
+        assert inverse[0, 0, 0] > inverse[0, 1, 1]  # 1 m is nearer than 8 m
 
     def test_normalize_depths_flat_depth(self):
         """Test normalization of flat depth map."""
@@ -112,33 +117,6 @@ class TestVideoDepthEstimator:
         info = estimator.get_model_info()
 
         assert info == {}
-
-    def test_determine_chunk_overlap_first_chunk(self):
-        """Test chunk overlap determination for first chunk."""
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-
-        depths = np.zeros((32, 100, 100))
-        keep = estimator._determine_chunk_overlap(0, 32, 100, 4, depths)
-
-        assert len(keep) == 32  # Keep all frames from first chunk
-
-    def test_determine_chunk_overlap_last_chunk(self):
-        """Test chunk overlap determination for last chunk."""
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-
-        depths = np.zeros((32, 100, 100))
-        keep = estimator._determine_chunk_overlap(68, 100, 100, 4, depths)
-
-        assert len(keep) == 28  # Skip 4 overlap frames
-
-    def test_determine_chunk_overlap_middle_chunk(self):
-        """Test chunk overlap determination for middle chunk."""
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-
-        depths = np.zeros((32, 100, 100))
-        keep = estimator._determine_chunk_overlap(28, 60, 100, 4, depths)
-
-        assert len(keep) == 28  # Skip 4 overlap frames
 
     @patch("torch.cuda.is_available", return_value=True)
     @patch("torch.cuda.empty_cache")
@@ -344,217 +322,78 @@ class TestGetModelInfo:
         assert info["temporal_consistency"] is True
 
 
-class TestEstimateDepthBatchDecisionLogic:
-    """Test estimate_depth_batch chunking decision logic."""
+class TestEstimateDepthBatch:
+    """Test estimate_depth_batch."""
 
-    def test_estimate_depth_batch_model_not_loaded(self):
-        """Test batch estimation when model not loaded."""
-        import numpy as np
-        import pytest
-
+    def _estimator(self, depths=None):
         estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-        frames = np.random.rand(10, 480, 640, 3)
+        estimator.model = MagicMock()
+        if depths is not None:
+            estimator.model.infer_video_depth.return_value = (depths, 24)
+        return estimator
 
+    def test_model_not_loaded(self):
+        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
         with pytest.raises(RuntimeError, match="Model not loaded"):
-            estimator.estimate_depth_batch(frames)
+            estimator.estimate_depth_batch(np.zeros((2, 8, 8, 3), np.uint8))
 
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_estimate_depth_batch_uses_chunking_for_large_video(self, mock_cuda):
-        """Test that large videos trigger chunking on CUDA."""
-        import numpy as np
+    def test_whole_sequence_in_one_call(self):
+        """VDA aligns its own windows, so long inputs are not split up here."""
+        raw = np.random.rand(70, 12, 16).astype(np.float32) * 5
+        estimator = self._estimator(raw)
 
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cuda")
-        estimator.model = MagicMock()
+        with patch.object(estimator, "_suppress_model_output", MagicMock()):
+            result = estimator.estimate_depth_batch(np.zeros((70, 12, 16, 3), np.uint8))
 
-        # Large video (>60 frames) should trigger chunking
-        frames = np.random.rand(70, 480, 640, 3).astype(np.uint8)
-
-        with patch.object(estimator, "_estimate_depth_chunked") as mock_chunked:
-            mock_chunked.return_value = np.random.rand(70, 480, 640)
-            result = estimator.estimate_depth_batch(frames)
-
-            mock_chunked.assert_called_once()
-            assert result.shape == (70, 480, 640)
-
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_estimate_depth_batch_uses_chunking_for_high_res(self, mock_cuda):
-        """Test that high-res videos trigger chunking on CUDA."""
-        import numpy as np
-
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cuda")
-        estimator.model = MagicMock()
-
-        # High-res video (>2K) with 70 frames should trigger chunking
-        frames = np.random.rand(70, 2160, 3840, 3).astype(np.uint8)
-
-        with patch.object(estimator, "_estimate_depth_chunked") as mock_chunked:
-            mock_chunked.return_value = np.random.rand(70, 2160, 3840)
-            estimator.estimate_depth_batch(frames)
-
-            mock_chunked.assert_called_once()
-
-    @patch("torch.cuda.is_available", return_value=False)
-    def test_estimate_depth_batch_single_batch_on_cpu(self, mock_cuda):
-        """Test that CPU processing uses single batch."""
-        import numpy as np
-
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-        estimator.model = MagicMock()
-
-        frames = np.random.rand(50, 480, 640, 3).astype(np.uint8)
-
-        with patch.object(estimator, "_estimate_depth_single_batch") as mock_single:
-            mock_single.return_value = np.random.rand(50, 480, 640)
-            estimator.estimate_depth_batch(frames)
-
-            mock_single.assert_called_once()
-
-
-class TestEstimateDepthSingleBatch:
-    """Test _estimate_depth_single_batch method."""
-
-    def test_estimate_depth_single_batch_success(self):
-        """Test single batch depth estimation."""
-        import numpy as np
-
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-        estimator.model = MagicMock()
-
-        # Mock infer_video_depth to return depth maps
-        mock_depths = np.random.rand(10, 480, 640)
-        estimator.model.infer_video_depth.return_value = (mock_depths, None)
-
-        frames = np.random.rand(10, 480, 640, 3).astype(np.uint8)
-
-        with patch("builtins.open", MagicMock()):
-            result = estimator._estimate_depth_single_batch(frames, 30, 518, False)
-
-        assert result.shape == (10, 480, 640)
         estimator.model.infer_video_depth.assert_called_once()
+        assert result.shape == (70, 12, 16)
+        assert 0.0 <= result.min() and result.max() <= 1.0
 
-    def test_estimate_depth_single_batch_exception(self):
-        """Test single batch with model exception."""
-        import numpy as np
-        import pytest
+    def test_raw_output(self):
+        raw = np.random.rand(3, 12, 16).astype(np.float32) * 5
+        estimator = self._estimator(raw)
 
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-        estimator.model = MagicMock()
-        estimator.model.infer_video_depth.side_effect = RuntimeError("CUDA OOM")
+        with patch.object(estimator, "_suppress_model_output", MagicMock()):
+            result = estimator.estimate_depth_batch(
+                np.zeros((3, 12, 16, 3), np.uint8), normalize=False
+            )
 
-        frames = np.random.rand(10, 480, 640, 3).astype(np.uint8)
+        np.testing.assert_allclose(result, raw)
 
-        with patch("builtins.open", MagicMock()):
-            with pytest.raises(RuntimeError, match="Video depth estimation failed"):
-                estimator._estimate_depth_single_batch(frames, 30, 518, False)
+    def test_bgr_to_rgb(self):
+        estimator = self._estimator(np.zeros((1, 2, 2), np.float32))
+        frames = np.zeros((1, 2, 2, 3), np.uint8)
+        frames[..., 0] = 255  # blue in BGR
 
+        with patch.object(estimator, "_suppress_model_output", MagicMock()):
+            estimator.estimate_depth_batch(frames)
 
-class TestEstimateDepthChunked:
-    """Test _estimate_depth_chunked method."""
+        sent = estimator.model.infer_video_depth.call_args[0][0]
+        assert sent[0, 0, 0, 2] == 255 and sent[0, 0, 0, 0] == 0
 
-    @patch("torch.cuda.is_available", return_value=True)
     @patch("torch.cuda.empty_cache")
-    def test_estimate_depth_chunked_success(self, mock_cache, mock_cuda):
-        """Test chunked depth estimation."""
-        import numpy as np
+    def test_oom_retries_at_lower_resolution(self, mock_cache):
+        estimator = self._estimator()
+        estimator.model.infer_video_depth.side_effect = [
+            RuntimeError("CUDA out of memory"),
+            (np.random.rand(2, 4, 4).astype(np.float32), 24),
+        ]
 
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cuda")
-        estimator.model = MagicMock()
+        with patch.object(estimator, "_suppress_model_output", MagicMock()):
+            result = estimator.estimate_depth_batch(
+                np.zeros((2, 4, 4, 3), np.uint8), input_size=1024
+            )
 
-        # Mock _process_depth_chunk to return chunk depths
-        def mock_process_chunk(frames_rgb, fps, size, fp32):
-            return np.random.rand(len(frames_rgb), 480, 640)
+        assert result.shape == (2, 4, 4)
+        assert estimator.model.infer_video_depth.call_args[1]["input_size"] == 512
 
-        estimator._process_depth_chunk = mock_process_chunk
+    def test_other_errors_raised(self):
+        estimator = self._estimator()
+        estimator.model.infer_video_depth.side_effect = RuntimeError("bad input")
 
-        # 50 frames should be split into chunks
-        frames = np.random.rand(50, 480, 640, 3).astype(np.uint8)
-
-        with patch("src.depth_surge_3d.core.constants.DEPTH_MODEL_CHUNK_SIZE", 24):
-            result = estimator._estimate_depth_chunked(frames, 30, 518, False)
-
-        assert result.shape == (50, 480, 640)
-        # Should clear cache between chunks
-        assert mock_cache.called
-
-    @patch("torch.cuda.is_available", return_value=True)
-    @patch("torch.cuda.empty_cache")
-    def test_estimate_depth_chunked_with_oom_retry(self, mock_cache, mock_cuda):
-        """Test chunked processing with OOM error and retry."""
-        import numpy as np
-
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cuda")
-        estimator.model = MagicMock()
-
-        # First chunk fails with OOM, retry succeeds
-        call_count = 0
-
-        def mock_process_chunk(frames_rgb, fps, size, fp32):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise RuntimeError("CUDA out of memory")
-            return np.random.rand(len(frames_rgb), 480, 640)
-
-        estimator._process_depth_chunk = mock_process_chunk
-
-        # Mock retry method
-        def mock_retry(frames_rgb, fps, size, fp32):
-            return np.random.rand(len(frames_rgb), 480, 640)
-
-        estimator._retry_chunk_with_reduced_resolution = mock_retry
-
-        frames = np.random.rand(30, 480, 640, 3).astype(np.uint8)
-
-        with patch("src.depth_surge_3d.core.constants.DEPTH_MODEL_CHUNK_SIZE", 24):
-            result = estimator._estimate_depth_chunked(frames, 30, 518, False)
-
-        assert result.shape == (30, 480, 640)
-
-    @patch("torch.cuda.is_available", return_value=True)
-    @patch("torch.cuda.empty_cache")
-    def test_estimate_depth_chunked_non_oom_error_reraise(self, mock_cache, mock_cuda):
-        """Test chunked processing re-raises non-OOM errors."""
-        import numpy as np
-
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cuda")
-        estimator.model = MagicMock()
-
-        # Raise a non-OOM error
-        def mock_process_chunk(frames_rgb, fps, size, fp32):
-            raise ValueError("Some other error")
-
-        estimator._process_depth_chunk = mock_process_chunk
-
-        frames = np.random.rand(30, 480, 640, 3).astype(np.uint8)
-
-        with patch("src.depth_surge_3d.core.constants.DEPTH_MODEL_CHUNK_SIZE", 24):
-            with pytest.raises(ValueError, match="Some other error"):
-                estimator._estimate_depth_chunked(frames, 30, 518, False)
-
-
-class TestProcessDepthChunk:
-    """Test _process_depth_chunk method."""
-
-    def test_process_depth_chunk_with_output_suppression(self):
-        """Test chunk processing suppresses output."""
-        import numpy as np
-
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-        estimator.model = MagicMock()
-
-        mock_depths = np.random.rand(10, 480, 640)
-        estimator.model.infer_video_depth.return_value = (mock_depths, None)
-
-        frames_rgb = np.random.rand(10, 480, 640, 3).astype(np.uint8)
-
-        with patch.object(estimator, "_suppress_model_output") as mock_suppress:
-            mock_suppress.return_value.__enter__ = MagicMock()
-            mock_suppress.return_value.__exit__ = MagicMock()
-
-            result = estimator._process_depth_chunk(frames_rgb, 30, 518, False)
-
-            assert result.shape == (10, 480, 640)
-            mock_suppress.assert_called_once()
+        with patch.object(estimator, "_suppress_model_output", MagicMock()):
+            with pytest.raises(RuntimeError, match="Video depth estimation failed: bad input"):
+                estimator.estimate_depth_batch(np.zeros((2, 4, 4, 3), np.uint8))
 
 
 class TestRetryChunkWithReducedResolution:
