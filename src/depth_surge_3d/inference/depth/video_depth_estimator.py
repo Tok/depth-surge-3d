@@ -7,6 +7,7 @@ This module handles loading and interfacing with the Video-Depth-Anything model,
 which provides temporal consistency for video depth estimation.
 """
 
+import gc
 import os
 import sys
 import urllib.request
@@ -16,19 +17,25 @@ import torch
 import numpy as np
 
 from ...utils.system.console import success as console_success, error as console_error
+from ...utils.imaging.image_processing import depth_to_inverse_depth
+from ...utils.system.xformers_guard import ensure_attention_backend
+from ...utils.domain.depth_alignment import normalize_depth_sequence
 from ...core.constants import (
     DEFAULT_MODEL_PATH,
     VIDEO_DEPTH_ANYTHING_REPO_DIR,
     MODEL_CONFIGS,
     MODEL_DOWNLOAD_URLS,
+    MODEL_DOWNLOAD_URLS_METRIC,
     DEPTH_MODEL_INPUT_SIZE,
-    DEPTH_MODEL_CHUNK_SIZE,
     DEPTH_MODEL_DEFAULT_FPS,
 )
 
 
 class VideoDepthEstimator:
     """Handles video depth estimation using Video-Depth-Anything models."""
+
+    # Output scale/shift is consistent across all frames of one estimate_depth_batch call
+    temporally_consistent = True
 
     def __init__(
         self,
@@ -42,7 +49,7 @@ class VideoDepthEstimator:
         self.metric = metric
         self.temporal_window_overlap = temporal_window_overlap
         self.model = None
-        self.model_config = None
+        self.model_config: dict[str, Any] | None = None
 
     def _determine_device(self, device: str) -> str:
         """Determine the best device to use for inference."""
@@ -73,15 +80,20 @@ class VideoDepthEstimator:
                 print(f"Cannot determine model type from path: {self.model_path}")
                 return False
 
-            self.model_config = MODEL_CONFIGS[model_type]  # type: ignore[assignment]
+            self.model_config = MODEL_CONFIGS[model_type]
 
             # Import and load model
             repo_path = Path(VIDEO_DEPTH_ANYTHING_REPO_DIR)
             if str(repo_path) not in sys.path:
                 sys.path.insert(0, str(repo_path))
 
+            # Use torch SDPA if xformers' kernels are missing or don't match this torch
+            if ensure_attention_backend() == "sdpa":
+                print("  Attention backend: PyTorch SDPA (xformers kernels unavailable)")
+
             from video_depth_anything.video_depth import VideoDepthAnything
 
+            assert self.model_config is not None
             self.model = VideoDepthAnything(**self.model_config, metric=self.metric)
 
             # Load state dict and fix key names if needed
@@ -106,7 +118,7 @@ class VideoDepthEstimator:
         except Exception as e:
             print(f"Error loading video model: {e}")
             print("Try downloading the model manually from:")
-            print(f"  {MODEL_DOWNLOAD_URLS.get(model_type, 'Unknown')}")  # type: ignore[arg-type]
+            print(f"  {self._download_url() or 'Unknown'}")
             return False
 
     def _ensure_dependencies(self) -> bool:
@@ -129,28 +141,35 @@ class VideoDepthEstimator:
 
         return True
 
+    def _download_url(self) -> str | None:
+        """Hugging Face URL for this estimator's model file (relative or metric weights)."""
+        model_type = self._get_model_type(self.model_path)
+        is_metric = self.metric or "metric" in Path(self.model_path).name.lower()
+        urls = MODEL_DOWNLOAD_URLS_METRIC if is_metric else MODEL_DOWNLOAD_URLS
+        return urls.get(model_type) if model_type else None
+
     def _auto_download_model(self) -> bool:
         """Auto-download the model if missing."""
         print("Attempting to download video model automatically...")
 
-        # Create model directory
-        model_dir = Path(self.model_path).parent
-        model_dir.mkdir(parents=True, exist_ok=True)
-
-        # Determine download URL
-        model_type = self._get_model_type(self.model_path)
-        if not model_type or model_type not in MODEL_DOWNLOAD_URLS:
+        download_url = self._download_url()
+        if not download_url:
             print("Cannot determine model download URL")
             return False
 
-        download_url = MODEL_DOWNLOAD_URLS[model_type]
+        model_file = Path(self.model_path)
+        model_file.parent.mkdir(parents=True, exist_ok=True)
+        partial = model_file.with_name(model_file.name + ".part")
 
         try:
             print(f"Downloading video model to {self.model_path}...")
-            urllib.request.urlretrieve(download_url, self.model_path)
+            # Download to a temporary name so an interrupted download isn't mistaken for a model
+            urllib.request.urlretrieve(download_url, partial)
+            partial.replace(model_file)
             print(console_success("Video model downloaded successfully"))
             return True
         except Exception as e:
+            partial.unlink(missing_ok=True)
             print(console_error(f"Auto-download failed: {e}"))
             print(f"Please download manually from: {download_url}")
             return False
@@ -175,126 +194,52 @@ class VideoDepthEstimator:
         target_fps: int = DEPTH_MODEL_DEFAULT_FPS,
         input_size: int = DEPTH_MODEL_INPUT_SIZE,
         fp32: bool = False,
+        normalize: bool = True,
     ) -> np.ndarray:
         """
-        Estimate depth for a batch of video frames with temporal consistency.
+        Estimate temporally consistent depth for a sequence of frames.
 
-        Automatically chunks large videos to avoid OOM errors.
+        Video-Depth-Anything processes any number of frames in overlapping 32-frame
+        windows with constant VRAM and aligns scale/shift between windows itself, so the
+        whole sequence goes through in one call. Long videos are split (with alignment)
+        by DepthMapProcessor to bound RAM.
 
         Args:
             frames: Input frames array (shape: [N, H, W, 3], BGR format)
             target_fps: Target frame rate for processing
             input_size: Input size for the model (default: DEPTH_MODEL_INPUT_SIZE)
             fp32: Use FP32 instead of FP16 (slower but more accurate)
+            normalize: Return 0-1 normalized inverse depth (one range for the whole
+                sequence). If False, return raw inverse depth (relative scale/shift).
 
         Returns:
-            Depth maps array (shape: [N, H, W], normalized 0-1 range)
+            Inverse depth maps array (shape: [N, H, W], larger = nearer)
         """
         if self.model is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
-        # Check available memory and determine if we need to chunk
-        num_frames = len(frames)
-        frame_h, frame_w = frames[0].shape[:2]
-
-        # Estimate memory usage per frame (rough heuristic)
-        # High-res videos (>2K) need chunking on GPUs with <16GB VRAM
-        needs_chunking = (
-            self.device == "cuda"
-            and torch.cuda.is_available()
-            and (frame_h * frame_w > 2000 * 2000 or num_frames > 60)
-        )
-
-        if needs_chunking and num_frames > DEPTH_MODEL_CHUNK_SIZE:
-            # Process in overlapping chunks to maintain temporal consistency
-            print(f"Using memory-efficient chunked processing for {num_frames} frames")
-            return self._estimate_depth_chunked(frames, target_fps, input_size, fp32)
-        else:
-            # Process all at once (original behavior)
-            return self._estimate_depth_single_batch(frames, target_fps, input_size, fp32)
-
-    def _estimate_depth_single_batch(
-        self, frames: np.ndarray, target_fps: int, input_size: int, fp32: bool
-    ) -> np.ndarray:
-        """Process all frames in a single batch."""
+        frames_rgb = frames[..., ::-1].copy()
+        depths = None
         try:
-            # Convert BGR to RGB
-            frames_rgb = frames[..., ::-1].copy()
-
-            # Suppress tqdm output from Video-Depth-Anything
-            import sys
-            import os
-
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            try:
-                sys.stdout = open(os.devnull, "w")
-                sys.stderr = open(os.devnull, "w")
-
-                # Call the video depth inference method
-                depths, _ = self.model.infer_video_depth(  # type: ignore[attr-defined]
-                    frames_rgb,
-                    target_fps,
-                    input_size=input_size,
-                    device=self.device,
-                    fp32=fp32,
-                )
-            finally:
-                sys.stdout.close()
-                sys.stderr.close()
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
-
-            # Normalize depth maps
-            return self._normalize_depths(depths)
-
-        except Exception as e:
-            raise RuntimeError(f"Video depth estimation failed: {e}")
-
-    def _estimate_depth_chunked(
-        self, frames: np.ndarray, target_fps: int, input_size: int, fp32: bool
-    ) -> np.ndarray:
-        """Process frames in overlapping chunks to save memory."""
-        chunk_size = DEPTH_MODEL_CHUNK_SIZE
-        overlap = self.temporal_window_overlap  # Overlap frames for smooth transitions
-
-        all_depths: list[Any] = []
-        num_frames = len(frames)
-
-        for chunk_start in range(0, num_frames, chunk_size - overlap):
-            chunk_end = min(chunk_start + chunk_size, num_frames)
-            chunk_frames = frames[chunk_start:chunk_end]
-
-            print(f"  Processing frames {chunk_start + 1}-{chunk_end}/{num_frames}")
-
-            # Convert BGR to RGB
-            frames_rgb = chunk_frames[..., ::-1].copy()
-
-            try:
-                # Process chunk with output suppression
-                depths = self._process_depth_chunk(frames_rgb, target_fps, input_size, fp32)
-
-            except RuntimeError as e:
-                if "out of memory" in str(e).lower():
-                    # Retry with reduced resolution
-                    depths = self._retry_chunk_with_reduced_resolution(
-                        frames_rgb, target_fps, input_size, fp32
-                    )
-                else:
-                    raise
-
-            # Determine which frames to keep (handle overlap)
-            keep_depths = self._determine_chunk_overlap(
-                chunk_start, chunk_end, num_frames, overlap, depths
-            )
-            all_depths.extend(keep_depths)
-
-            # Clear CUDA cache between chunks
+            depths = self._infer(frames_rgb, target_fps, input_size, fp32)
+        except RuntimeError as e:
+            if "out of memory" not in str(e).lower():
+                raise RuntimeError(f"Video depth estimation failed: {e}")
+        finally:
             if self.device == "cuda" and torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        # Normalize all depth maps
-        return self._normalize_depths(np.array(all_depths))
+        if depths is None:
+            # Retry outside the except block: while handling the exception its traceback still
+            # references the failed attempt's GPU tensors, so that memory couldn't be freed and
+            # the retry ran out of memory too
+            gc.collect()
+            depths = self._retry_chunk_with_reduced_resolution(
+                frames_rgb, target_fps, input_size, fp32
+            )
+
+        inverse = self._to_inverse_depth(depths)
+        return normalize_depth_sequence(inverse) if normalize else inverse
 
     def _suppress_model_output(self):
         """Context manager to suppress model output streams."""
@@ -318,21 +263,10 @@ class VideoDepthEstimator:
 
         return suppress()
 
-    def _determine_chunk_overlap(
-        self, chunk_start: int, chunk_end: int, num_frames: int, overlap: int, depths
-    ) -> np.ndarray:
-        """Determine which frames to keep from chunk based on overlap."""
-        if chunk_start == 0:
-            return depths  # First chunk: keep all
-        elif chunk_end == num_frames:
-            return depths[overlap:]  # Last chunk: skip overlap frames
-        else:
-            return depths[overlap:]  # Middle chunks: skip overlap frames
-
-    def _process_depth_chunk(
+    def _infer(
         self, frames_rgb: np.ndarray, target_fps: int, input_size: int, fp32: bool
     ) -> np.ndarray:
-        """Process a single chunk for depth estimation with output suppression."""
+        """Run the model on RGB frames with its progress output suppressed."""
         with self._suppress_model_output():
             depths, _ = self.model.infer_video_depth(  # type: ignore[attr-defined]
                 frames_rgb,
@@ -347,29 +281,26 @@ class VideoDepthEstimator:
         self, frames_rgb: np.ndarray, target_fps: int, input_size: int, fp32: bool
     ) -> np.ndarray:
         """Retry depth processing with reduced input size on OOM error."""
-        print("  OOM error, retrying with reduced resolution...")
+        reduced = max(384, input_size // 2)
+        print(f"  Out of GPU memory, retrying with depth resolution {reduced}...")
         torch.cuda.empty_cache()
+        return self._infer(frames_rgb, target_fps, reduced, fp32)
 
-        with self._suppress_model_output():
-            depths, _ = self.model.infer_video_depth(  # type: ignore[attr-defined]
-                frames_rgb,
-                target_fps,
-                input_size=max(384, input_size // 2),
-                device=self.device,
-                fp32=fp32,
-            )
+    def _to_inverse_depth(self, depths: np.ndarray) -> np.ndarray:
+        """
+        Convert model output to raw inverse depth (float32, larger = nearer).
+
+        Relative models already output inverse depth (disparity); metric models output
+        depth in meters and are inverted.
+        """
+        depths = np.asarray(depths, dtype=np.float32)
+        if self.metric:
+            return np.stack([depth_to_inverse_depth(d) for d in depths])
         return depths
 
     def _normalize_depths(self, depths: np.ndarray) -> np.ndarray:
-        """Normalize depth maps to 0-1 range."""
-        normalized_depths = []
-        for depth in depths:
-            if depth.max() == depth.min():
-                normalized = np.zeros_like(depth)
-            else:
-                normalized = (depth - depth.min()) / (depth.max() - depth.min())
-            normalized_depths.append(np.clip(normalized, 0.0, 1.0))
-        return np.array(normalized_depths)
+        """Normalize raw model output to 0-1 inverse depth with one range for all frames."""
+        return normalize_depth_sequence(self._to_inverse_depth(depths))
 
     def get_model_info(self) -> dict[str, Any]:
         """Get information about the loaded model."""
@@ -412,7 +343,8 @@ def create_video_depth_estimator(
         model_path: Path to model file (uses default if None)
         device: Device to use for inference
         metric: Use metric depth model (true depth values)
-        temporal_window_overlap: Number of frames to overlap between chunks (V2 only)
+        temporal_window_overlap: Unused (chunk overlap is settings["temporal_window_overlap"]
+            in DepthMapProcessor); kept for API compatibility
 
     Returns:
         Configured VideoDepthEstimator instance

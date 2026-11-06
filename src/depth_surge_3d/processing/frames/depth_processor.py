@@ -30,14 +30,19 @@ from ...core.constants import (
     CHUNK_SIZE_720P,
     CHUNK_SIZE_SMALL,
     PREVIEW_FRAME_SAMPLE_RATE,
+    DEPTH_MODEL_CHUNK_OVERLAP,
+    DEPTH_CHUNK_RAM_BUDGET_BYTES,
+    DEPTH_CHUNK_BYTES_PER_PIXEL,
+    DEPTH_CHUNK_MIN_FRAMES,
+    DEPTH_CHUNK_MAX_FRAMES,
 )
+from ...utils.domain.depth_alignment import DepthSequenceAligner, normalize_depth_sequence
 from ...utils import (
     get_cached_depth_maps,
     save_depth_maps_to_cache,
     get_cache_size,
 )
 from ...utils import calculate_optimal_chunk_size, get_vram_info
-from ...utils import resize_image
 
 
 class DepthMapProcessor:
@@ -254,11 +259,11 @@ class DepthMapProcessor:
 
     def _load_chunk_frames(self, chunk_files: list[Path], settings: dict[str, Any]) -> list | None:
         """
-        Load chunk of frames into memory.
+        Load chunk of frames into memory at source resolution.
 
         Args:
             chunk_files: List of frame file paths for this chunk
-            settings: Processing settings
+            settings: Processing settings (unused, kept for API compatibility)
 
         Returns:
             List of loaded frame images
@@ -273,61 +278,71 @@ class DepthMapProcessor:
                 print(f"Warning: Could not load {frame_file}")
                 continue
 
-            # Apply super sampling if needed
-            if settings["super_sample"] != "none":
-                target_width = max(frame.shape[1], settings["per_eye_width"] * 2)
-                target_height = max(frame.shape[0], settings["per_eye_height"] * 2)
-                frame = resize_image(frame, target_width, target_height)
-
+            # Frames go to the depth model at source resolution. The model resizes to
+            # input_size internally, so upscaling here only wastes memory; super sampling
+            # is applied later, during stereo generation (see render_stereo_pair).
             chunk_frames.append(frame)
 
         return chunk_frames if chunk_frames else None
 
-    def _process_chunk_depth(
-        self,
-        chunk_frames: list,
-        chunk_files: list[Path],
-        settings: dict[str, Any],
-        directories: dict[str, Path],
-        input_size: int,
-        progress_tracker=None,
-    ) -> np.ndarray | None:
+    def _estimate_chunk(
+        self, chunk_frames: list, settings: dict[str, Any], input_size: int
+    ) -> np.ndarray:
         """
-        Process chunk with depth estimation.
+        Run depth estimation on a chunk and return raw inverse depth.
+
+        Normalization happens once for the whole video after the chunks are aligned
+        (see DepthSequenceAligner), so the estimator is asked for unnormalized output.
 
         Args:
             chunk_frames: List of frame images
-            chunk_files: List of frame file paths
             settings: Processing settings
-            directories: Dictionary of processing directories
-            input_size: Depth map resolution
-            progress_tracker: Optional progress tracker
+            input_size: Depth model input resolution
 
         Returns:
-            Numpy array of depth maps
+            Raw inverse depth maps [N, H, W]
 
         Side effects:
             - GPU inference
-            - Progress updates
         """
-        # Normalize target_fps
         target_fps = settings.get("target_fps", DEFAULT_FALLBACK_FPS)
         if target_fps is None or str(target_fps) == "None" or target_fps == "original":
             target_fps = 30
 
-        # Estimate depth
-        chunk_frames_array = np.array(chunk_frames)
-        chunk_depth_maps = self.depth_estimator.estimate_depth_batch(
-            chunk_frames_array, target_fps=target_fps, input_size=input_size, fp32=False
+        return self.depth_estimator.estimate_depth_batch(
+            np.array(chunk_frames),
+            target_fps=target_fps,
+            input_size=input_size,
+            fp32=False,
+            normalize=False,
         )
 
-        # Save depth maps immediately to free memory
-        if settings["keep_intermediates"] and "depth_maps" in directories:
-            self._save_depth_maps(
-                chunk_depth_maps, chunk_files, directories["depth_maps"], progress_tracker
-            )
+    @staticmethod
+    def _temporal_chunk_size(frame_w: int, frame_h: int) -> int:
+        """
+        PURE: Chunk length for temporally consistent models, bounded by system RAM.
 
-        return chunk_depth_maps
+        Their VRAM use doesn't depend on the chunk length (fixed internal windows), but
+        full-resolution frames and depth maps for the whole chunk are held in RAM.
+        """
+        frames_in_budget = DEPTH_CHUNK_RAM_BUDGET_BYTES // max(
+            1, frame_w * frame_h * DEPTH_CHUNK_BYTES_PER_PIXEL
+        )
+        return int(min(max(frames_in_budget, DEPTH_CHUNK_MIN_FRAMES), DEPTH_CHUNK_MAX_FRAMES))
+
+    @staticmethod
+    def _chunk_overlap(settings: dict[str, Any], chunk_size: int) -> int:
+        """PURE: Frames shared by consecutive chunks for scale/shift alignment."""
+        requested = settings.get("temporal_window_overlap") or DEPTH_MODEL_CHUNK_OVERLAP
+        return int(min(max(int(requested), 4), chunk_size // 2))
+
+    def _send_chunk_preview(self, depth_chunk: np.ndarray, frame_num: int, progress_tracker):
+        """Send a live preview of the newest depth map (normalized on its own)."""
+        if not progress_tracker or not hasattr(progress_tracker, "send_preview_frame_from_array"):
+            return
+        preview = normalize_depth_sequence(depth_chunk[-1:])[0]
+        preview_bgr = cv2.cvtColor((preview * DEPTH_MAP_SCALE).astype("uint8"), cv2.COLOR_GRAY2BGR)
+        progress_tracker.send_preview_frame_from_array(preview_bgr, "depth_map", frame_num)
 
     def _generate_depth_maps_chunked(
         self,
@@ -363,40 +378,47 @@ class DepthMapProcessor:
         depth_resolution = settings.get("depth_resolution", "auto")
         chunk_size, input_size = self._determine_chunk_params(frame_w, frame_h, depth_resolution)
 
-        print(f"  Processing in chunks of {chunk_size} frames (input_size={input_size})...")
+        # Temporally consistent models (VDA): long chunks, aligned on overlapping frames.
+        # Per-frame models (DA3): VRAM-sized chunks, every frame aligned to its predecessors.
+        temporal = getattr(self.depth_estimator, "temporally_consistent", False) is True
+        overlap = 0
+        if temporal:
+            chunk_size = self._temporal_chunk_size(frame_w, frame_h)
+            overlap = self._chunk_overlap(settings, chunk_size)
+
+        print(
+            f"  Processing in chunks of {chunk_size} frames "
+            f"(input_size={input_size}, overlap={overlap})..."
+        )
 
         # Clear GPU cache before processing
         self._clear_gpu_memory()
 
-        # Process all chunks
-        all_depth_maps: list[Any] = []
+        aligner = DepthSequenceAligner(per_frame=not temporal)
         num_frames = len(frame_files)
         total_chunks = (num_frames + chunk_size - 1) // chunk_size
 
         for chunk_start in range(0, num_frames, chunk_size):
             chunk_end = min(chunk_start + chunk_size, num_frames)
-            chunk_files = frame_files[chunk_start:chunk_end]
+            load_start = max(0, chunk_start - overlap)
+            chunk_files = frame_files[load_start:chunk_end]
             chunk_num = chunk_start // chunk_size + 1
 
-            # Load chunk frames
+            # Load chunk frames (including the overlap with the previous chunk)
             chunk_frames = self._load_chunk_frames(chunk_files, settings)
-            if not chunk_frames:
-                print("Error: No frames loaded in chunk")
+            if not chunk_frames or len(chunk_frames) != len(chunk_files):
+                print("Error: Could not load all frames in chunk")
                 return None
 
-            # Process chunk for depth
             try:
-                chunk_depth_maps = self._process_chunk_depth(
-                    chunk_frames, chunk_files, settings, directories, input_size, progress_tracker
-                )
-                all_depth_maps.extend(chunk_depth_maps)  # type: ignore[arg-type]
+                raw_depths = self._estimate_chunk(chunk_frames, settings, input_size)
+                aligner.add(raw_depths, overlap=chunk_start - load_start)
+                self._send_chunk_preview(raw_depths, chunk_end, progress_tracker)
 
-                # Clear references and GPU cache
                 del chunk_frames
-                del chunk_depth_maps
+                del raw_depths
                 self._clear_gpu_memory()
 
-                # Update progress
                 if progress_tracker:
                     progress_tracker.update_progress(
                         f"Chunk {chunk_num}/{total_chunks}: Depth maps {chunk_end}/{num_frames}",
@@ -411,7 +433,13 @@ class DepthMapProcessor:
                 print(f"Error processing chunk {chunk_start}-{chunk_end}: {e}")
                 return None
 
-        return np.array(all_depth_maps)
+        # One normalization range for the whole video keeps depth stable over time
+        depth_maps = normalize_depth_sequence(aligner.result(), copy=False)
+
+        if settings.get("keep_intermediates") and "depth_maps" in directories:
+            self._save_depth_maps(depth_maps, frame_files, directories["depth_maps"], None)
+
+        return depth_maps
 
     def _generate_depth_maps_batch(
         self, frames: np.ndarray, settings: dict[str, Any], progress_tracker

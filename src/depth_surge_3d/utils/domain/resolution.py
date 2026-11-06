@@ -121,7 +121,9 @@ def classify_aspect_ratio(aspect_ratio: float) -> str:
         return "standard"
 
 
-def auto_detect_resolution(source_width: int, source_height: int, vr_format: str) -> str:
+def auto_detect_resolution(
+    source_width: int, source_height: int, vr_format: str, fisheye: bool = False
+) -> str:
     """
     Auto-detect optimal VR resolution based on source dimensions.
 
@@ -129,12 +131,15 @@ def auto_detect_resolution(source_width: int, source_height: int, vr_format: str
         source_width: Source video width
         source_height: Source video height
         vr_format: Target VR format
+        fisheye: Fisheye (VR180) output. Each eye is then a circle in a square, so a square
+            per-eye resolution is chosen whatever the source aspect ratio (a 16:9 eye would
+            either stretch the circle or need black bars).
 
     Returns:
         Recommended resolution setting
     """
     aspect_ratio = calculate_aspect_ratio(source_width, source_height)
-    category = classify_aspect_ratio(aspect_ratio)
+    category = "standard" if fisheye else classify_aspect_ratio(aspect_ratio)
 
     # Get source pixel count for quality matching
     source_pixels = source_width * source_height

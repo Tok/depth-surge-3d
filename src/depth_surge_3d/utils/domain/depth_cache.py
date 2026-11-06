@@ -15,6 +15,8 @@ from typing import Any
 import cv2
 import numpy as np
 
+from ...core.constants import DEPTH_CACHE_FORMAT_VERSION
+
 
 def get_cache_dir() -> Path:
     """Get the global depth cache directory."""
@@ -77,7 +79,8 @@ def compute_cache_key(video_path: str, depth_settings: dict[str, Any]) -> str:
         "device",  # CPU vs GPU may produce slightly different results
     ]
 
-    settings_for_hash = {k: depth_settings.get(k) for k in depth_relevant_keys}
+    settings_for_hash: dict[str, Any] = {k: depth_settings.get(k) for k in depth_relevant_keys}
+    settings_for_hash["cache_format_version"] = DEPTH_CACHE_FORMAT_VERSION
     settings_json = json.dumps(settings_for_hash, sort_keys=True)
     hasher.update(settings_json.encode())
 
@@ -125,11 +128,13 @@ def get_cached_depth_maps(
             if not depth_file.exists():
                 return None
 
-            depth_img = cv2.imread(str(depth_file), cv2.IMREAD_GRAYSCALE)
-            if depth_img is None:
+            # IMREAD_UNCHANGED keeps the 16-bit data; IMREAD_GRAYSCALE would reduce it to
+            # 8 bits, turning every cached depth map into ~0 (flat output, #16)
+            depth_img = cv2.imread(str(depth_file), cv2.IMREAD_UNCHANGED)
+            if depth_img is None or depth_img.dtype != np.uint16:
                 return None
 
-            # Convert back to float (assuming saved as uint16 scaled by 1000)
+            # Convert back to float (saved as uint16 scaled by 1000)
             depth_float = depth_img.astype(np.float32) / 1000.0
             depth_maps.append(depth_float)
 
@@ -187,7 +192,7 @@ def save_depth_maps_to_cache(
         for i, depth_map in enumerate(depth_maps):
             depth_file = cache_entry_dir / f"depth_{i:06d}.png"
             # Scale to uint16 (multiply by 1000 for 3 decimal precision)
-            depth_uint16 = (depth_map * 1000.0).astype(np.uint16)
+            depth_uint16 = np.round(np.clip(depth_map, 0.0, 1.0) * 1000.0).astype(np.uint16)
             cv2.imwrite(str(depth_file), depth_uint16)
 
         return True

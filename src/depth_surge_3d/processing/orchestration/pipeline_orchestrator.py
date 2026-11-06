@@ -15,10 +15,12 @@ import numpy as np
 
 from ...io.operations import (
     create_output_directories,
+    remove_intermediate_directories,
     save_processing_settings,
     update_processing_status,
 )
 from ...utils.path_utils import generate_output_filename
+from ...utils.domain.progress import NullProgressTracker
 from ...utils import (
     step_complete,
     saved_to,
@@ -99,6 +101,10 @@ class ProcessingOrchestrator:
             - Filesystem state management
             - Delegates to all processor modules
         """
+        # CLI runs have no tracker; stages call it unconditionally (#14, #17)
+        if progress_tracker is None:
+            progress_tracker = NullProgressTracker()
+
         try:
             # Start timer
             self._start_time = time.time()
@@ -343,6 +349,10 @@ class ProcessingOrchestrator:
         # Finalize and cleanup
         if progress_tracker and hasattr(progress_tracker, "finish"):
             progress_tracker.finish("Video processing complete")
+        if success and not settings.get("keep_intermediates", True):
+            removed = remove_intermediate_directories(directories["base"])
+            if removed:
+                print(saved_to(f"Removed {removed} intermediate directories (--no-intermediates)"))
         self._finalize_processing(success, output_path, video_path, settings, num_frames)
         return success
 

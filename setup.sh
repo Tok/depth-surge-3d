@@ -9,13 +9,13 @@ command_exists() {
 
 # Check for Python 3
 if ! command_exists python3; then
-    echo "[ERROR] Python 3 is not installed. Please install Python 3.9 or later."
+    echo "[ERROR] Python 3 is not installed. Please install Python 3.10 or later."
     exit 1
 fi
 
 # Check Python version
 python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-required_version="3.9"
+required_version="3.10"
 
 if [ "$(printf '%s\n' "$required_version" "$python_version" | sort -V | head -n1)" != "$required_version" ]; then
     echo "[ERROR] Python $required_version or later is required. Found: $python_version"
@@ -23,6 +23,11 @@ if [ "$(printf '%s\n' "$required_version" "$python_version" | sort -V | head -n1
 fi
 
 echo "[OK] Python $python_version found"
+
+
+# Force Wheelnext UV installation. For automatic GPU variabt torch installation.
+curl -LsSf https://astral.sh/uv/install.sh | INSTALLER_DOWNLOAD_URL=https://wheelnext.astral.sh sh
+
 
 # Check for uv package manager
 if command_exists uv; then
@@ -37,9 +42,14 @@ else
     use_uv=false
 fi
 
+use_uv=true
+
 # Setup virtual environment and dependencies
 if [ "$use_uv" = true ]; then
     echo "Setting up environment with uv..."
+    # Install required python 3.12
+    uv python install 3.12
+    uv python pin 3.12
     uv sync
 else
     echo "Setting up environment with pip..."
@@ -143,13 +153,12 @@ echo ""
 echo "Available models:"
 echo "  - Video-Depth-Anything-Large (335M params) - Downloaded"
 echo ""
-echo "Additional models available (optional):"
-echo "  ./scripts/download_models.sh small  # Video-Depth-Anything-Small (24.8M params, fastest)"
-echo "  ./scripts/download_models.sh base   # Video-Depth-Anything-Base (97.5M params, balanced)"
+echo "More models (optional; run without arguments to see what's installed):"
+echo "  ./scripts/download_models.sh recommended  # models used by the CLI and web UI defaults"
+echo "  ./scripts/download_models.sh all          # every Video-Depth-Anything and DA3 model"
 echo ""
 echo "Tips:"
 echo "  - Use --vr-resolution 16x9-720p for quick tests"
-echo "  - Use --processing-mode batch for faster processing"
 echo "  - Try custom resolutions: --vr-resolution custom:1920x1080"
 echo ""
 echo "Output will be saved to ./output/ directory"

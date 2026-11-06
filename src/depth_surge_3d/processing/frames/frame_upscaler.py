@@ -120,21 +120,18 @@ class FrameUpscalerProcessor:
             print(f"Frame count mismatch: {len(left_files)} left, {len(right_files)} right")
             return False
 
-        # Create output directories only if keeping intermediates
-        left_upscaled = directories.get("left_upscaled")
-        right_upscaled = directories.get("right_upscaled")
-
-        if settings["keep_intermediates"]:
-            # Ensure directories exist when keeping intermediates
-            if not left_upscaled:
-                left_upscaled = directories["base"] / INTERMEDIATE_DIRS["left_upscaled"]
-            if not right_upscaled:
-                right_upscaled = directories["base"] / INTERMEDIATE_DIRS["right_upscaled"]
-
-            if left_upscaled:
-                left_upscaled.mkdir(exist_ok=True)
-            if right_upscaled:
-                right_upscaled.mkdir(exist_ok=True)
+        # Upscaled frames are always written: VR assembly reads them from disk (without them it
+        # silently fell back to the non-upscaled frames when intermediates weren't kept)
+        left_upscaled = directories.get("left_upscaled") or (
+            directories["base"] / INTERMEDIATE_DIRS["left_upscaled"]
+        )
+        right_upscaled = directories.get("right_upscaled") or (
+            directories["base"] / INTERMEDIATE_DIRS["right_upscaled"]
+        )
+        left_upscaled.mkdir(exist_ok=True)
+        right_upscaled.mkdir(exist_ok=True)
+        directories["left_upscaled"] = left_upscaled
+        directories["right_upscaled"] = right_upscaled
 
         # Process frames
         for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
@@ -202,27 +199,16 @@ class FrameUpscalerProcessor:
             and (frame_idx % PREVIEW_FRAME_SAMPLE_RATE == 0 or frame_idx == total_frames - 1)
         )
 
-        # Send preview from memory if not keeping intermediates
-        if should_send_preview and not settings["keep_intermediates"]:
+        # Always save (VR assembly reads these from disk)
+        if left_upscaled:
+            cv2.imwrite(str(left_upscaled / f"{frame_name}.png"), left_upscaled_img)
+        if right_upscaled:
+            cv2.imwrite(str(right_upscaled / f"{frame_name}.png"), right_upscaled_img)
+
+        if should_send_preview:
             progress_tracker.send_preview_frame_from_array(
                 left_upscaled_img, "upscaled_left", frame_idx + 1
             )
-
-        # Save files only if keeping intermediates
-        if settings["keep_intermediates"]:
-            if left_upscaled:
-                left_upscaled_path = left_upscaled / f"{frame_name}.png"
-                cv2.imwrite(str(left_upscaled_path), left_upscaled_img)
-
-                # Send preview from file if keeping intermediates
-                if should_send_preview and hasattr(progress_tracker, "send_preview_frame"):
-                    progress_tracker.send_preview_frame(
-                        left_upscaled_path, "upscaled_left", frame_idx + 1
-                    )
-
-            if right_upscaled:
-                # Save right frame when keeping intermediates
-                cv2.imwrite(str(right_upscaled / f"{frame_name}.png"), right_upscaled_img)
 
         # Progress update (every frame since upscaling is slow)
         if frame_idx % 1 == 0 or frame_idx == total_frames - 1:

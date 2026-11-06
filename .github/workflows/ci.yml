@@ -13,75 +13,70 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.3
         with:
-          python-version: "3.10"
-          cache: "pip"
+          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install black==25.1.0 flake8 mypy
+      - name: Install dev tools
+        run: uv sync --locked --only-dev
 
       - name: Check formatting with black
-        run: |
-          black --check src/ tests/
+        run: uv run --no-sync black --check src/ tests/ depth_surge_3d.py
 
       - name: Lint with flake8
-        run: |
-          flake8 src/ tests/ --count --show-source --statistics
+        run: uv run --no-sync flake8 src/ tests/ depth_surge_3d.py --count --show-source --statistics
 
   test:
-    name: Test
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     needs: code-quality
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
+      - name: Free disk space for CUDA wheels
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-test.txt
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
 
-      - name: Run linting (flake8)
-        run: |
-          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 src/ --count --max-complexity=10 --max-line-length=127 --statistics
+      - name: Install dependencies
+        run: uv sync --locked
 
       - name: Run type checking (mypy)
-        run: |
-          mypy src/depth_surge_3d --ignore-missing-imports
+        run: uv run --no-sync mypy src/depth_surge_3d --ignore-missing-imports
 
       - name: Run unit tests
-        run: |
-          pytest tests/unit -v --cov=src/depth_surge_3d --cov-report=xml --cov-report=term --cov-fail-under=85
+        run: >
+          uv run --no-sync pytest tests/unit -v
+          --cov=src/depth_surge_3d --cov-report=xml --cov-report=term --cov-fail-under=85
 
       - name: Run integration tests
-        run: |
-          pytest tests/integration -v -m integration
+        run: uv run --no-sync pytest tests/integration -v -m integration
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
@@ -92,18 +87,16 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.3
         with:
-          python-version: "3.10"
+          python-version: "3.12"
 
-      - name: Install safety
-        run: pip install safety
-
-      - name: Check dependencies for vulnerabilities
+      - name: Audit locked dependencies
         continue-on-error: true
         run: |
-          pip install -r requirements.txt
-          safety check --json
+          uv export --locked --no-hashes --no-emit-project \
+            --no-emit-package depth-anything-3 --format requirements-txt > requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt --disable-pip --no-deps

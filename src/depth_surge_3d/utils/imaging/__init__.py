@@ -6,13 +6,20 @@ Core image transformations and video processing functions.
 from .image_processing import (
     # Image operations
     resize_image,
+    fit_to_canvas,
     validate_image_array,
     calculate_image_statistics,
     # Depth operations
     normalize_depth_map,
     depth_to_disparity,
+    depth_to_inverse_depth,
+    match_depth_to_frame,
+    calculate_super_sample_size,
     # Stereo operations
     create_shifted_image,
+    render_stereo_pair,
+    create_stereo_view,
+    forward_warp_disparity,
     hole_fill_image,
     # VR operations
     apply_center_crop,
@@ -29,13 +36,20 @@ from .video_processing import (
 __all__ = [
     # Image operations
     "resize_image",
+    "fit_to_canvas",
     "validate_image_array",
     "calculate_image_statistics",
     # Depth operations
     "normalize_depth_map",
     "depth_to_disparity",
+    "depth_to_inverse_depth",
+    "match_depth_to_frame",
+    "calculate_super_sample_size",
     # Stereo operations
     "create_shifted_image",
+    "render_stereo_pair",
+    "create_stereo_view",
+    "forward_warp_disparity",
     "hole_fill_image",
     # VR operations
     "apply_center_crop",

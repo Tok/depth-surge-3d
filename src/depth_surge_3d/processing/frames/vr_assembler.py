@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ...utils import (
-    resize_image,
+    fit_to_canvas,
     create_vr_frame,
 )
 
@@ -138,9 +138,11 @@ class VRFrameAssembler:
             print(f"Warning: Could not load {left_file} or {right_file}")
             return False
 
-        # Resize to final target resolution
-        left_final = resize_image(left_img, settings["per_eye_width"], settings["per_eye_height"])
-        right_final = resize_image(right_img, settings["per_eye_width"], settings["per_eye_height"])
+        # Scale to the final per-eye resolution (aspect preserved: black bars, never stretched)
+        left_final = fit_to_canvas(left_img, settings["per_eye_width"], settings["per_eye_height"])
+        right_final = fit_to_canvas(
+            right_img, settings["per_eye_width"], settings["per_eye_height"]
+        )
 
         # Create and save final VR frame
         vr_frame = create_vr_frame(left_final, right_final, settings["vr_format"])

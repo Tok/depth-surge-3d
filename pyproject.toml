@@ -1,46 +1,40 @@
 [project]
 name = "depth-surge-3d"
-version = "0.9.1"
+version = "0.10.0"
 description = "Convert 2D videos to immersive 3D VR format using advanced AI depth estimation"
 authors = [
     { name = "Zirteq", email = "zirteq111@gmail.com" }
 ]
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.10,<3.14"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Video",
     "Topic :: Scientific/Engineering :: Image Processing",
     "Topic :: Multimedia :: Graphics :: 3D Modeling",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
-    "opencv-python>=4.8.0",
-    "numpy>=1.24.0",
-    "Pillow>=10.0.0",
-    "tqdm>=4.65.0",
-    "transformers>=4.30.0",
-    "flask>=3.0.0",
-    "flask-socketio>=5.3.0",
-    "eventlet>=0.35.0",
-    "six>=1.16.0",
-    "einops>=0.7.0",
-    "easydict>=1.9",
-    "matplotlib>=3.7.0",
-    "imageio>=2.30.0",
-    "imageio-ffmpeg>=0.4.7",
-    "decord>=0.6.0",
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+    "opencv-python>=4.10.0",
+    "numpy>=1.26.0",
+    "Pillow>=10.4.0",
+    "tqdm>=4.66.0",
+    "flask>=3.1.0",
+    "flask-socketio>=5.5.0",
+    "einops>=0.8.0",
+    "easydict>=1.13",
+    "open3d>=0.19.0",
+    "addict>=2.4.0",  # imported by Depth-Anything-3 but not declared (used to come via open3d<0.20)
     "depth-anything-3",
 ]
 
@@ -56,20 +50,28 @@ Issues = "https://github.com/Tok/depth-surge-3d/issues"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-dev-dependencies = [
-    "pytest>=7.0.0",
-    "black>=23.0.0",
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "pytest-timeout>=2.3.0",
+    "black>=25.1.0",
     "flake8>=7.2.0",
-    "mypy>=1.0.0",
+    "mypy>=1.15.0",
 ]
+
+[tool.uv]
+# Depth-Anything-3 pins numpy<2, which has no wheels for Python 3.13. DA3 works with numpy 2
+# (verified with numpy 2.3), so lift the pin. See https://github.com/Tok/depth-surge-3d/issues/11
+override-dependencies = ["numpy>=1.26.0"]
 
 [tool.uv.sources]
 depth-anything-3 = { git = "https://github.com/ByteDance-Seed/Depth-Anything-3" }
 
 [tool.black]
 line-length = 100
-target-version = ['py39', 'py310', 'py311', 'py312']
+target-version = ['py310', 'py311', 'py312', 'py313']
 include = '\.pyi?$'
 extend-exclude = '''
 /(

@@ -260,12 +260,18 @@ def _load_settings_summary(batch_path: Path) -> str:
 
 
 def _detect_audio_availability(batch_path: Path) -> bool:
-    """Check if audio is available in uploads directory."""
+    """
+    Check whether the batch has a usable audio source.
+
+    Matches what video stitching uses: the extracted original_audio.flac, or the source
+    video stored in the batch directory (outputs containing "_3D_" don't count).
+    """
+    if (batch_path / "original_audio.flac").exists():
+        return True
     video_extensions = ["*.mp4", "*.avi", "*.mov", "*.mkv"]
-    for ext in video_extensions:
-        if list(batch_path.parent.parent.glob(f"uploads/{ext}")):
-            return True
-    return False
+    return any(
+        "_3D_" not in video.name for ext in video_extensions for video in batch_path.glob(ext)
+    )
 
 
 def _summarize_settings(settings: dict[str, Any]) -> str:

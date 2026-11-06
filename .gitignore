@@ -218,7 +218,8 @@ test_data/
 cache/
 .cache/
 *.lock
-uv.lock
+# uv.lock pins the tested dependency versions (used by setup scripts and CI)
+!uv.lock
 
 # Hugging Face cache
 .cache/huggingface/

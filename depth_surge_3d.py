@@ -22,6 +22,7 @@ from depth_surge_3d.core.constants import (  # noqa: E402
 )
 from depth_surge_3d.utils import (  # noqa: E402
     get_available_resolutions,
+    parse_custom_resolution,
     warning as console_warning,
 )
 from depth_surge_3d.io.operations import (  # noqa: E402
@@ -29,6 +30,27 @@ from depth_surge_3d.io.operations import (  # noqa: E402
     can_resume_processing,
     load_processing_settings,
 )
+
+
+def vr_resolution_type(value: str) -> str:
+    """
+    Argparse type for --vr-resolution.
+
+    Accepts any preset name, "auto", or "custom:WIDTHxHEIGHT".
+    """
+    if value == "auto" or value in VR_RESOLUTIONS:
+        return value
+    if value.startswith("custom:"):
+        if parse_custom_resolution(value) is not None:
+            return value
+        raise argparse.ArgumentTypeError(
+            f"invalid custom resolution '{value}' (expected custom:WIDTHxHEIGHT, "
+            "e.g. custom:1920x1080, each side 1-10000)"
+        )
+    raise argparse.ArgumentTypeError(
+        f"invalid choice: '{value}' (use a preset from --list-resolutions, "
+        "'auto', or custom:WIDTHxHEIGHT)"
+    )
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -64,12 +86,13 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
     )
 
     # VR settings
-    available_resolutions = list(VR_RESOLUTIONS.keys()) + ["auto", "custom"]
     parser.add_argument(
         "--vr-resolution",
-        choices=available_resolutions,
+        type=vr_resolution_type,
         default=DEFAULT_SETTINGS["vr_resolution"],
-        help="VR output resolution per eye (default: %(default)s)",
+        metavar="RESOLUTION",
+        help="VR output resolution per eye: a preset (see --list-resolutions), 'auto', "
+        "or custom:WIDTHxHEIGHT (default: %(default)s)",
     )
 
     parser.add_argument(

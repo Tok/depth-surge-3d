@@ -1,6 +1,6 @@
 # Depth Surge 3D - Development Guide
 
-**Version**: 0.9.0
+**Version**: 0.10.0
 **Purpose**: 2D to 3D VR video converter using AI depth estimation (Depth-Anything V3/V2)
 
 ---
@@ -175,7 +175,7 @@ Complete optical flow implementation (2000+ lines, 35 passing tests) that is **i
 ## CI/CD
 
 - **Platform**: Ubuntu (GitHub Actions)
-- **Python**: 3.11
+- **Python**: 3.10-3.13 (matrix, installed from uv.lock)
 - **Jobs**: Code Quality (black, flake8), Tests (unit + integration), Coverage (Codecov)
 - **Required**: All flake8 checks must pass (0 errors)
 

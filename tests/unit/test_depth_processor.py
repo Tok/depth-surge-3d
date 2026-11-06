@@ -335,19 +335,18 @@ class TestLoadChunkFrames:
         assert len(result) == 3
         assert all(isinstance(frame, np.ndarray) for frame in result)
 
-    def test_load_chunk_frames_with_super_sampling(self, processor, temp_frames):
-        """Test frame loading with super sampling."""
-        settings = {"super_sample": "2x", "per_eye_width": 200, "per_eye_height": 200}
+    def test_load_chunk_frames_never_upscales(self, processor, temp_frames):
+        """Regression #16/#17: frames reach the depth model at source resolution.
 
-        with patch(
-            "src.depth_surge_3d.processing.frames.depth_processor.resize_image"
-        ) as mock_resize:
-            mock_resize.side_effect = lambda img, w, h: np.zeros((h, w, 3), dtype=np.uint8)
-            result = processor._load_chunk_frames(temp_frames, settings)
+        Super sampling used to upscale frames here, producing depth maps that didn't
+        match the frames used for stereo generation.
+        """
+        settings = {"super_sample": "auto", "per_eye_width": 200, "per_eye_height": 200}
+
+        result = processor._load_chunk_frames(temp_frames, settings)
 
         assert result is not None
-        assert len(result) == 3
-        assert mock_resize.call_count == 3
+        assert all(frame.shape == (100, 100, 3) for frame in result)
 
     def test_load_chunk_frames_missing_file(self, processor, temp_frames):
         """Test loading with missing file."""
@@ -373,217 +372,152 @@ class TestLoadChunkFrames:
         assert result is None
 
 
-class TestProcessChunkDepth:
-    """Test chunk depth processing."""
+def _sized_estimator(temporal: bool, h: int = 20, w: int = 30) -> Mock:
+    """Mock estimator returning one depth map per input frame."""
+    estimator = Mock()
+    estimator.temporally_consistent = temporal
+    estimator.estimate_depth_batch = Mock(
+        side_effect=lambda frames, **kw: np.random.rand(len(frames), h, w).astype(np.float32)
+    )
+    return estimator
 
-    @pytest.fixture
-    def mock_estimator(self):
-        """Create mock depth estimator."""
-        estimator = Mock()
-        estimator.estimate_depth_batch = Mock(return_value=np.random.rand(3, 100, 100))
-        return estimator
 
-    @pytest.fixture
-    def mock_progress_tracker(self):
-        """Create mock progress tracker."""
-        return Mock()
+class TestEstimateChunk:
+    """Test raw chunk depth estimation."""
 
-    @pytest.fixture
-    def temp_frames(self, tmp_path):
-        """Create temporary frame files."""
-        frame_dir = tmp_path / "frames"
-        frame_dir.mkdir()
+    def test_requests_raw_output(self):
+        estimator = _sized_estimator(temporal=True)
+        processor = DepthMapProcessor(estimator, verbose=False)
+        frames = [np.zeros((20, 30, 3), np.uint8)] * 3
 
-        frame_files = []
-        for i in range(3):
-            frame_path = frame_dir / f"frame_{i:04d}.png"
-            frame_files.append(frame_path)
+        result = processor._estimate_chunk(frames, {"target_fps": 24}, input_size=518)
 
-        return frame_files
+        assert result.shape == (3, 20, 30)
+        kwargs = estimator.estimate_depth_batch.call_args[1]
+        assert kwargs["normalize"] is False
+        assert kwargs["target_fps"] == 24
+        assert kwargs["input_size"] == 518
 
-    def test_process_chunk_depth_success(
-        self, mock_estimator, mock_progress_tracker, temp_frames, tmp_path
-    ):
-        """Test successful chunk depth processing."""
-        processor = DepthMapProcessor(mock_estimator, verbose=False)
+    @pytest.mark.parametrize("fps", [None, "None", "original"])
+    def test_fallback_fps(self, fps):
+        estimator = _sized_estimator(temporal=True)
+        processor = DepthMapProcessor(estimator, verbose=False)
 
-        chunk_frames = [np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8) for _ in range(3)]
-        settings = {
-            "target_fps": 30,
-            "keep_intermediates": False,
-            "super_sample": "none",
-            "per_eye_width": 100,
-            "per_eye_height": 100,
-        }
-        directories = {}
+        processor._estimate_chunk([np.zeros((20, 30, 3), np.uint8)], {"target_fps": fps}, 518)
 
-        result = processor._process_chunk_depth(
-            chunk_frames,
-            temp_frames,
-            settings,
-            directories,
-            input_size=1080,
-            progress_tracker=mock_progress_tracker,
-        )
+        assert estimator.estimate_depth_batch.call_args[1]["target_fps"] == 30
 
-        assert result is not None
-        assert len(result) == 3
-        mock_estimator.estimate_depth_batch.assert_called_once()
 
-    def test_process_chunk_depth_with_save(
-        self, mock_estimator, mock_progress_tracker, temp_frames, tmp_path
-    ):
-        """Test chunk processing with intermediate saving."""
-        processor = DepthMapProcessor(mock_estimator, verbose=False)
+class TestChunkSizing:
+    """Test chunk sizing helpers."""
 
-        chunk_frames = [np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8) for _ in range(3)]
-        depth_dir = tmp_path / "depth_maps"
-        depth_dir.mkdir()
+    def test_temporal_chunk_size_bounded(self):
+        assert DepthMapProcessor._temporal_chunk_size(320, 240) == 512  # tiny frames: max
+        assert DepthMapProcessor._temporal_chunk_size(7680, 4320) == 32  # 8K: min
+        assert 32 < DepthMapProcessor._temporal_chunk_size(1280, 720) < 512
 
-        settings = {
-            "target_fps": 30,
-            "keep_intermediates": True,
-            "super_sample": "none",
-            "per_eye_width": 100,
-            "per_eye_height": 100,
-        }
-        directories = {"depth_maps": depth_dir}
-
-        with patch.object(processor, "_save_depth_maps") as mock_save:
-            result = processor._process_chunk_depth(
-                chunk_frames,
-                temp_frames,
-                settings,
-                directories,
-                input_size=1080,
-                progress_tracker=mock_progress_tracker,
-            )
-
-        assert result is not None
-        mock_save.assert_called_once()
-
-    def test_process_chunk_depth_fallback_fps(
-        self, mock_estimator, mock_progress_tracker, temp_frames
-    ):
-        """Test fallback FPS handling."""
-        processor = DepthMapProcessor(mock_estimator, verbose=False)
-
-        chunk_frames = [np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8) for _ in range(3)]
-        settings = {
-            "target_fps": None,
-            "keep_intermediates": False,
-            "super_sample": "none",
-            "per_eye_width": 100,
-            "per_eye_height": 100,
-        }
-        directories = {}
-
-        result = processor._process_chunk_depth(
-            chunk_frames,
-            temp_frames,
-            settings,
-            directories,
-            input_size=1080,
-            progress_tracker=mock_progress_tracker,
-        )
-
-        assert result is not None
-        # Should use fallback FPS of 30
-        call_args = mock_estimator.estimate_depth_batch.call_args
-        assert call_args[1]["target_fps"] == 30
+    def test_chunk_overlap(self):
+        assert DepthMapProcessor._chunk_overlap({}, 200) == 10  # default
+        assert DepthMapProcessor._chunk_overlap({"temporal_window_overlap": 16}, 200) == 16
+        assert DepthMapProcessor._chunk_overlap({"temporal_window_overlap": 1}, 200) == 4
+        assert DepthMapProcessor._chunk_overlap({"temporal_window_overlap": 40}, 32) == 16
 
 
 class TestGenerateDepthMapsChunked:
-    """Test chunked depth map generation."""
-
-    @pytest.fixture
-    def mock_estimator(self):
-        """Create mock depth estimator."""
-        estimator = Mock()
-        estimator.estimate_depth_batch = Mock(return_value=np.random.rand(2, 100, 100))
-        return estimator
-
-    @pytest.fixture
-    def mock_progress_tracker(self):
-        """Create mock progress tracker."""
-        tracker = Mock()
-        tracker.update_progress = Mock()
-        return tracker
+    """Test chunked depth map generation with alignment."""
 
     @pytest.fixture
     def temp_frames(self, tmp_path):
-        """Create temporary frame files."""
         frame_dir = tmp_path / "frames"
         frame_dir.mkdir()
-
         frame_files = []
-        for i in range(5):
-            frame = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+        for i in range(25):
             frame_path = frame_dir / f"frame_{i:04d}.png"
-            cv2.imwrite(str(frame_path), frame)
+            cv2.imwrite(str(frame_path), np.random.randint(0, 255, (20, 30, 3), dtype=np.uint8))
             frame_files.append(frame_path)
-
         return frame_files
 
-    def test_generate_chunked_success(
-        self, mock_estimator, mock_progress_tracker, temp_frames, tmp_path
-    ):
-        """Test successful chunked generation."""
-        processor = DepthMapProcessor(mock_estimator, verbose=False)
+    SETTINGS = {"depth_resolution": "518", "target_fps": 30, "keep_intermediates": False}
 
-        settings = {
-            "depth_resolution": "1080",
-            "target_fps": 30,
-            "keep_intermediates": False,
-            "super_sample": "none",
-            "per_eye_width": 100,
-            "per_eye_height": 100,
-        }
-        directories = {}
+    def _run(self, processor, frames, settings=None, directories=None, tracker=None, chunk=4):
+        with (
+            patch.object(processor, "_determine_chunk_params", return_value=(chunk, 518)),
+            patch.object(processor, "_temporal_chunk_size", return_value=10),
+            patch.object(processor, "_clear_gpu_memory"),
+        ):
+            return processor._generate_depth_maps_chunked(
+                frames, settings or self.SETTINGS, directories or {}, tracker
+            )
 
-        with patch.object(processor, "_determine_chunk_params", return_value=(2, 1080)):
-            with patch.object(processor, "_clear_gpu_memory"):
-                result = processor._generate_depth_maps_chunked(
-                    temp_frames, settings, directories, mock_progress_tracker
-                )
+    def test_temporal_model_overlapping_chunks(self, temp_frames):
+        """Temporal models get long chunks that re-process the overlap frames."""
+        estimator = _sized_estimator(temporal=True)
+        settings = {**self.SETTINGS, "temporal_window_overlap": 4}
+
+        result = self._run(DepthMapProcessor(estimator), temp_frames, settings)
+
+        assert result.shape == (25, 20, 30)
+        assert 0.0 <= result.min() and result.max() <= 1.0
+        sizes = [len(c[0][0]) for c in estimator.estimate_depth_batch.call_args_list]
+        # chunks of 10 new frames; later chunks also re-process 4 overlap frames
+        assert sizes == [10, 14, 9]
+
+    def test_per_frame_model_no_overlap(self, temp_frames):
+        """Per-frame models use the VRAM-based chunk size and no overlap."""
+        estimator = _sized_estimator(temporal=False)
+
+        result = self._run(DepthMapProcessor(estimator), temp_frames, chunk=4)
+
+        assert result.shape == (25, 20, 30)
+        sizes = [len(c[0][0]) for c in estimator.estimate_depth_batch.call_args_list]
+        assert sizes == [4, 4, 4, 4, 4, 4, 1]
+
+    def test_saves_normalized_maps_at_end(self, temp_frames, tmp_path):
+        estimator = _sized_estimator(temporal=True)
+        processor = DepthMapProcessor(estimator)
+        depth_dir = tmp_path / "depth"
+        depth_dir.mkdir()
+
+        with patch.object(processor, "_save_depth_maps") as mock_save:
+            result = self._run(
+                processor,
+                temp_frames,
+                {**self.SETTINGS, "keep_intermediates": True},
+                {"depth_maps": depth_dir},
+            )
+
+        mock_save.assert_called_once()
+        assert mock_save.call_args[0][0] is result
+
+    def test_live_preview_per_chunk(self, temp_frames):
+        tracker = Mock()
+        result = self._run(DepthMapProcessor(_sized_estimator(True)), temp_frames, tracker=tracker)
 
         assert result is not None
-        # Mock returns 2 items per call, 3 chunks (5 frames / 2 = 3 chunks) = 6 items
-        assert len(result) == 6
+        assert tracker.send_preview_frame_from_array.call_count == 3
+        preview = tracker.send_preview_frame_from_array.call_args[0][0]
+        assert preview.shape == (20, 30, 3) and preview.dtype == np.uint8
 
-    def test_generate_chunked_sample_frame_missing(
-        self, mock_estimator, mock_progress_tracker, tmp_path
-    ):
-        """Test chunked generation with missing sample frame."""
-        processor = DepthMapProcessor(mock_estimator, verbose=False)
-
-        fake_frames = [tmp_path / "nonexistent.png"]
-        settings = {"depth_resolution": "1080", "keep_intermediates": False}
-        directories = {}
+    def test_generate_chunked_sample_frame_missing(self, tmp_path):
+        processor = DepthMapProcessor(_sized_estimator(True), verbose=False)
 
         result = processor._generate_depth_maps_chunked(
-            fake_frames, settings, directories, mock_progress_tracker
+            [tmp_path / "nonexistent.png"], self.SETTINGS, {}, None
         )
 
         assert result is None
 
-    def test_generate_chunked_error_handling(
-        self, mock_estimator, mock_progress_tracker, temp_frames
-    ):
-        """Test error handling during chunk processing."""
-        processor = DepthMapProcessor(mock_estimator, verbose=False)
+    def test_generate_chunked_error_handling(self, temp_frames):
+        processor = DepthMapProcessor(_sized_estimator(True), verbose=False)
 
-        settings = {"depth_resolution": "1080", "keep_intermediates": False}
-        directories = {}
+        with patch.object(processor, "_load_chunk_frames", return_value=None):
+            assert self._run(processor, temp_frames) is None
 
-        with patch.object(processor, "_determine_chunk_params", return_value=(2, 1080)):
-            with patch.object(processor, "_clear_gpu_memory"):
-                with patch.object(processor, "_load_chunk_frames", return_value=None):
-                    result = processor._generate_depth_maps_chunked(
-                        temp_frames, settings, directories, mock_progress_tracker
-                    )
+    def test_estimator_failure(self, temp_frames):
+        estimator = _sized_estimator(True)
+        estimator.estimate_depth_batch.side_effect = RuntimeError("boom")
 
-        assert result is None
+        assert self._run(DepthMapProcessor(estimator), temp_frames) is None
 
 
 class TestSaveDepthMaps:

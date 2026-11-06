@@ -355,7 +355,7 @@ class TestResolveSettings:
         assert resolved["source_height"] == 1080
         assert resolved["source_fps"] == 30
 
-        mock_auto_detect.assert_called_once_with(1920, 1080, "side_by_side")
+        mock_auto_detect.assert_called_once_with(1920, 1080, "side_by_side", fisheye=True)
 
     @patch("src.depth_surge_3d.rendering.stereo_projector.create_video_depth_estimator")
     @patch("src.depth_surge_3d.rendering.stereo_projector.validate_resolution_settings")

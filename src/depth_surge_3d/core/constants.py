@@ -20,6 +20,13 @@ DEPTH_MODEL_INPUT_SIZE = 518  # Input resolution for depth estimation model
 DEPTH_MODEL_CHUNK_SIZE = 32  # Number of frames to process in one batch (temporal window)
 DEPTH_MODEL_CHUNK_OVERLAP = 10  # Number of frames to overlap between chunks
 DEPTH_MODEL_DEFAULT_FPS = 30  # Default FPS for depth estimation when original cannot be determined
+# Chunking for temporally consistent depth models (RAM-bound, not VRAM-bound)
+DEPTH_CHUNK_RAM_BUDGET_BYTES = 2 * 1024**3  # extra RAM a chunk may use
+# Measured ~28 B/px: frame copies (BGR, array, RGB) plus VDA's full-resolution float32 depth,
+# its aligned copy and the stacked result
+DEPTH_CHUNK_BYTES_PER_PIXEL = 32
+DEPTH_CHUNK_MIN_FRAMES = 32  # VDA pads shorter inputs to its 32-frame window anyway
+DEPTH_CHUNK_MAX_FRAMES = 512
 
 # Video model configurations
 MODEL_CONFIGS = {
@@ -54,7 +61,7 @@ DEFAULT_SETTINGS = {
     "crop_factor": 1.0,  # default: 1.0 (no crop)
     "fisheye_crop_factor": 0.7,  # default: 0.7 (zoom into center ~70%, crops ~20% each edge to hide distortion)
     "hole_fill_quality": "fast",
-    "super_sample": "auto",
+    "super_sample": "auto",  # stereo warp resolution: auto (<=2x), 2x, 1080p, 4k, none
     "target_fps": 60,
     "min_resolution": "1080p",
     "preserve_audio": True,
@@ -240,6 +247,18 @@ DEPTH_MAP_SCALE_FLOAT = 255.0  # Float version for division operations
 MIN_DEPTH_VALUE = 0.0
 MAX_DEPTH_VALUE = 1.0
 
+# Stereo geometry
+# Depth maps are normalized inverse depth ("nearness"): 1.0 = nearest point, 0.0 = farthest.
+# The nearest point in each frame is treated as this many meters away and the farthest as
+# infinitely far, so max disparity (px) = baseline (m) * focal_length (px) / STEREO_NEAR_PLANE_M.
+STEREO_NEAR_PLANE_M = 1.0
+
+# Upper bound on stereo worker processes (each holds a full frame + depth map in RAM)
+MAX_STEREO_WORKERS = 16
+
+# Bump whenever the meaning of cached depth maps changes (invalidates the global depth cache)
+DEPTH_CACHE_FORMAT_VERSION = 3
+
 # Progress reporting
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every N frames processed
 
@@ -312,19 +331,20 @@ MODEL_DOWNLOAD_URLS = {
     ),
 }
 
-# Metric depth models (trained on Virtual KITTI and IRS for accurate depth values)
+# Metric depth models (trained on Virtual KITTI and IRS for accurate depth values).
+# These live in separate "Metric-Video-Depth-Anything-*" repos; saved locally as *_metric.pth.
 MODEL_DOWNLOAD_URLS_METRIC = {
     "vits": (
-        "https://huggingface.co/depth-anything/Video-Depth-Anything-Small/"
-        "resolve/main/video_depth_anything_vits_metric.pth"
+        "https://huggingface.co/depth-anything/Metric-Video-Depth-Anything-Small/"
+        "resolve/main/metric_video_depth_anything_vits.pth"
     ),
     "vitb": (
-        "https://huggingface.co/depth-anything/Video-Depth-Anything-Base/"
-        "resolve/main/video_depth_anything_vitb_metric.pth"
+        "https://huggingface.co/depth-anything/Metric-Video-Depth-Anything-Base/"
+        "resolve/main/metric_video_depth_anything_vitb.pth"
     ),
     "vitl": (
-        "https://huggingface.co/depth-anything/Video-Depth-Anything-Large/"
-        "resolve/main/video_depth_anything_vitl_metric.pth"
+        "https://huggingface.co/depth-anything/Metric-Video-Depth-Anything-Large/"
+        "resolve/main/metric_video_depth_anything_vitl.pth"
     ),
 }
 

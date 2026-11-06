@@ -2,11 +2,10 @@
 
 ## Prerequisites
 
-- **Python 3.9, 3.10, 3.11, or 3.12** (Python 3.13+ not yet supported)
-  - **Note**: Python 3.13 is not compatible due to dependency limitations (specifically `open3d` in Depth-Anything V3)
-  - See [Issue #11](https://github.com/Tok/depth-surge-3d/issues/11) for tracking Python 3.13 support
+- **Python 3.10, 3.11, 3.12, or 3.13** (3.12 recommended)
+  - The setup scripts install Python 3.12 for you via [uv](https://docs.astral.sh/uv/)
 - FFmpeg
-- CUDA 13.0+ (required for GPU acceleration)
+- NVIDIA driver 580+ for GPU acceleration (the default PyTorch build uses CUDA 13)
 - CUDA-compatible GPU (optional, but strongly recommended for faster processing)
 - Git
 - curl or wget (for downloading models)
@@ -32,26 +31,34 @@ The setup script will automatically:
 
 ## Model Management
 
-The project includes flexible model management:
+Depth Surge 3D doesn't ship model weights; it downloads them from Hugging Face. The setup
+script fetches Video-Depth-Anything-Large. Use the download script for the others:
 
 ```bash
-# Download specific models
-./scripts/download_models.sh large          # Large model (best quality)
-./scripts/download_models.sh small          # Small model (fastest)
-./scripts/download_models.sh small base     # Multiple models
-./scripts/download_models.sh all            # All models
-
-# Check model status
-./scripts/download_models.sh                # Shows current status
-
-# Models are automatically downloaded if missing
-python depth_surge_3d.py input.mp4  # Auto-downloads if needed
+./scripts/download_models.sh                       # status of all models + usage
+./scripts/download_models.sh recommended           # models used by the CLI and web UI defaults
+./scripts/download_models.sh vda-base da3-large    # specific models
+./scripts/download_models.sh vda-metric            # a group
+./scripts/download_models.sh all                   # everything
+# Windows: .\scripts\download_models.ps1 with the same arguments
 ```
 
-**Available Models:**
-- **Small** (24.8M params) - Fast processing, lower quality
-- **Base** (97.5M params) - Balanced performance and quality
-- **Large** (335.3M params) - Best quality (default)
+Missing models are also downloaded automatically on first use.
+
+**Available models:**
+
+| Name | Backend | Notes | Licence |
+|---|---|---|---|
+| `vda-small`, `vda-small-metric` | Video-Depth-Anything (V2) | Fastest | Apache-2.0 |
+| `vda-base`, `vda-base-metric` | Video-Depth-Anything (V2) | Balanced | CC BY-NC 4.0 |
+| `vda-large`, `vda-large-metric` | Video-Depth-Anything (V2) | Best V2 quality (CLI default) | CC BY-NC 4.0 |
+| `da3-small`, `da3-base` | Depth Anything V3 | Low VRAM | Apache-2.0 |
+| `da3-large` | Depth Anything V3 (DA3MONO-LARGE) | Monocular relative depth | Apache-2.0 |
+| `da3-large-metric` | Depth Anything V3 (DA3METRIC-LARGE) | Metric depth (web UI default) | Apache-2.0 |
+| `da3-giant`, `da3-giant-large` | Depth Anything V3 1.1 | Highest DA3 quality, most VRAM | CC BY-NC 4.0 |
+
+Groups: `recommended`, `vda`, `vda-metric`, `da3`. DA3 models are stored in the Hugging Face
+cache (`~/.cache/huggingface`), the Video-Depth-Anything files under `models/`.
 
 ## Manual Installation
 
@@ -73,7 +80,7 @@ choco install ffmpeg
 # Or download from: https://ffmpeg.org/download.html
 ```
 
-**Python 3.9-3.12** (not 3.13+) and **Git**:
+**Python 3.10-3.13** and **Git** (or let `uv` install Python for you):
 ```bash
 # Ubuntu/Debian
 sudo apt install python3 python3-venv git
@@ -91,25 +98,31 @@ brew install python3 git
 git clone https://github.com/tok/depth-surge-3d.git depth-surge-3d
 cd depth-surge-3d
 
-# Create virtual environment
+# Recommended: uv installs the exact tested versions from uv.lock
+uv python install 3.12
+uv sync
+
+# Alternative: plain pip
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install Python dependencies
 pip install -r requirements.txt
 ```
+
+> **pip on Python 3.13:** Depth-Anything-3 pins `numpy<2`, which has no Python 3.13 wheels.
+> `uv sync` lifts that pin automatically. With pip, see the note at the top of
+> `requirements.txt`.
 
 ### Step 3: Download Video-Depth-Anything
 
 **Option A: Automatic download (recommended)**
 ```bash
-./scripts/download_models.sh large
+./scripts/download_models.sh recommended
 ```
 
 **Option B: Manual download**
 ```bash
 # Clone the repository
-git clone https://github.com/DepthAnything/Video-Depth-Anything.git video_depth_anything_repo
+git clone https://github.com/DepthAnything/Video-Depth-Anything.git vendor/Video-Depth-Anything
 
 # Create models directory
 mkdir -p models/Video-Depth-Anything-Large
@@ -157,165 +170,30 @@ Run `./test.sh` to verify your installation:
 - ✓ Model files
 - ✓ FFmpeg
 
-For developers: Run `./scripts/run-unit-tests.sh` for full test suite (770+ tests)
+For developers: Run `./scripts/run-unit-tests.sh` for full test suite (800+ tests)
 
 ---
 
-## Advanced: Python 3.13+ Support
+## Python 3.13
 
-**Status**: Python 3.13 is not officially supported yet, but advanced users can compile dependencies from source.
+Python 3.13 is supported since v0.10.0. `open3d` 0.20 (a Depth-Anything-3 dependency) ships
+Python 3.13 wheels, and `uv sync` overrides DA3's `numpy<2` pin so numpy 2.x is used.
+See [Issue #11](https://github.com/Tok/depth-surge-3d/issues/11) for the history.
 
-**Why the limitation?** The `open3d` library (dependency of Depth-Anything V3) doesn't provide pre-built wheels for Python 3.13 yet. See [Open3D Issue #7284](https://github.com/isl-org/Open3D/issues/7284) and [#7318](https://github.com/isl-org/Open3D/issues/7318) for upstream status.
+Python 3.14 is untested: Depth-Anything-3 declares `requires-python <= 3.13`.
 
-### Option 1: Wait for Official Support (Recommended)
+## xformers
 
-The Open3D team is actively working on Python 3.13 wheels. For most users, **we recommend using Python 3.9-3.12** until official wheels are released.
-
-Track progress:
-- [Depth Surge 3D Issue #11](https://github.com/Tok/depth-surge-3d/issues/11)
-- [Open3D Python 3.13 Support](https://github.com/isl-org/Open3D/issues/7284)
-
-### Option 2: Compile Open3D from Source (Advanced)
-
-The latest Open3D development version supports Python 3.13 when compiled from source.
-
-**⚠️ Warning**: This is complex and time-consuming (10-30 minutes). Only attempt if you're comfortable with:
-- Command-line build tools
-- Debugging compilation errors
-- Managing system dependencies
-
-**System Requirements:**
-- CMake >= 3.18
-- C++14 compiler (GCC 5+, Clang 7+, Visual Studio 2017+, or Xcode 8+)
-- Git
-- Build tools (make, ninja, or MSBuild)
-- Python 3.13 development headers
-
-**Installation Steps:**
-
-#### Ubuntu/Debian
-```bash
-# Install build dependencies
-sudo apt update
-sudo apt install -y \
-    cmake \
-    build-essential \
-    git \
-    python3.13-dev \
-    libpython3.13-dev \
-    pkg-config \
-    libeigen3-dev \
-    libgl1-mesa-dev \
-    libgomp1
-
-# Clone Open3D repository
-git clone --recursive https://github.com/isl-org/Open3D.git
-cd Open3D
-
-# Configure and build
-mkdir build && cd build
-cmake -DBUILD_PYTHON_MODULE=ON \
-      -DPYTHON_EXECUTABLE=$(which python3.13) \
-      -DCMAKE_BUILD_TYPE=Release \
-      ..
-
-# Compile (this takes 10-30 minutes)
-make -j$(nproc)
-make install-pip-package
-
-# Verify installation
-python3.13 -c "import open3d; print(open3d.__version__)"
-```
-
-#### macOS (with Homebrew)
-```bash
-# Install build dependencies
-brew install cmake eigen pkg-config
-
-# Clone and build Open3D
-git clone --recursive https://github.com/isl-org/Open3D.git
-cd Open3D
-mkdir build && cd build
-
-cmake -DBUILD_PYTHON_MODULE=ON \
-      -DPYTHON_EXECUTABLE=$(which python3.13) \
-      -DCMAKE_BUILD_TYPE=Release \
-      ..
-
-make -j$(sysctl -n hw.ncpu)
-make install-pip-package
-```
-
-#### Windows (with Visual Studio)
-```powershell
-# Requires Visual Studio 2017+ with C++ tools
-# Install CMake from https://cmake.org/download/
-
-# Clone Open3D
-git clone --recursive https://github.com/isl-org/Open3D.git
-cd Open3D
-mkdir build
-cd build
-
-# Configure (adjust Python path)
-cmake -DBUILD_PYTHON_MODULE=ON ^
-      -DPYTHON_EXECUTABLE=C:\Python313\python.exe ^
-      -DCMAKE_BUILD_TYPE=Release ^
-      -G "Visual Studio 17 2022" ^
-      ..
-
-# Build (takes 15-30 minutes)
-cmake --build . --config Release --target install-pip-package
-```
-
-**After Compiling Open3D:**
-
-Now install Depth Surge 3D normally:
-```bash
-# Clone Depth Surge 3D
-git clone https://github.com/Tok/depth-surge-3d.git
-cd depth-surge-3d
-
-# Create virtual environment with Python 3.13
-python3.13 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies (open3d already compiled above)
-pip install -r requirements.txt
-
-# Verify
-python depth_surge_3d.py --help
-```
-
-**Troubleshooting Compilation:**
-- **CMake errors**: Ensure CMake >= 3.18 installed
-- **Missing headers**: Install development packages for your Python version
-- **Eigen3 errors**: Install libeigen3-dev (Ubuntu) or eigen (macOS)
-- **Build failures**: Check [Open3D compilation docs](https://www.open3d.org/docs/latest/compilation.html)
-- **CUDA support**: Add `-DBUILD_CUDA_MODULE=ON -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc` to cmake
-
-**Still having issues?** Comment on [Issue #11](https://github.com/Tok/depth-surge-3d/issues/11) with:
-- Python version (`python --version`)
-- OS and version
-- Error messages from compilation
-
-### Option 3: Use Docker (Alternative)
-
-If compilation fails, consider using Docker with Python 3.12:
-```bash
-# Create Dockerfile with Python 3.12
-FROM python:3.12-slim
-# ... rest of setup
-```
+Depth-Anything-3 installs `xformers`, whose PyPI wheels target one specific PyTorch/CUDA build.
+If its kernels can't load with your PyTorch (you may see `xFormers can't load C++/CUDA
+extensions`), Depth Surge 3D automatically uses PyTorch's built-in scaled-dot-product attention
+instead, which uses about the same memory. You'll see `Attention backend: PyTorch SDPA` in the
+log. No action is needed.
 
 ---
 
 ## Additional Resources
 
-**Official Documentation:**
-- [Open3D Build from Source](https://www.open3d.org/docs/latest/compilation.html)
-- [Open3D Getting Started](https://www.open3d.org/docs/latest/getting_started.html)
-
 **Community Support:**
 - [Depth Surge 3D Discussions](https://github.com/Tok/depth-surge-3d/discussions)
-- [Open3D GitHub Issues](https://github.com/isl-org/Open3D/issues)
+- [Depth Surge 3D Issues](https://github.com/Tok/depth-surge-3d/issues)

@@ -13,6 +13,7 @@ For pure functions without side effects, see utils/path_utils.py.
 from __future__ import annotations
 
 import os
+import shutil
 import json
 import subprocess
 import time
@@ -29,6 +30,13 @@ from ..utils.path_utils import (
     generate_output_filename,
     format_time_duration,
 )
+
+
+def _project_version() -> str:
+    """Return the package version (imported lazily to avoid a circular import)."""
+    from .. import __version__
+
+    return __version__
 
 
 def validate_video_file(video_path: str) -> bool:
@@ -159,13 +167,30 @@ def get_video_info_ffprobe(video_path: str) -> dict[str, Any]:
     return {}
 
 
+# Directories later pipeline steps read from; always created and written, even when
+# intermediates aren't kept (they're removed after a successful run instead).
+PIPELINE_DIRS = [
+    "frames",
+    "left_frames",
+    "right_frames",
+    "left_distorted",
+    "right_distorted",
+    "left_cropped",
+    "right_cropped",
+    "left_upscaled",
+    "right_upscaled",
+    "vr_frames",
+]
+
+
 def create_output_directories(base_path: Path, keep_intermediates: bool = True) -> dict[str, Path]:
     """
     Create output directory structure on filesystem.
 
     Args:
         base_path: Base output directory path
-        keep_intermediates: Whether to create intermediate directories
+        keep_intermediates: Also create the purely informational directories (depth map
+            images, legacy folders). The pipeline directories are always created.
 
     Returns:
         Dictionary mapping directory names to paths
@@ -174,27 +199,40 @@ def create_output_directories(base_path: Path, keep_intermediates: bool = True) 
         Creates directories on filesystem
     """
     directories = {"base": base_path}
-
-    # Always create base directory
     base_path.mkdir(parents=True, exist_ok=True)
 
-    # Always create directories needed for pipeline steps (cropped frames for upscaling)
-    required_dirs = ["vr_frames", "left_cropped", "right_cropped"]
-    for dir_name in required_dirs:
-        if dir_name in INTERMEDIATE_DIRS:
-            full_path = base_path / INTERMEDIATE_DIRS[dir_name]
-            full_path.mkdir(exist_ok=True)
-            directories[dir_name] = full_path
-
-    # Create additional intermediate directories if requested
-    if keep_intermediates:
-        for dir_name, dir_path in INTERMEDIATE_DIRS.items():
-            if dir_name not in required_dirs:  # Skip already created dirs
-                full_path = base_path / dir_path
-                full_path.mkdir(exist_ok=True)
-                directories[dir_name] = full_path
+    names = INTERMEDIATE_DIRS if keep_intermediates else PIPELINE_DIRS
+    for dir_name in names:
+        full_path = base_path / INTERMEDIATE_DIRS[dir_name]
+        full_path.mkdir(exist_ok=True)
+        directories[dir_name] = full_path
 
     return directories
+
+
+def remove_intermediate_directories(base_path: Path) -> int:
+    """
+    Delete all intermediate frame directories of a batch.
+
+    Used after a successful run when intermediates aren't kept. The final video, settings
+    file, source video and extracted audio in ``base_path`` are left alone.
+
+    Args:
+        base_path: Batch output directory
+
+    Returns:
+        Number of directories removed
+
+    Side Effects:
+        Deletes directories from filesystem
+    """
+    removed = 0
+    for dir_name in INTERMEDIATE_DIRS.values():
+        full_dir = base_path / dir_name
+        if full_dir.is_dir():
+            shutil.rmtree(full_dir, ignore_errors=True)
+            removed += 1
+    return removed
 
 
 def get_frame_files(frames_dir: Path) -> list[Path]:
@@ -427,7 +465,7 @@ def save_processing_settings(
             "source_video_name": Path(source_video_path).name,
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "created_timestamp": time.time(),
-            "project_version": "0.9.0",
+            "project_version": _project_version(),
             "processing_status": "in_progress",
         },
         "video_properties": video_properties,

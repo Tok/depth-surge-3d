@@ -17,7 +17,7 @@
 
 ### Resolution Options
 
-- **`--vr-resolution`**: Resolution format including all aspect ratios (default: auto)
+- **`--vr-resolution`**: Per-eye resolution: a preset, `custom:WIDTHxHEIGHT`, or `auto` (default). Auto picks a square preset when fisheye is enabled (VR180 eyes are square) and a preset matching the source aspect for flat 3D (`--no-distortion`). If the content's aspect differs from the chosen resolution, it's fitted with black bars, never stretched.
   - **Square**: square-480, square-720, square-1k, square-2k, square-3k, square-4k, square-5k
   - **16:9**: 16x9-480p, 16x9-720p, 16x9-1080p, 16x9-1440p, 16x9-4k, 16x9-5k, 16x9-8k
   - **Legacy Wide**: wide-2k, wide-4k, ultrawide
@@ -50,7 +50,7 @@
 
 ### Quality Options
 
-- **`--hole-fill-quality`**: Hole filling quality - 'fast' or 'advanced' (default: fast)
+- **`--hole-fill-quality`**: How revealed background next to near objects is filled - 'fast', 'advanced' or 'high' (default: fast)
   - **fast**: ~2-4 seconds per frame, basic gap filling
   - **advanced**: ~8-15 seconds per frame, sophisticated depth-guided filling
 
@@ -95,8 +95,9 @@ The **baseline** (distance between virtual cameras) and **focal length** work to
    ```
 
 2. **Adjust Hole Filling**:
-   - `--hole-fill-quality fast`: Simple inpainting, fewer artifacts but visible gaps
-   - `--hole-fill-quality advanced`: Better gap filling but may introduce AI "hallucinations"
+   - `--hole-fill-quality fast`: Fills revealed areas by mirroring the neighbouring background
+     (deterministic, so it doesn't flicker between frames)
+   - `--hole-fill-quality advanced` (or `high`): Same, plus softened seams around the filled areas
 
 3. **Crop More Aggressively**:
    ```bash
@@ -106,7 +107,7 @@ The **baseline** (distance between virtual cameras) and **focal length** work to
 
 **Trade-offs to Understand**:
 - **Strong 3D vs. Clean Image**: More dramatic depth = more artifacts
-- **Hole Filling Quality vs. Performance**: Advanced filling is 3-5x slower with marginal visual improvement
+- **Hole Filling Quality vs. Performance**: Advanced only adds seam softening and costs little extra
 - **Edge Preservation vs. 3D Effect**: Keeping original content vs. creating convincing stereo
 
 **When to Reduce 3D Strength**:
@@ -162,9 +163,8 @@ The system automatically detects your content's aspect ratio and recommends the 
 ## Performance vs. Quality Trade-offs
 
 **Hole Filling Quality Impact**:
-- **Fast**: ~2-4 seconds per frame, basic gap filling
-- **Advanced**: ~8-15 seconds per frame, sophisticated depth-guided filling
-- **Reality**: Advanced mode often provides only 10-20% visual improvement despite 3-4x processing time
+- **Fast**: mirrors background texture into revealed areas (tens of ms per frame)
+- **Advanced / high**: additionally softens the seams of filled areas (slightly slower)
 
 **Optimization Recommendations**:
 ```bash

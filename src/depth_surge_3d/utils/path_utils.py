@@ -149,7 +149,8 @@ def generate_output_filename(
     parts = [safe_base, "3D", safe_format]
 
     if resolution:
-        parts.append(resolution)
+        # "custom:1920x1080" -> "custom-1920x1080" (":" is invalid in Windows filenames)
+        parts.append(sanitize_filename(resolution.replace(":", "-")))
 
     filename = "_".join(parts) + ".mp4"
     return filename

@@ -22,8 +22,7 @@ Write-Host "Activating virtual environment..."
 Write-Host "Checking dependencies..."
 python -m pip install flask flask-socketio *>$null
 
-# Create upload and output directories
-New-Item -ItemType Directory -Force -Path "uploads" | Out-Null
+# Create output directory (uploaded videos are stored in their batch folder under output/)
 New-Item -ItemType Directory -Force -Path "output" | Out-Null
 
 # Start the Flask application

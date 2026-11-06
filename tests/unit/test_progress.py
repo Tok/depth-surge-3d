@@ -796,3 +796,21 @@ class TestTqdmImportHandling:
         from src.depth_surge_3d.utils.domain.progress import HAS_TQDM
 
         assert isinstance(HAS_TQDM, bool)
+
+
+class TestNullProgressTracker:
+    """CLI runs use a no-op tracker so stages can report unconditionally."""
+
+    def test_methods_are_noops(self):
+        from src.depth_surge_3d.utils.domain.progress import NullProgressTracker
+
+        tracker = NullProgressTracker()
+        assert tracker.update_progress("msg", phase="x", frame_num=1) is None
+        assert tracker.finish("done") is None
+
+    def test_no_preview_support(self):
+        from src.depth_surge_3d.utils.domain.progress import NullProgressTracker
+
+        tracker = NullProgressTracker()
+        assert not hasattr(tracker, "send_preview_frame")
+        assert not hasattr(tracker, "send_preview_frame_from_array")

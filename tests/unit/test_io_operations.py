@@ -232,11 +232,12 @@ class TestCreateOutputDirectories:
         assert "base" in result
         assert result["base"] == base_path
 
-        # Should not create early-stage intermediate directories
-        assert "frames" not in result
+        # Pipeline directories are always created (later steps read from them)...
+        for name in ("frames", "left_frames", "right_frames", "left_cropped", "vr_frames"):
+            assert name in result
+        # ...informational ones only when keeping intermediates
         assert "depth_maps" not in result
-        assert "left_frames" not in result
-        assert "right_frames" not in result
+        assert "supersampled" not in result
 
         # Should still create necessary output directories (vr_frames, cropped frames)
         # These are needed for final output even without intermediates
@@ -1115,3 +1116,35 @@ class TestAnalyzeProcessingProgress:
         # Should return default progress dict despite exception
         assert "frames_processed" in result
         assert result["frames_processed"] == 0
+
+
+class TestRemoveIntermediateDirectories:
+    """--no-intermediates: frame folders are deleted after a successful run."""
+
+    def test_removes_frame_dirs_keeps_outputs(self, tmp_path):
+        from src.depth_surge_3d.io.operations import (
+            create_output_directories,
+            remove_intermediate_directories,
+        )
+
+        dirs = create_output_directories(tmp_path, keep_intermediates=False)
+        (dirs["left_frames"] / "frame_000001.png").write_bytes(b"x")
+        for keep in (
+            "clip_3D_side-by-side_square-2k.mp4",
+            "clip-settings.json",
+            "clip.mp4",
+            "original_audio.flac",
+        ):
+            (tmp_path / keep).write_bytes(b"x")
+
+        assert remove_intermediate_directories(tmp_path) >= 1
+
+        remaining = sorted(p.name for p in tmp_path.iterdir())
+        assert remaining == sorted(
+            [
+                "clip_3D_side-by-side_square-2k.mp4",
+                "clip-settings.json",
+                "clip.mp4",
+                "original_audio.flac",
+            ]
+        )

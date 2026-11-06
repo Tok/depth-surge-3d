@@ -1,6 +1,7 @@
 """Unit tests for image processing utilities."""
 
 import numpy as np
+import pytest
 from src.depth_surge_3d.utils.imaging.image_processing import (
     normalize_depth_map,
     depth_to_disparity,
@@ -93,20 +94,34 @@ class TestDepthToDisparity:
     """Test depth to disparity conversion function."""
 
     def test_depth_to_disparity_basic(self):
-        """Test basic depth to disparity conversion."""
+        """Inverse depth maps linearly to disparity: nearer = larger disparity."""
         depth_map = np.array([[0.5, 0.75], [0.25, 1.0]])
         baseline = 0.1  # 10cm
         focal_length = 1000.0  # pixels
 
         disparity = depth_to_disparity(depth_map, baseline, focal_length)
 
-        # Disparity should be inversely proportional to depth
-        # Closer objects (lower depth values) should have higher disparity
         assert disparity.shape == depth_map.shape
-        assert np.all(disparity > 0)
+        # nearest point (1.0) sits at STEREO_NEAR_PLANE_M = 1m -> baseline * focal px
+        assert np.isclose(disparity[1, 1], 100.0)
+        assert np.isclose(disparity[0, 0], 50.0)
+        assert disparity[1, 1] > disparity[0, 1] > disparity[0, 0] > disparity[1, 0]
 
-        # Check inverse relationship: lower depth = higher disparity
-        assert disparity[1, 0] > disparity[0, 0]  # 0.25 depth > 0.5 depth disparity
+    def test_depth_to_disparity_bounded(self):
+        """Regression #16: disparity never exceeds baseline * focal / near plane.
+
+        The old formula divided by normalized depth, so the 0-valued pixel present in
+        every min-max normalized frame was shifted by thousands of pixels.
+        """
+        depth_map = np.random.rand(64, 64)
+        depth_map[0, 0] = 0.0
+        depth_map[0, 1] = 1.0
+
+        disparity = depth_to_disparity(depth_map, baseline=0.065, focal_length=1000.0)
+
+        assert disparity.min() >= 0.0
+        assert disparity.max() <= 65.0 + 1e-4
+        assert disparity[0, 0] == 0.0  # farthest point -> infinity -> no parallax
 
     def test_depth_to_disparity_zero_depth_handling(self):
         """Test that zero depth values are handled safely."""
@@ -718,3 +733,285 @@ class TestHoleFillImage:
             # Should have filled the holes including residuals
             # Note: bilateral filter is applied, so values won't be exactly zero
             # but should be filled
+
+
+class TestDepthToInverseDepth:
+    """Test depth -> inverse depth conversion (DA3 / metric models)."""
+
+    def test_nearer_is_larger(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        depth = np.array([[1.0, 2.0], [4.0, 8.0]], dtype=np.float32)
+        inverse = depth_to_inverse_depth(depth, low_percentile=0.0)
+
+        assert np.allclose(inverse, 1.0 / depth)
+
+    def test_invalid_pixels_become_far(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        depth = np.array([[0.0, -1.0], [np.nan, 2.0]], dtype=np.float32)
+        inverse = depth_to_inverse_depth(depth)
+
+        assert inverse[0, 0] == 0.0 and inverse[0, 1] == 0.0 and inverse[1, 0] == 0.0
+        assert np.isclose(inverse[1, 1], 0.5)
+
+    def test_all_invalid(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        assert not depth_to_inverse_depth(np.zeros((4, 4))).any()
+
+    def test_outliers_clamped(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        depth = np.full((100, 100), 5.0, dtype=np.float32)
+        depth[0, 0] = 1e-9  # one bogus near-zero pixel
+        inverse = depth_to_inverse_depth(depth)
+
+        assert np.isclose(inverse.max(), 0.2)
+
+
+class TestSuperSampleSize:
+    """Test stereo warp resolution selection."""
+
+    def test_none(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(1376, 768, 2752, 1536, "none") == (1376, 768)
+
+    def test_auto_matches_source_when_output_not_larger(self):
+        """Regression #17: same-size output must not be upscaled."""
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(1376, 768, 1376, 768, "auto") == (1376, 768)
+
+    def test_auto_covers_output_preserving_aspect(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(1080, 1920, 1536, 1536, "auto") == (1536, 2731)
+
+    def test_auto_capped_at_2x(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(640, 360, 4096, 4096, "auto") == (1280, 720)
+
+    def test_2x(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(100, 50, 10, 10, "2x") == (200, 100)
+
+    @pytest.mark.parametrize(
+        "mode,src,expected",
+        [
+            ("1080p", (1280, 720), (1920, 1080)),
+            ("4k", (1920, 1080), (3840, 2160)),
+            ("4k", (1080, 1920), (2160, 3840)),  # portrait keeps aspect
+            ("1080p", (3840, 2160), (3840, 2160)),  # never downscales
+        ],
+    )
+    def test_ui_modes(self, mode, src, expected):
+        """Web UI options: 'Force 1080p' / 'Force 4K'."""
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(*src, 1920, 1080, mode) == expected
+
+
+class TestRenderStereoPair:
+    """Test full stereo pair rendering."""
+
+    def test_near_content_has_crossed_disparity(self):
+        """A near object appears further right in the left eye than in the right eye."""
+        from src.depth_surge_3d.utils.imaging.image_processing import render_stereo_pair
+
+        frame = np.zeros((40, 200), dtype=np.uint8)
+        frame[:, 95:105] = 255  # white bar in the middle
+        depth = np.zeros((40, 200), dtype=np.float32)
+        depth[:, 80:120] = 1.0  # bar region is nearest
+        settings = {"baseline": 0.02, "focal_length": 1000, "hole_fill_quality": "none"}
+
+        left, right = render_stereo_pair(frame, depth, settings)
+
+        left_center = np.nonzero(left[20] > 127)[0].mean()
+        right_center = np.nonzero(right[20] > 127)[0].mean()
+        assert left_center - right_center == pytest.approx(20, abs=2)
+
+    def test_disparity_scales_with_super_sampling(self):
+        """Super sampling doesn't change the relative 3D strength."""
+        from src.depth_surge_3d.utils.imaging.image_processing import render_stereo_pair
+
+        frame = np.zeros((40, 200), dtype=np.uint8)
+        frame[:, 95:105] = 255
+        depth = np.zeros((40, 200), dtype=np.float32)
+        depth[:, 80:120] = 1.0
+        settings = {
+            "baseline": 0.02,
+            "focal_length": 1000,
+            "hole_fill_quality": "none",
+            "super_sample": "2x",
+        }
+
+        left, right = render_stereo_pair(frame, depth, settings)
+
+        assert left.shape == (80, 400)
+        left_center = np.nonzero(left[40] > 127)[0].mean()
+        right_center = np.nonzero(right[40] > 127)[0].mean()
+        assert left_center - right_center == pytest.approx(40, abs=3)
+
+
+class TestOcclusionAwareWarp:
+    """Forward warping with a z-buffer and background-side hole filling."""
+
+    @staticmethod
+    def _scene(width=120, height=6, bar=(50, 70), fg_disp=20.0):
+        """Textured background (disparity 0) with a uniform near bar in front of it."""
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view  # noqa
+
+        bg = (np.arange(width) % 7 * 30).astype(np.uint8)  # background texture
+        image = np.tile(bg, (height, 1))
+        image[:, bar[0] : bar[1]] = 255  # foreground bar
+        disparity = np.zeros((height, width), np.float32)
+        disparity[:, bar[0] : bar[1]] = fg_disp
+        return image, disparity
+
+    def test_nearer_pixel_wins(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import forward_warp_disparity
+
+        disp = np.array([[0, 0, 0, 0, 4, 0, 0, 0, 0, 0]], np.float32)
+        warped = forward_warp_disparity(disp, 0.5)
+        # pixel 4 (disparity 4) moves 2 px right and covers the background pixels there
+        assert warped[0, 6] == 4
+
+    def test_disocclusion_is_hole(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import stereo_source_coordinates
+
+        _, disp = self._scene()
+        _, holes = stereo_source_coordinates(disp, "left")
+        # left eye: the bar moves right by 10 px and reveals background on its left
+        assert holes[0, 52:58].all()
+        assert not holes[0, 75:110].any()
+
+    def test_hole_filled_with_background_not_foreground(self):
+        """Regression: backward warping smeared the foreground into revealed areas."""
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene()
+        view, holes = create_stereo_view(image, disp, "left", "fast")
+        assert holes.any()
+        assert (view[holes] < 255).all()  # no bar colour in the filled hole
+        assert (view[:, 62:78] == 255).all()  # bar shifted by +10 px, intact
+
+    def test_right_eye_mirrors(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene()
+        view, holes = create_stereo_view(image, disp, "right", "fast")
+        assert (view[:, 42:58] == 255).all()  # bar shifted by -10 px
+        assert holes[0, 62:68].all() and (view[holes] < 255).all()
+
+    def test_real_black_pixels_kept(self):
+        """Regression: the old hole filler inpainted every pure-black pixel of the footage."""
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image = np.full((20, 40, 3), 120, np.uint8)
+        image[5:15, 10:30] = 0  # dark object in the footage
+        view, holes = create_stereo_view(image, np.zeros((20, 40), np.float32), "left", "fast")
+        assert not holes.any()
+        assert (view[5:15, 10:30] == 0).all()
+
+    def test_none_leaves_holes_black(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene()
+        view, holes = create_stereo_view(image, disp, "left", "none")
+        assert (view[holes] == 0).all()
+
+    def test_advanced_only_touches_seams(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene(width=200, bar=(80, 120))
+        fast, holes = create_stereo_view(image, disp, "left", "fast")
+        adv, _ = create_stereo_view(image, disp, "left", "advanced")
+        far_from_holes = np.ones_like(holes)
+        far_from_holes[:, 70:110] = False
+        assert np.array_equal(fast[far_from_holes], adv[far_from_holes])
+
+    def test_crack_bands_merged(self):
+        """Steep depth ramps leave interleaved 1 px cracks; they become one hole."""
+        from src.depth_surge_3d.utils.imaging.image_processing import stereo_source_coordinates
+
+        disp = np.zeros((1, 80), np.float32)
+        disp[0, 30:40] = np.linspace(0, 30, 10)  # soft edge: 3 px of disparity per px
+        disp[0, 40:] = 30
+        _, holes = stereo_source_coordinates(disp, "left")
+        run = holes[0].astype(int)
+        assert np.count_nonzero(np.diff(run) == 1) == 1  # a single contiguous hole
+
+
+class TestFittedFisheye:
+    """Regression: the fisheye mapping sampled outside the source and clamped into streaks."""
+
+    @pytest.mark.parametrize(
+        "projection", ["stereographic", "equidistant", "equisolid", "orthogonal"]
+    )
+    @pytest.mark.parametrize("crop", [0.5, 0.7, 1.0])
+    def test_kept_circle_samples_real_content(self, projection, crop):
+        w, h = 320, 180
+        x_map, y_map = calculate_fisheye_coordinates(w, h, 180, projection, fit_radius=crop)
+        yy, xx = np.mgrid[0:h, 0:w]
+        inside_circle = np.hypot(xx - w / 2, yy - h / 2) <= crop * h / 2 - 1
+        assert (y_map[inside_circle] >= -0.5).all() and (y_map[inside_circle] <= h - 0.5).all()
+        assert (x_map[inside_circle] >= -0.5).all() and (x_map[inside_circle] <= w - 0.5).all()
+
+    def test_circle_edge_hits_source_edge(self):
+        w, h = 320, 180
+        _, y_map = calculate_fisheye_coordinates(w, h, 180, "stereographic", fit_radius=0.7)
+        top_of_circle = int(round(h / 2 - 0.7 * h / 2))
+        assert y_map[top_of_circle, w // 2] == pytest.approx(0, abs=1.5)
+
+    def test_outside_source_is_black(self):
+        img = np.full((90, 160, 3), 200, np.uint8)
+        out = apply_fisheye_distortion(img, 180, "stereographic", fit_radius=0.7)
+        assert (out[0, 0] == 0).all()  # corner lies outside the source: black, not streaked
+        assert (out[45, 80] == 200).all()
+
+    def test_legacy_mapping_unchanged(self):
+        x_map, y_map = calculate_fisheye_coordinates(64, 64, 180, "stereographic")
+        assert x_map.min() >= 0 and x_map.max() <= 63 and y_map.max() <= 63
+
+    def test_maps_cached(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import _cached_fisheye_maps
+
+        a = _cached_fisheye_maps(64, 48, 180.0, "equidistant", 0.7)
+        b = _cached_fisheye_maps(64, 48, 180.0, "equidistant", 0.7)
+        assert a[0] is b[0] and not a[0].flags.writeable
+
+
+class TestFitToCanvas:
+    """Regression: per-eye scaling stretched content whose aspect didn't match the target."""
+
+    def test_same_aspect_is_plain_resize(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import fit_to_canvas
+
+        out = fit_to_canvas(np.full((90, 160, 3), 200, np.uint8), 1280, 720)
+        assert out.shape == (720, 1280, 3) and (out == 200).all()
+
+    def test_square_into_wide_is_pillarboxed(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import fit_to_canvas
+
+        out = fit_to_canvas(np.full((100, 100, 3), 200, np.uint8), 160, 90)
+        assert out.shape == (90, 160, 3)
+        assert (out[:, 35:125] == 200).all()  # 90x90 square centred
+        assert (out[:, :35] == 0).all() and (out[:, 125:] == 0).all()
+
+    def test_portrait_into_wide(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import fit_to_canvas
+
+        out = fit_to_canvas(np.full((160, 90), 50, np.uint8), 160, 90)
+        assert out.shape == (90, 160)
+        assert out[45, 80] == 50 and out[45, 0] == 0
+
+    def test_fisheye_crop_not_stretched(self):
+        """A square fisheye crop into a 16:9 eye keeps the circle round."""
+        img = np.full((100, 200, 3), 255, np.uint8)
+        out = apply_fisheye_square_crop(img, 320, 180, crop_factor=1.0)
+        assert out.shape == (180, 320, 3)
+        assert (out[:, :60] == 0).all() and (out[:, 70:250] == 255).all()

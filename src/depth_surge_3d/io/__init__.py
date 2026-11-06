@@ -18,6 +18,7 @@ from .operations import (
     get_frame_files,
     calculate_directory_size,
     cleanup_intermediate_files,
+    remove_intermediate_directories,
     get_available_space,
     # Processing state
     save_processing_settings,
@@ -41,6 +42,7 @@ __all__ = [
     "get_frame_files",
     "calculate_directory_size",
     "cleanup_intermediate_files",
+    "remove_intermediate_directories",
     "get_available_space",
     # Processing state
     "save_processing_settings",

@@ -914,13 +914,16 @@
                             </select>
                             <small class="form-text text-muted"><i class="fas fa-tachometer-alt"></i> Uses fast FFmpeg Lanczos scaling (not AI upscaling, won't alter visual style)</small>
                         </div>
-                        <div class="mb-3" style="display: none;">
-                            <label class="form-label">Super Sampling</label>
+                        <div class="mb-3">
+                            <label class="form-label">Super Sampling <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Resolution at which the stereo views are rendered. Rendering above the source resolution reduces resampling artifacts when the VR output is larger than the source. Does not change the 3D strength."></i></label>
                             <select class="form-select" id="superSample">
-                                <option value="none" selected>None (Keep Original)</option>
-                                <option value="1080p">Force 1080p</option>
-                                <option value="4k">Force 4K</option>
+                                <option value="auto" selected>Auto (Up to 2x, matched to VR output) - Recommended</option>
+                                <option value="none">None (Source resolution, fastest)</option>
+                                <option value="2x">2x (Always double resolution)</option>
+                                <option value="1080p">At least 1080p</option>
+                                <option value="4k">At least 4K (Slow, high RAM)</option>
                             </select>
+                            <small class="form-text text-muted"><i class="fas fa-expand"></i> Aspect ratio is preserved; frames are never downscaled</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Target FPS <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Frame rate for processing. Higher FPS = smoother motion but longer processing time."></i></label>
@@ -992,31 +995,17 @@
                                 <i class="fas fa-brain"></i> Trained on Virtual KITTI and IRS datasets
                             </small>
                         </div>
-                        <!-- Experimental: Temporal Window Settings (V2 only) -->
+                        <!-- Temporal depth alignment (V2 only) -->
                         <div class="mb-3" id="temporalWindowSettings" style="display: none;">
-                            <div class="alert alert-warning" style="background-color: rgba(255, 193, 7, 0.1); border-color: var(--accent-yellow); color: var(--accent-yellow);">
-                                <i class="fas fa-flask"></i> <strong>Experimental:</strong> Temporal Window Tuning
-                            </div>
-                            <label class="form-label">Window Size (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Number of frames processed together for temporal consistency. Default: 32. Higher = more context but more VRAM. Lower = less VRAM but may reduce smoothness."></i></label>
-                            <input type="range" class="form-range" id="temporalWindowSize" min="16" max="64" step="8" value="32">
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">16 (Low VRAM)</small>
-                                <small><strong id="temporalWindowSizeValue">32</strong> frames</small>
-                                <small class="text-muted">64 (High VRAM)</small>
-                            </div>
-                            <small class="form-text text-muted" style="margin-top: 0.5rem; display: block;">
-                                <i class="fas fa-memory"></i> Default (32): Balanced temporal consistency & VRAM<br>
-                                <i class="fas fa-exclamation-triangle"></i> Changing from 32 may affect quality (model trained on 32)
-                            </small>
-                            <label class="form-label" style="margin-top: 1rem;">Overlap (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Number of frames shared between consecutive windows. Default: 10. Higher = smoother transitions but slower."></i></label>
+                            <label class="form-label">Chunk Overlap (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Long videos are processed in chunks. Consecutive chunks share this many frames, which are used to align their depth scale so there are no depth jumps between chunks. Default: 10."></i></label>
                             <input type="range" class="form-range" id="temporalWindowOverlap" min="4" max="20" step="2" value="10">
                             <div class="d-flex justify-content-between">
-                                <small class="text-muted">4 (Fast)</small>
+                                <small class="text-muted">4 (Faster)</small>
                                 <small><strong id="temporalWindowOverlapValue">10</strong> frames</small>
-                                <small class="text-muted">20 (Smooth)</small>
+                                <small class="text-muted">20 (More robust alignment)</small>
                             </div>
                             <small class="form-text text-muted" style="margin-top: 0.5rem; display: block;">
-                                <i class="fas fa-arrows-alt-h"></i> Default (10): Good balance of speed & smoothness
+                                <i class="fas fa-arrows-alt-h"></i> Default (10): Seamless depth across chunks with little extra work
                             </small>
                         </div>
                         <div class="mb-3">
@@ -1080,7 +1069,7 @@
                                 <option value="equidistant">Equidistant (f*θ)</option>
                                 <option value="stereographic" selected>Stereographic (2f*tan(θ/2))</option>
                                 <option value="equisolid">Equisolid Angle (2f*sin(θ/2))</option>
-                                <option value="orthographic">Orthographic (f*sin(θ))</option>
+                                <option value="orthogonal">Orthographic (f*sin(θ))</option>
                             </select>
                             <small class="form-text text-muted">Mathematical projection model for fisheye lens</small>
                         </div>
@@ -1107,22 +1096,20 @@
 </small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Fisheye Crop Factor <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Applied when fisheye is enabled. Controls zoom level of the fisheye projection. <1.0 zooms in to hide curved edges, >1.0 shows more field of view."></i></label>
+                            <label class="form-label">Fisheye Crop Factor <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Applied when fisheye is enabled. Sets how much of the fisheye circle ends up in the output; the source video is fitted into that circle. Areas outside the source are black."></i></label>
                             <input type="number" class="form-control" id="fisheyeCropFactor" value="0.7" step="0.05" min="0.5" max="2.0">
                             <small class="form-text text-muted">
-    <i class="fas fa-search-plus"></i> Zoom/crop for fisheye projection (hemispherical to fit VR display)<br>
-    <strong>0.5</strong> = zoomed in (hides edges) | <strong>0.7</strong> = balanced (default) | <strong>1.0</strong> = full circle | <strong>>1.0</strong> = show more FOV
+    <i class="fas fa-search-plus"></i> How much of the fisheye circle is kept; the video is fitted into it, so edges are never stretched<br>
+    <strong>0.5</strong> = zoomed in | <strong>0.7</strong> = balanced (default) | <strong>1.0</strong> = full circle | <strong>>1.0</strong> = wider, with black corners
 </small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Hole Filling Quality <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Higher quality uses multi-pass inpainting with adaptive parameters and edge preservation for best stereo quality."></i></label>
+                            <label class="form-label">Hole Filling <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="When the viewpoint shifts, background hidden behind near objects becomes visible. These areas are filled by mirroring the neighbouring background texture (never the foreground), the same way every frame, so the fill does not flicker."></i></label>
                             <select class="form-select" id="holeFillQuality">
-                                <option value="fast" selected>Fast (Quick TELEA inpainting)</option>
-                                <option value="advanced">Advanced (Navier-Stokes + bilateral filter)</option>
-                                <option value="high">High (Multi-pass + edge preservation)</option>
+                                <option value="fast" selected>Mirror Background (Recommended)</option>
+                                <option value="advanced">Mirror Background + Soft Seams</option>
                             </select>
-                            <small class="form-text text-muted">Balance between processing speed and stereo quality
-                            <br><strong>Warning:</strong> Advanced is 3-5x slower with often minimal visual improvement</small>
+                            <small class="form-text text-muted">Soft seams blend the edges of filled areas; both options cost about the same</small>
                         </div>
                         <div class="step-indicator">Cropping removes edge artifacts from stereo generation</div>
                     </div>
@@ -1196,7 +1183,7 @@
                         <div class="mb-3">
                             <label class="form-label">VR Resolution per Eye <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Square formats (1:1): Optimized for VR headsets. Example: 1080×1080 per eye = 2160×1080 total (SBS) or 1080×2160 (Over-Under). 16:9 formats: Standard widescreen, preserves original content aspect ratio naturally."></i></label>
                             <select class="form-select" id="vrResolution">
-                                <option value="auto" selected>Auto (Match Source Quality & Aspect)</option>
+                                <option value="auto" selected>Auto (Square eyes for fisheye/VR180, source aspect for flat 3D)</option>
                                 <optgroup label="Square Formats (VR Optimized)">
                                                                     <option value="square-480">Square 480 (480×480 per eye - Quick Test Only ⚠️)</option>
                             <option value="square-720">Square 720 (720×720 per eye - Preview Quality ⚠️)</option>
@@ -1840,6 +1827,8 @@
                 return;
             }
 
+            hidePreviousOutput();
+
             const formData = new FormData();
             formData.append('video', file);
 
@@ -2143,7 +2132,6 @@
                 depth_model_version: document.getElementById('depthModelVersion').value,
                 depth_resolution: document.getElementById('depthResolution').value,
                 use_metric_depth: document.getElementById('depthModelType').value === 'metric',
-                temporal_window_size: parseInt(document.getElementById('temporalWindowSize').value),
                 temporal_window_overlap: parseInt(document.getElementById('temporalWindowOverlap').value),
                 super_sample: document.getElementById('superSample').value,
                 apply_distortion: document.getElementById('applyDistortion').checked,
@@ -2173,6 +2161,8 @@
                 if (data.success) {
                     currentSessionId = data.session_id;
                     socket.emit('join_session', {session_id: currentSessionId});
+                    resetProgressDisplay();
+                    hidePreviousOutput();
                     showProgressPanel();
                     showCurrentBatchDirectory(data.output_dir);
                     // Auto-populate resume field for easy resuming
@@ -2210,6 +2200,8 @@
                 if (data.success) {
                     currentSessionId = data.session_id;
                     socket.emit('join_session', {session_id: currentSessionId});
+                    resetProgressDisplay();
+                    hidePreviousOutput();
                     showProgressPanel();
                     showCurrentBatchDirectory(data.output_dir);
                 } else {
@@ -2298,24 +2290,49 @@
             document.getElementById('currentBatchDirectory').style.display = 'none';
         }
         
-        // Reset progress display
+        // Reset progress display to its initial state (called whenever a new job starts)
         function resetProgressDisplay() {
-            const progressBar = document.querySelector('.progress-bar');
-            progressBar.style.width = '0%';
-            progressBar.classList.remove('bg-success', 'bg-danger');
-            progressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
-            
-            document.getElementById('progressText').textContent = 'Initializing...';
-            document.getElementById('progressPercent').textContent = '0%';
-            document.getElementById('currentFrame').textContent = '0';
-            document.getElementById('totalFrames').textContent = '0';
-            document.getElementById('processingSpeed').textContent = '--';
-            document.getElementById('estimatedTime').textContent = '--';
-            
-            // Reset sub-progress bars
-            document.getElementById('extractProgress').style.width = '0%';
-            document.getElementById('depthProgress').style.width = '0%';
-            document.getElementById('videoProgress').style.width = '0%';
+            const overallBar = document.getElementById('overallProgressBar');
+            if (overallBar) {
+                overallBar.style.width = '0%';
+                overallBar.setAttribute('aria-valuenow', 0);
+                overallBar.classList.remove('bg-danger', 'bg-warning');
+                overallBar.classList.add('bg-success', 'progress-bar-striped', 'progress-bar-animated');
+            }
+            const overallText = document.getElementById('overallProgressText');
+            if (overallText) overallText.textContent = '0%';
+            const overallPhase = document.getElementById('overallProgressPhase');
+            if (overallPhase) overallPhase.textContent = 'Initializing...';
+
+            for (let i = 1; i <= 8; i++) {
+                const bar = document.getElementById(`step${i}Bar`);
+                const text = document.getElementById(`step${i}Progress`);
+                if (bar) {
+                    bar.style.width = '0%';
+                    bar.classList.remove('bg-success');
+                    bar.classList.add('bg-info');
+                }
+                if (text) text.textContent = '0%';
+            }
+
+            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+                const img = document.getElementById(id);
+                if (img) img.src = '';
+            });
+            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+                const label = document.getElementById(id);
+                if (label) label.textContent = 'Frame: --';
+            });
+
+            processingStartTime = null;
+            lastFrameTime = null;
+            frameProcessingTimes = [];
+        }
+
+        // Hide the previous run's output card (shown after completion)
+        function hidePreviousOutput() {
+            const card = document.getElementById('outputDirectoryCard');
+            if (card) card.style.display = 'none';
         }
 
         // Processing start time for speed calculation
@@ -2589,12 +2606,14 @@
         
         // Handle processing stopped
         function handleProcessingStopped(data) {
-            const progressBar = document.querySelector('.progress-bar');
-            progressBar.classList.remove('progress-bar-animated');
-            progressBar.classList.add('bg-warning');
-            
-            document.getElementById('progressText').textContent = 'Processing stopped';
-            
+            const overallBar = document.getElementById('overallProgressBar');
+            if (overallBar) {
+                overallBar.classList.remove('progress-bar-animated', 'bg-success');
+                overallBar.classList.add('bg-warning');
+            }
+            const overallPhase = document.getElementById('overallProgressPhase');
+            if (overallPhase) overallPhase.textContent = 'Processing stopped';
+
             // Hide stop button, show start button
             hideProgressPanel();
             currentSessionId = null;
@@ -2934,7 +2953,7 @@
 
         // Settings persistence functions
         function saveSettings() {
-            const SETTINGS_VERSION = 2; // Must match version in loadSettings()
+            const SETTINGS_VERSION = 3; // Must match version in loadSettings()
             const settings = {
                 version: SETTINGS_VERSION,
                 // Time range
@@ -2978,7 +2997,7 @@
         }
         
         function loadSettings() {
-            const SETTINGS_VERSION = 2; // Increment to force reset of old settings
+            const SETTINGS_VERSION = 3; // Increment to force reset of old settings
             const savedSettings = localStorage.getItem('stereoProjectorSettings');
             if (!savedSettings) return;
 
@@ -3203,12 +3222,7 @@
             document.getElementById('temporalWindowSettings').style.display = isV2 ? 'block' : 'none';
         });
 
-        // Update temporal window size value display
-        document.getElementById('temporalWindowSize').addEventListener('input', function() {
-            document.getElementById('temporalWindowSizeValue').textContent = this.value;
-        });
-
-        // Update temporal window overlap value display
+        // Update chunk overlap value display
         document.getElementById('temporalWindowOverlap').addEventListener('input', function() {
             document.getElementById('temporalWindowOverlapValue').textContent = this.value;
         });

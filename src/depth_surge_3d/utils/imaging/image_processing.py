@@ -7,11 +7,17 @@ and geometric transformations without side effects.
 
 from __future__ import annotations
 
-import cv2
-import numpy as np
+import functools
 import math
 
-from ...core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE
+import cv2
+import numpy as np
+from typing import Any
+
+from ...core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE, STEREO_NEAR_PLANE_M
+
+# Holes closer than this (px) are merged into one disocclusion region before filling
+HOLE_MERGE_WIDTH = 5
 
 
 def resize_image(
@@ -35,6 +41,36 @@ def resize_image(
     return cv2.resize(image, (target_width, target_height), interpolation=interpolation)
 
 
+def fit_to_canvas(image: np.ndarray, target_width: int, target_height: int) -> np.ndarray:
+    """
+    PURE: Scale an image into a target size without distorting it.
+
+    If the aspect ratios match (within a pixel), this is a plain resize. Otherwise the image is
+    scaled to fit and centred on a black canvas (letterbox/pillarbox) instead of being stretched.
+
+    Args:
+        image: Input image (H, W) or (H, W, C)
+        target_width: Output width
+        target_height: Output height
+
+    Returns:
+        Image of exactly (target_height, target_width)
+    """
+    height, width = image.shape[:2]
+    scale = min(target_width / width, target_height / height)
+    new_w = max(1, int(round(width * scale)))
+    new_h = max(1, int(round(height * scale)))
+    if abs(new_w - target_width) <= 1 and abs(new_h - target_height) <= 1:
+        return resize_image(image, target_width, target_height)
+
+    scaled = resize_image(image, new_w, new_h)
+    canvas = np.zeros((target_height, target_width) + image.shape[2:], dtype=image.dtype)
+    y0 = (target_height - new_h) // 2
+    x0 = (target_width - new_w) // 2
+    canvas[y0 : y0 + new_h, x0 : x0 + new_w] = scaled
+    return canvas
+
+
 def normalize_depth_map(depth_map: np.ndarray) -> np.ndarray:
     """
     Normalize depth map to 0-1 range.
@@ -52,28 +88,116 @@ def normalize_depth_map(depth_map: np.ndarray) -> np.ndarray:
     return np.clip(normalized, MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
 
 
-def depth_to_disparity(depth_map: np.ndarray, baseline: float, focal_length: float) -> np.ndarray:
+def depth_to_inverse_depth(depth: np.ndarray, low_percentile: float = 1.0) -> np.ndarray:
     """
-    Convert depth map to disparity map for stereo generation.
+    Convert a depth map (larger = farther) to inverse depth (larger = nearer).
+
+    The pipeline works on inverse depth, which is what relative depth models such as
+    Video-Depth-Anything output natively. Models that output depth (Depth Anything V3,
+    metric models) must be converted first. Depths are clamped at a low percentile of the
+    valid values so a few near-zero pixels can't blow up the range.
 
     Args:
-        depth_map: Normalized depth map (0-1 range)
+        depth: Depth map (any positive scale); non-positive values are treated as invalid
+        low_percentile: Percentile of valid depths used as the minimum depth
+
+    Returns:
+        Inverse depth map (float32, >= 0); invalid pixels become 0 (infinitely far)
+    """
+    depth = np.asarray(depth, dtype=np.float32)
+    valid = np.isfinite(depth) & (depth > 0)
+    if not valid.any():
+        return np.zeros_like(depth)
+
+    min_depth = max(float(np.percentile(depth[valid], low_percentile)), 1e-6)
+    inverse = np.zeros_like(depth)
+    inverse[valid] = 1.0 / np.maximum(depth[valid], min_depth)
+    return inverse
+
+
+def depth_to_disparity(depth_map: np.ndarray, baseline: float, focal_length: float) -> np.ndarray:
+    """
+    Convert a normalized inverse-depth map to a pixel disparity map.
+
+    Depth maps throughout the pipeline are normalized inverse depth ("nearness"):
+    1.0 is the nearest point in the frame and 0.0 the farthest. The nearest point is
+    placed at STEREO_NEAR_PLANE_M meters and the farthest at infinity (zero disparity),
+    so disparity = baseline * focal_length * nearness / STEREO_NEAR_PLANE_M.
+
+    Args:
+        depth_map: Normalized inverse depth map (0-1 range, 1 = near)
         baseline: Stereo baseline in meters
         focal_length: Camera focal length in pixels
 
     Returns:
-        Disparity map array
+        Disparity map array in pixels (float32, >= 0)
     """
-    # Avoid division by zero
-    safe_depth = np.where(depth_map > 0.001, depth_map, 0.001)
+    nearness = np.clip(np.nan_to_num(depth_map, nan=0.0), MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
+    max_disparity = (baseline * focal_length) / STEREO_NEAR_PLANE_M
+    return (nearness * max_disparity).astype(np.float32)
 
-    # Convert normalized depth to actual depth (assuming 1 unit = 10 meters)
-    actual_depth = safe_depth * 10.0
 
-    # Calculate disparity: d = (baseline * focal_length) / depth
-    disparity = (baseline * focal_length) / actual_depth
+def match_depth_to_frame(depth_map: np.ndarray, width: int, height: int) -> np.ndarray:
+    """
+    Resize a depth map to the given frame size if it doesn't already match.
 
-    return disparity
+    Args:
+        depth_map: Depth map array (H, W)
+        width: Target width in pixels
+        height: Target height in pixels
+
+    Returns:
+        Depth map of shape (height, width)
+    """
+    if depth_map.shape[:2] == (height, width):
+        return depth_map
+    return cv2.resize(depth_map.astype(np.float32), (width, height), interpolation=cv2.INTER_LINEAR)
+
+
+def calculate_super_sample_size(
+    frame_width: int,
+    frame_height: int,
+    per_eye_width: int,
+    per_eye_height: int,
+    super_sample: str = "auto",
+) -> tuple[int, int]:
+    """
+    Determine the working resolution for stereo warping.
+
+    Warping at a higher resolution than the source reduces resampling artifacts when
+    the per-eye output is larger than the source. The source aspect ratio is preserved.
+
+    Modes:
+        none:  work at source resolution
+        auto:  upscale so the frame covers the per-eye output, at most 2x the source
+        2x:    upscale by 2x
+        1080p: upscale so the shorter side is at least 1080 px
+        4k:    upscale so the shorter side is at least 2160 px
+        any other value is treated like "auto"; the frame is never downscaled
+
+    Args:
+        frame_width: Source frame width
+        frame_height: Source frame height
+        per_eye_width: Target per-eye width
+        per_eye_height: Target per-eye height
+        super_sample: Super sampling mode
+
+    Returns:
+        Tuple of (width, height) for stereo warping
+    """
+    if super_sample == "none" or frame_width <= 0 or frame_height <= 0:
+        return frame_width, frame_height
+
+    short_side_targets = {"1080p": 1080, "4k": 2160}
+    if super_sample == "2x":
+        scale = 2.0
+    elif super_sample in short_side_targets:
+        scale = max(short_side_targets[super_sample] / min(frame_width, frame_height), 1.0)
+    else:
+        scale = max(per_eye_width / frame_width, per_eye_height / frame_height)
+        scale = min(max(scale, 1.0), 2.0)
+
+    return int(round(frame_width * scale)), int(round(frame_height * scale))
 
 
 def create_shifted_image(
@@ -125,6 +249,178 @@ def create_shifted_image(
     return shifted_image
 
 
+def forward_warp_disparity(disparity: np.ndarray, shift_scale: float) -> np.ndarray:
+    """
+    PURE: Splat a disparity map into the target view with a z-buffer.
+
+    Every source pixel moves horizontally by ``shift_scale * disparity`` and is written to
+    the two nearest target pixels (closes 1 px cracks on stretched surfaces). Where several
+    pixels land on the same target, the nearest one (largest disparity) wins, which gives
+    correct occlusion edges.
+
+    Args:
+        disparity: Source-view disparity in pixels (H, W)
+        shift_scale: Fraction of the disparity to shift by (+0.5 = left eye, -0.5 = right eye)
+
+    Returns:
+        Target-view disparity (H, W, float32); -inf where nothing landed (disocclusions)
+    """
+    height, width = disparity.shape[:2]
+    disp = np.asarray(disparity, dtype=np.float32)
+    target_x = np.arange(width, dtype=np.float32)[None, :] + shift_scale * disp
+    x0 = np.floor(target_x).astype(np.int64)
+    row_offsets = (np.arange(height, dtype=np.int64) * width)[:, None]
+
+    zbuffer = np.full(height * width, -np.inf, dtype=np.float32)
+    for xi in (x0, x0 + 1):
+        inside = (xi >= 0) & (xi < width)
+        np.maximum.at(zbuffer, (row_offsets + xi)[inside], disp[inside])
+    return zbuffer.reshape(height, width)
+
+
+def stereo_source_coordinates(
+    disparity: np.ndarray, direction: str = "left"
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    PURE: Per target pixel, the source x coordinate to sample for one eye.
+
+    Visible pixels sample at the position given by the forward-warped disparity.
+    Disoccluded pixels (background revealed next to a foreground edge) mirror the
+    texture of their background-side neighbour, i.e. the neighbour with the smaller
+    disparity, so foreground is never duplicated into the hole and the result is
+    deterministic (temporally stable).
+
+    Args:
+        disparity: Source-view disparity in pixels (H, W)
+        direction: "left" or "right" eye
+
+    Returns:
+        Tuple of (map_x float32 (H, W), hole_mask bool (H, W))
+    """
+    shift = 0.5 if direction == "left" else -0.5
+    target_disp = forward_warp_disparity(disparity, shift)
+    height, width = target_disp.shape
+    found = np.isfinite(target_disp)
+    # Soft depth edges stretch into bands of 1 px cracks with "flying" in-between pixels;
+    # merge them into one hole so it gets filled as a unit from the true background,
+    # and grow it slightly so flying pixels at its border are replaced as well
+    kernel = np.ones((1, HOLE_MERGE_WIDTH), np.uint8)
+    holes_grown = cv2.dilate(
+        cv2.morphologyEx((~found).astype(np.uint8), cv2.MORPH_CLOSE, kernel), kernel
+    )
+    valid = found & (holes_grown == 0)
+    cols = np.arange(width)
+    xs = np.broadcast_to(cols.astype(np.float32), (height, width))
+    map_x = xs - shift * np.where(valid, target_disp, 0.0)
+    holes = ~valid
+    if not holes.any():
+        return map_x.astype(np.float32), holes
+
+    # Nearest visible pixel to the left and to the right of every pixel in its row
+    left_nb = np.maximum.accumulate(np.where(valid, cols, -1), axis=1)
+    right_nb = np.minimum.accumulate(np.where(valid, cols, width)[:, ::-1], axis=1)[:, ::-1]
+    has_left, has_right = left_nb >= 0, right_nb < width
+    left_c, right_c = np.clip(left_nb, 0, width - 1), np.clip(right_nb, 0, width - 1)
+    disp_left = np.where(has_left, np.take_along_axis(target_disp, left_c, axis=1), np.inf)
+    disp_right = np.where(has_right, np.take_along_axis(target_disp, right_c, axis=1), np.inf)
+
+    # Background side = smaller disparity
+    use_left = has_left & (~has_right | (disp_left <= disp_right))
+    neighbour = np.where(use_left, left_c, right_c)
+    neighbour_src = np.take_along_axis(map_x, neighbour, axis=1)
+    mirrored = neighbour_src + (neighbour - cols[None, :])  # reflect away from the hole
+
+    fillable = holes & (has_left | has_right)
+    map_x = np.where(fillable, mirrored, map_x)
+    return map_x.astype(np.float32), holes
+
+
+def create_stereo_view(
+    image: np.ndarray, disparity: np.ndarray, direction: str = "left", hole_fill: str = "fast"
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Synthesize one eye's view with occlusion-aware warping.
+
+    Args:
+        image: Source image (H, W) or (H, W, C)
+        disparity: Disparity in pixels (H, W), same size as ``image``
+        direction: "left" or "right" eye
+        hole_fill: "fast" (mirror background into disocclusions), "advanced"/"high"
+            (additionally soften the seams around filled regions); anything else leaves
+            holes black
+
+    Returns:
+        Tuple of (view, hole_mask)
+    """
+    height, width = image.shape[:2]
+    map_x, holes = stereo_source_coordinates(disparity, direction)
+    map_y = np.broadcast_to(np.arange(height, dtype=np.float32)[:, None], (height, width)).astype(
+        np.float32
+    )
+    view = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+
+    if not holes.any():
+        return view, holes
+
+    if hole_fill in ("advanced", "high"):
+        # Soften only the seams at the hole border; blurring the whole fill would smear
+        # textured backgrounds
+        seams = cv2.morphologyEx(
+            holes.astype(np.uint8), cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8)
+        )
+        alpha = np.clip(cv2.GaussianBlur(seams.astype(np.float32), (0, 0), 1.0) * 1.5, 0, 1)
+        blurred = cv2.GaussianBlur(view, (0, 0), 1.5)
+        if view.ndim == 3:
+            alpha = alpha[:, :, None]
+        view = (view * (1.0 - alpha) + blurred * alpha).astype(image.dtype)
+    elif hole_fill != "fast":
+        view = view.copy()
+        view[holes] = 0
+
+    return view, holes
+
+
+def render_stereo_pair(
+    frame: np.ndarray, depth_map: np.ndarray, settings: dict[str, Any]
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Render a left/right stereo pair from a frame and its normalized inverse-depth map.
+
+    The depth map may come at any resolution (e.g. from the depth cache); it is resized
+    to the warp resolution. When super sampling is enabled the frame is upscaled first
+    and the disparity is scaled by the same factor, so the 3D strength is independent of
+    the super sampling mode.
+
+    Args:
+        frame: Source frame (H, W, C) or (H, W)
+        depth_map: Normalized inverse depth map (any resolution, 1 = near)
+        settings: Needs baseline, focal_length, hole_fill_quality; optionally
+            super_sample, per_eye_width, per_eye_height
+
+    Returns:
+        Tuple of (left_image, right_image) at the warp resolution
+    """
+    src_h, src_w = frame.shape[:2]
+    work_w, work_h = calculate_super_sample_size(
+        src_w,
+        src_h,
+        int(settings.get("per_eye_width") or src_w),
+        int(settings.get("per_eye_height") or src_h),
+        str(settings.get("super_sample", "none")),
+    )
+    if (work_w, work_h) != (src_w, src_h):
+        frame = cv2.resize(frame, (work_w, work_h), interpolation=cv2.INTER_CUBIC)
+
+    depth_map = match_depth_to_frame(depth_map, work_w, work_h)
+    disparity_map = depth_to_disparity(depth_map, settings["baseline"], settings["focal_length"])
+    disparity_map *= work_w / src_w
+
+    hole_fill = str(settings.get("hole_fill_quality", "fast"))
+    left_img, _ = create_stereo_view(frame, disparity_map, "left", hole_fill)
+    right_img, _ = create_stereo_view(frame, disparity_map, "right", hole_fill)
+    return left_img, right_img
+
+
 def apply_center_crop(image: np.ndarray, crop_factor: float) -> np.ndarray:
     """
     Apply center crop to image.
@@ -154,8 +450,26 @@ def apply_center_crop(image: np.ndarray, crop_factor: float) -> np.ndarray:
     return image[y_start:y_end, x_start:x_end]
 
 
+def _fisheye_source_radius(
+    rho: np.ndarray | float, max_radius: float, fov_radians: float, projection_type: str
+) -> np.ndarray:
+    """PURE: Source radius sampled for a normalized output radius (1.0 = inscribed circle)."""
+    theta = np.asarray(rho, dtype=np.float64) * (fov_radians / 2)
+    if projection_type == "stereographic":
+        return 2 * max_radius * np.tan(theta / 2) / np.tan(fov_radians / 4)
+    if projection_type == "equidistant":
+        return max_radius * theta / (fov_radians / 2)
+    if projection_type == "equisolid":
+        return 2 * max_radius * np.sin(theta / 2) / np.sin(fov_radians / 4)
+    return max_radius * np.sin(theta) / np.sin(fov_radians / 2)  # orthogonal
+
+
 def calculate_fisheye_coordinates(
-    width: int, height: int, fov_degrees: float, projection_type: str = "stereographic"
+    width: int,
+    height: int,
+    fov_degrees: float,
+    projection_type: str = "stereographic",
+    fit_radius: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate coordinate mappings for fisheye projection.
@@ -165,60 +479,67 @@ def calculate_fisheye_coordinates(
         height: Output height
         fov_degrees: Field of view in degrees
         projection_type: Type of fisheye projection
+        fit_radius: Normalized output radius (1.0 = inscribed circle) that should land
+            exactly on the source's top/bottom edge, typically the fisheye crop factor.
+            The projections sample up to 2x beyond the source there, which used to be
+            clamped into edge streaks. With fit_radius, everything inside that circle comes
+            from real image content and coordinates outside the source are returned
+            unclamped (render them as black). None keeps the legacy clamped mapping.
 
     Returns:
         Tuple of (x_map, y_map) coordinate arrays
     """
-    # Create coordinate grids
     y, x = np.mgrid[0:height, 0:width]
-
-    # Center coordinates
     center_x, center_y = width / 2, height / 2
-
-    # Convert to centered coordinates
     x_centered = x - center_x
     y_centered = y - center_y
 
-    # Calculate radius and angle
     radius = np.sqrt(x_centered**2 + y_centered**2)
     angle = np.arctan2(y_centered, x_centered)
 
-    # Calculate maximum radius for given FOV
     fov_radians = math.radians(fov_degrees)
     max_radius = min(width, height) / 2
 
-    # Apply projection based on type
-    if projection_type == "stereographic":
-        # Stereographic projection
-        theta = (radius / max_radius) * (fov_radians / 2)
-        r_fisheye = 2 * max_radius * np.tan(theta / 2) / np.tan(fov_radians / 4)
-    elif projection_type == "equidistant":
-        # Equidistant projection
-        theta = (radius / max_radius) * (fov_radians / 2)
-        r_fisheye = max_radius * theta / (fov_radians / 2)
-    elif projection_type == "equisolid":
-        # Equisolid projection
-        theta = (radius / max_radius) * (fov_radians / 2)
-        r_fisheye = 2 * max_radius * np.sin(theta / 2) / np.sin(fov_radians / 4)
-    else:  # orthogonal
-        # Orthogonal projection
-        theta = (radius / max_radius) * (fov_radians / 2)
-        r_fisheye = max_radius * np.sin(theta) / np.sin(fov_radians / 2)
+    r_fisheye = _fisheye_source_radius(
+        radius / max_radius, max_radius, fov_radians, projection_type
+    )
 
-    # Convert back to cartesian coordinates
+    if fit_radius is not None:
+        rho_fit = min(max(float(fit_radius), 0.05), 1.0)  # crops never extend past the short side
+        r_fit = float(_fisheye_source_radius(rho_fit, max_radius, fov_radians, projection_type))
+        if np.isfinite(r_fit) and r_fit > 0:
+            # land on the outermost pixel centre, not half a pixel beyond it
+            r_fisheye = r_fisheye * ((max_radius - 0.5) / r_fit)
+
     x_fisheye = r_fisheye * np.cos(angle) + center_x
     y_fisheye = r_fisheye * np.sin(angle) + center_y
 
-    # Clamp coordinates to image bounds instead of masking to circle
-    # This allows the fisheye to fill the entire rectangular frame
-    x_fisheye = np.clip(x_fisheye, 0, width - 1)
-    y_fisheye = np.clip(y_fisheye, 0, height - 1)
+    if fit_radius is None:
+        # Legacy behaviour: clamp to image bounds (stretches edge pixels into streaks)
+        x_fisheye = np.clip(x_fisheye, 0, width - 1)
+        y_fisheye = np.clip(y_fisheye, 0, height - 1)
 
     return x_fisheye.astype(np.float32), y_fisheye.astype(np.float32)
 
 
+@functools.lru_cache(maxsize=8)
+def _cached_fisheye_maps(
+    width: int, height: int, fov_degrees: float, projection_type: str, fit_radius: float | None
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fisheye maps depend only on size and settings: compute once per video, not per frame."""
+    x_map, y_map = calculate_fisheye_coordinates(
+        width, height, fov_degrees, projection_type, fit_radius
+    )
+    x_map.flags.writeable = False
+    y_map.flags.writeable = False
+    return x_map, y_map
+
+
 def apply_fisheye_distortion(
-    image: np.ndarray, fov_degrees: float, projection_type: str = "stereographic"
+    image: np.ndarray,
+    fov_degrees: float,
+    projection_type: str = "stereographic",
+    fit_radius: float | None = None,
 ) -> np.ndarray:
     """
     Apply fisheye distortion to image.
@@ -227,19 +548,22 @@ def apply_fisheye_distortion(
         image: Input image array
         fov_degrees: Field of view in degrees
         projection_type: Type of fisheye projection
+        fit_radius: See calculate_fisheye_coordinates. When set, areas outside the source
+            are black (standard circular fisheye) instead of stretched edge pixels.
 
     Returns:
         Fisheye distorted image array
     """
     height, width = image.shape[:2]
+    x_map, y_map = _cached_fisheye_maps(
+        width, height, float(fov_degrees), projection_type, fit_radius
+    )
 
-    # Get coordinate mappings
-    x_map, y_map = calculate_fisheye_coordinates(width, height, fov_degrees, projection_type)
-
-    # Apply remapping with reflection to avoid black borders
-    distorted = cv2.remap(image, x_map, y_map, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
-
-    return distorted
+    if fit_radius is None:
+        return cv2.remap(image, x_map, y_map, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101)
+    return cv2.remap(
+        image, x_map, y_map, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0
+    )
 
 
 def apply_fisheye_square_crop(
@@ -281,12 +605,12 @@ def apply_fisheye_square_crop(
     # Crop to square
     cropped = image[y_start:y_end, x_start:x_end]
 
-    # Resize to target dimensions
+    # Scale to the target size; a non-square target gets black bars instead of a stretched circle
     if cropped.size > 0:
-        scaled = resize_image(cropped, target_width, target_height)
+        scaled = fit_to_canvas(cropped, target_width, target_height)
     else:
         # Fallback if crop failed
-        scaled = resize_image(image, target_width, target_height)
+        scaled = fit_to_canvas(image, target_width, target_height)
 
     return scaled
 
@@ -321,8 +645,7 @@ def _create_hole_mask(image: np.ndarray) -> np.ndarray:
 
     # Dilate mask slightly to catch edge artifacts
     kernel = np.ones((3, 3), np.uint8)
-    mask = cv2.dilate(mask, kernel, iterations=1)
-    return mask
+    return np.asarray(cv2.dilate(mask, kernel, iterations=1))
 
 
 def _calculate_adaptive_radius(mask: np.ndarray) -> int:

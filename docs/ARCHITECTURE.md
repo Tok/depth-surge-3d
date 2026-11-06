@@ -45,9 +45,11 @@ The conversion follows a 7-step pipeline with resume capability:
 
 ### Step 4: Stereo Image Generation
 - **Symmetric Generation**: Creates both left and right eye images with proper disparity
-- **Pixel Shifting**: Moves pixels horizontally based on their depth
-- **Hole Filling**: Fills gaps created by pixel shifts using inpainting techniques
-- **Quality Modes**: Fast (basic inpainting) or Advanced (depth-guided filling)
+- **Occlusion-aware warping**: Pixels are splatted to the eye's view with a z-buffer (nearer
+  wins), so foreground edges occlude correctly instead of smearing over the background
+- **Hole Filling**: Revealed (disoccluded) areas are an explicit mask; they're filled by mirroring
+  the background-side neighbour's texture, deterministic and therefore stable over time
+- **Quality Modes**: Fast (mirror fill) or Advanced/High (mirror fill + softened seams)
 
 **Resume**: Skips if stereo pairs already exist (when `--keep-intermediates` is enabled)
 
