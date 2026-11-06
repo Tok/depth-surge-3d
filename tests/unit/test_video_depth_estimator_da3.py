@@ -12,6 +12,18 @@ from src.depth_surge_3d.inference.depth.video_depth_estimator_da3 import (
 from src.depth_surge_3d.core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
 
 
+def _da3_modules() -> dict:
+    """
+    Fake depth_anything_3 package for sys.modules, with `pkg.api` linked to the submodule.
+
+    On Python 3.10, patch("depth_anything_3.api.X") resolves the target through the
+    parent's `.api` attribute, while `from depth_anything_3.api import X` reads
+    sys.modules; unlinked mocks would make the patch miss.
+    """
+    api = MagicMock()
+    return {"depth_anything_3": MagicMock(api=api), "depth_anything_3.api": api}
+
+
 @pytest.fixture(autouse=True)
 def _no_real_xformers(request):
     """
@@ -111,7 +123,7 @@ class TestVideoDepthEstimatorDA3:
         """Test successful model loading."""
         with patch.dict(
             "sys.modules",
-            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+            _da3_modules(),
         ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
@@ -133,7 +145,7 @@ class TestVideoDepthEstimatorDA3:
         """Test metric model override."""
         with patch.dict(
             "sys.modules",
-            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+            _da3_modules(),
         ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
@@ -155,7 +167,7 @@ class TestVideoDepthEstimatorDA3:
         """Test loading with direct Hugging Face model ID (not in DA3_MODEL_NAMES)."""
         with patch.dict(
             "sys.modules",
-            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+            _da3_modules(),
         ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
@@ -179,7 +191,7 @@ class TestVideoDepthEstimatorDA3:
         """Test that loguru logging is suppressed during model loading."""
         with patch.dict(
             "sys.modules",
-            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+            _da3_modules(),
         ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
@@ -202,7 +214,7 @@ class TestVideoDepthEstimatorDA3:
         """Test model loading handles exceptions gracefully."""
         with patch.dict(
             "sys.modules",
-            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+            _da3_modules(),
         ):
             mock_da3 = MagicMock()
             # Make from_pretrained raise an exception
@@ -323,7 +335,7 @@ class TestVideoDepthEstimatorDA3:
         """Test model info when model is loaded."""
         with patch.dict(
             "sys.modules",
-            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+            _da3_modules(),
         ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
@@ -342,7 +354,7 @@ class TestVideoDepthEstimatorDA3:
         """Test model unloading with CUDA cleanup."""
         with patch.dict(
             "sys.modules",
-            {"depth_anything_3": MagicMock(), "depth_anything_3.api": MagicMock()},
+            _da3_modules(),
         ):
             mock_da3 = MagicMock()
             mock_model = MagicMock()
