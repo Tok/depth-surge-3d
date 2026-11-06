@@ -49,7 +49,7 @@ fi
 python -m pip install flask flask-socketio > /dev/null 2>&1
 
 # Create upload and output directories
-mkdir -p uploads output
+mkdir -p output
 
 # Start the Flask application
 echo "Starting web server at http://localhost:5000"

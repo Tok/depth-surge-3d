@@ -24,6 +24,7 @@ from ...core.constants import (
     VIDEO_DEPTH_ANYTHING_REPO_DIR,
     MODEL_CONFIGS,
     MODEL_DOWNLOAD_URLS,
+    MODEL_DOWNLOAD_URLS_METRIC,
     DEPTH_MODEL_INPUT_SIZE,
     DEPTH_MODEL_DEFAULT_FPS,
 )
@@ -116,7 +117,7 @@ class VideoDepthEstimator:
         except Exception as e:
             print(f"Error loading video model: {e}")
             print("Try downloading the model manually from:")
-            print(f"  {MODEL_DOWNLOAD_URLS.get(model_type, 'Unknown')}")  # type: ignore[arg-type]
+            print(f"  {self._download_url() or 'Unknown'}")
             return False
 
     def _ensure_dependencies(self) -> bool:
@@ -139,28 +140,35 @@ class VideoDepthEstimator:
 
         return True
 
+    def _download_url(self) -> str | None:
+        """Hugging Face URL for this estimator's model file (relative or metric weights)."""
+        model_type = self._get_model_type(self.model_path)
+        is_metric = self.metric or "metric" in Path(self.model_path).name.lower()
+        urls = MODEL_DOWNLOAD_URLS_METRIC if is_metric else MODEL_DOWNLOAD_URLS
+        return urls.get(model_type) if model_type else None
+
     def _auto_download_model(self) -> bool:
         """Auto-download the model if missing."""
         print("Attempting to download video model automatically...")
 
-        # Create model directory
-        model_dir = Path(self.model_path).parent
-        model_dir.mkdir(parents=True, exist_ok=True)
-
-        # Determine download URL
-        model_type = self._get_model_type(self.model_path)
-        if not model_type or model_type not in MODEL_DOWNLOAD_URLS:
+        download_url = self._download_url()
+        if not download_url:
             print("Cannot determine model download URL")
             return False
 
-        download_url = MODEL_DOWNLOAD_URLS[model_type]
+        model_file = Path(self.model_path)
+        model_file.parent.mkdir(parents=True, exist_ok=True)
+        partial = model_file.with_name(model_file.name + ".part")
 
         try:
             print(f"Downloading video model to {self.model_path}...")
-            urllib.request.urlretrieve(download_url, self.model_path)
+            # Download to a temporary name so an interrupted download isn't mistaken for a model
+            urllib.request.urlretrieve(download_url, partial)
+            partial.replace(model_file)
             print(console_success("Video model downloaded successfully"))
             return True
         except Exception as e:
+            partial.unlink(missing_ok=True)
             print(console_error(f"Auto-download failed: {e}"))
             print(f"Please download manually from: {download_url}")
             return False

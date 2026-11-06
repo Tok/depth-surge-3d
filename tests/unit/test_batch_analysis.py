@@ -122,18 +122,19 @@ class TestLoadSettingsSummary:
 
 
 class TestDetectAudioAvailability:
-    """Test _detect_audio_availability function."""
+    """Audio comes from the batch directory (the old uploads/ folder is gone)."""
 
-    def test_detect_audio_not_available(self):
-        """Test when no audio files exist."""
-        mock_batch_path = MagicMock(spec=Path)
-        mock_parent = MagicMock(spec=Path)
-        mock_parent.parent.glob.return_value = []
-        mock_batch_path.parent = mock_parent
+    def test_no_audio(self, tmp_path):
+        (tmp_path / "clip_3D_side-by-side_auto.mp4").write_bytes(b"")  # output only
+        assert _detect_audio_availability(tmp_path) is False
 
-        result = _detect_audio_availability(mock_batch_path)
+    def test_extracted_flac(self, tmp_path):
+        (tmp_path / "original_audio.flac").write_bytes(b"")
+        assert _detect_audio_availability(tmp_path) is True
 
-        assert result is False
+    def test_source_video(self, tmp_path):
+        (tmp_path / "clip.mp4").write_bytes(b"")
+        assert _detect_audio_availability(tmp_path) is True
 
 
 class TestAnalyzeBatchDirectory:
@@ -318,24 +319,6 @@ class TestDetectVRFormatAndResolutionWithFrames:
 
         assert vr_format == "unknown"
         assert resolution == "unknown"
-
-
-class TestDetectAudioAvailabilityWithAudio:
-    """Test _detect_audio_availability with audio files."""
-
-    def test_detect_audio_available(self):
-        """Test when audio files exist."""
-        mock_batch_path = MagicMock(spec=Path)
-        mock_parent = MagicMock(spec=Path)
-
-        # Mock finding an mp4 file
-        mock_video = MagicMock(spec=Path)
-        mock_parent.parent.glob.return_value = [mock_video]
-        mock_batch_path.parent = mock_parent
-
-        result = _detect_audio_availability(mock_batch_path)
-
-        assert result is True
 
 
 class TestSummarizeSettings:

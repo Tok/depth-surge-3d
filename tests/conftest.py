@@ -24,3 +24,19 @@ def _no_xformers_guard(request):
         ),
     ):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _no_network_downloads():
+    """
+    Fail loudly if a test triggers a real download.
+
+    An earlier test silently re-downloaded the 1.5 GB depth model into models/ on every
+    run. Tests that exercise download code patch urlretrieve themselves (inner patches win).
+    """
+
+    def blocked(url, *args, **kwargs):
+        raise RuntimeError(f"Network download attempted in a unit test: {url}")
+
+    with patch("urllib.request.urlretrieve", side_effect=blocked):
+        yield

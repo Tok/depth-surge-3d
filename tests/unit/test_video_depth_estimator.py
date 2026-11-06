@@ -1,5 +1,7 @@
 """Unit tests for VideoDepthEstimator (V2)."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from unittest.mock import patch, MagicMock
@@ -258,40 +260,62 @@ class TestLoadModel:
 class TestAutoDownloadModel:
     """Test _auto_download_model method."""
 
-    def test_auto_download_model_file_exists(self):
-        """Test auto download when model file already exists."""
-        with patch("pathlib.Path.exists", return_value=True):
-            estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
-            result = estimator._auto_download_model()
+    # These tests must never hit the network or touch models/: always mock urlretrieve and
+    # use tmp_path (an earlier version re-downloaded the real 1.5 GB model on every run).
 
-            # Should return True if file exists
-            assert result is True
+    def test_auto_download_success(self, tmp_path):
+        target = tmp_path / "Video-Depth-Anything-Large" / "video_depth_anything_vitl.pth"
+        estimator = VideoDepthEstimator(str(target), device="cpu")
 
-    def test_auto_download_model_no_url(self):
-        """Test auto download when no URL configured."""
-        with patch("pathlib.Path.exists", return_value=False):
-            estimator = VideoDepthEstimator("models/unknown_model.pth", device="cpu")
+        def fake_download(url, path):
+            Path(path).write_bytes(b"weights")
 
-            # Mock MODEL_DOWNLOAD_URLS to not have this model
-            with patch(
-                "src.depth_surge_3d.inference.depth.video_depth_estimator.MODEL_DOWNLOAD_URLS", {}
-            ):
-                result = estimator._auto_download_model()
+        with patch("urllib.request.urlretrieve", side_effect=fake_download) as mock_get:
+            assert estimator._auto_download_model() is True
 
-                # Should return False when no URL available
-                assert result is False
+        assert target.read_bytes() == b"weights"
+        assert not target.with_name(target.name + ".part").exists()
+        assert mock_get.call_args[0][0].endswith(
+            "Video-Depth-Anything-Large/resolve/main/video_depth_anything_vitl.pth"
+        )
 
-    def test_auto_download_model_download_exception(self):
-        """Test auto download when download fails with exception."""
-        estimator = VideoDepthEstimator(DEFAULT_MODEL_PATH, device="cpu")
+    def test_metric_model_uses_metric_repo(self, tmp_path):
+        """Regression: metric files were downloaded from the relative-model URL."""
+        target = tmp_path / "video_depth_anything_vitb_metric.pth"
+        estimator = VideoDepthEstimator(str(target), device="cpu", metric=True)
 
-        with patch("pathlib.Path.exists", return_value=False):
-            with patch.object(estimator, "_get_model_type", return_value="vitl"):
-                # Mock urllib.request.urlretrieve to raise an exception
-                with patch("urllib.request.urlretrieve", side_effect=Exception("Network error")):
-                    result = estimator._auto_download_model()
+        assert estimator._download_url() == (
+            "https://huggingface.co/depth-anything/Metric-Video-Depth-Anything-Base/"
+            "resolve/main/metric_video_depth_anything_vitb.pth"
+        )
 
-                    assert result is False
+    def test_metric_detected_from_filename(self, tmp_path):
+        estimator = VideoDepthEstimator(str(tmp_path / "video_depth_anything_vits_metric.pth"))
+        assert "Metric-Video-Depth-Anything-Small" in estimator._download_url()
+
+    def test_auto_download_model_no_url(self, tmp_path):
+        estimator = VideoDepthEstimator(str(tmp_path / "unknown_model.pth"), device="cpu")
+
+        with patch(
+            "src.depth_surge_3d.inference.depth.video_depth_estimator.MODEL_DOWNLOAD_URLS", {}
+        ):
+            with patch("urllib.request.urlretrieve") as mock_get:
+                assert estimator._auto_download_model() is False
+        mock_get.assert_not_called()
+
+    def test_auto_download_model_download_exception(self, tmp_path):
+        target = tmp_path / "video_depth_anything_vitl.pth"
+        estimator = VideoDepthEstimator(str(target), device="cpu")
+
+        def failing_download(url, path):
+            Path(path).write_bytes(b"partial")
+            raise Exception("Network error")
+
+        with patch("urllib.request.urlretrieve", side_effect=failing_download):
+            assert estimator._auto_download_model() is False
+
+        assert not target.exists()  # no half-downloaded file left behind as a "model"
+        assert not target.with_name(target.name + ".part").exists()
 
 
 class TestGetModelInfo:

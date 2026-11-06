@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `scripts/download_models.sh` / `.ps1` (backed by `scripts/download_models.py`) download every
+  supported model: Video-Depth-Anything Small/Base/Large in relative and metric versions, and
+  all Depth Anything V3 variants, plus a `recommended` set for the default settings. The script
+  reads model locations from the application's constants and shows install status and licences.
+  The old script downloaded the Depth-Anything-V2 *image* models, which the project doesn't use.
+
 ### Changed
+- **Web UI**:
+  - Super sampling is now visible with the new modes (Auto, the default, matching the backend;
+    None, 2x, at least 1080p, at least 4K). It was hidden and fixed at "none".
+  - Hole filling options describe the new mirror fill.
+  - The temporal "window size" slider was removed (it had no effect; VDA's window is fixed). The
+    remaining overlap slider now controls chunk alignment.
+  - The orthographic projection now uses the backend's `orthogonal` name.
+  - The fisheye crop help text matches the fitted projection.
+  - Saved browser settings are reset once (settings version 3) so the new defaults apply.
 - **Occlusion-aware stereo view synthesis**: Eye views were made by backward warping with the
   disparity at the *target* position. That smeared and duplicated foreground edges over the
   background (ghosted edge lines, chopped corners), so there were never real holes. Views are now
@@ -27,6 +43,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of twice per frame.
 
 ### Fixed
+- **Web UI jobs failing on longer videos**: a Flask `teardown_appcontext` hook, which runs after
+  *every* request, called `pkill -f "ffmpeg.*depth-surge"`. Any browser request during a job
+  killed its frame extraction, audio extraction or encoding ("received signal 15", "Video
+  processing failed"). Short clips usually escaped. Process cleanup now only runs on shutdown and
+  only targets ffmpeg processes started by the server.
+- **Web UI not resetting between jobs**: a new job started with the previous job's final progress
+  (e.g. 59.7% "Applying distortion"), the previous job's output folder stayed on screen, and the
+  progress bar kept its finished/failed styling. Progress state is reset server- and client-side
+  when a job starts. The old output card hides on a new upload. The broken
+  `resetProgressDisplay()` (stale element IDs) was rewritten.
+- `/status` returned HTTP 500 for as long as a job was running (thread object not JSON
+  serializable).
+- Removed the unused `uploads/` folder (uploads are stored in their batch folder). Stitching's audio
+  detection now looks in the batch folder instead of `uploads/`.
+- Metric Video-Depth-Anything downloads returned 404: the weights moved to the
+  `depth-anything/Metric-Video-Depth-Anything-*` repos. Automatic downloads also used the
+  relative-model URL for metric files, and now download atomically (no half-written models).
+- Web UI resume ignored the batch's saved settings and used stale hardcoded values
+  (fisheye FOV 105, crop factor 1.0); it now continues with the saved settings.
+- `setup.ps1` cloned Video-Depth-Anything to the wrong folder (`video_depth_anything_repo`
+  instead of `vendor/Video-Depth-Anything`), so the V2 backend couldn't load on Windows.
+- A unit test re-downloaded the 1.5 GB VDA-Large model into `models/` on every test run. Unit
+  tests now block real downloads, and the suite runs about twice as fast.
 - **Depth flicker / temporal consistency**: Video-Depth-Anything's temporal consistency was undone
   by the pipeline. Videos were cut into independent ~32-frame chunks, each with its own
   depth scale, and every frame was then normalized to 0-1 separately. On a 10 s test clip the

@@ -32,6 +32,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning)  # moviepy old regex p
 
 # Import our constants and utilities
 from src.depth_surge_3d.core.constants import (  # noqa: E402
+    DEFAULT_SETTINGS,
     INTERMEDIATE_DIRS,
     MODEL_PATHS,
     MODEL_PATHS_METRIC,
@@ -230,9 +231,12 @@ def cleanup_processes() -> None:
     SHUTDOWN_FLAG = True
     vprint("Cleaning up active processes...")
 
-    # Kill any ffmpeg processes related to this app
+    # Stop ffmpeg processes started by this server (and only those: a broad name pattern
+    # would also kill conversions running from the CLI in another terminal)
     try:
-        subprocess.run(["pkill", "-f", "ffmpeg.*depth-surge"], check=False, capture_output=True)
+        subprocess.run(
+            ["pkill", "-TERM", "-P", str(os.getpid()), "ffmpeg"], check=False, capture_output=True
+        )
     except Exception:
         pass
 
@@ -282,12 +286,9 @@ socketio = SocketIO(
 )
 
 
-@app.teardown_appcontext
-def cleanup_on_teardown(error: Exception | None) -> None:
-    """Clean up processes when Flask shuts down"""
-    if error:
-        vprint(f"App teardown due to error: {error}")
-    cleanup_processes()
+# NOTE: no @app.teardown_appcontext cleanup here. Flask runs that hook after *every request*,
+# so it killed running ffmpeg jobs (frame extraction, encoding) whenever the browser polled
+# the server. Process cleanup only happens on shutdown (signal_handler).
 
 
 # Global variables for processing state
@@ -301,6 +302,32 @@ current_processing = {
     "stop_requested": False,
     "thread": None,
 }
+
+
+_INITIAL_PROGRESS = {
+    "progress": 0,
+    "stage": "Initializing...",
+    "total_frames": 0,
+    "current_frame": 0,
+    "phase": "extraction",
+    "step_name": "",
+    "step_index": 0,
+    "step_progress": 0,
+    "step_total": 0,
+}
+
+
+def reset_progress_state(session_id: str) -> None:
+    """
+    Start a new job with fresh progress state.
+
+    Called before the job is announced to the browser: the client joins the session right
+    after, and the join handler sends the current progress as its initial state. Without
+    the reset that was the previous job's final progress (e.g. 59.7% "Applying distortion").
+    """
+    current_processing.update(_INITIAL_PROGRESS)
+    current_processing["session_id"] = session_id
+    current_processing["stop_requested"] = False
 
 
 def ensure_directories() -> None:
@@ -1189,6 +1216,7 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 
     # Generate session ID
     session_id = str(uuid.uuid4())
+    reset_progress_state(session_id)
 
     # Start processing in background using socketio's method for proper context handling
     thread = socketio.start_background_task(
@@ -1247,6 +1275,7 @@ def resume_processing():
 
     # Generate session ID
     session_id = str(uuid.uuid4())
+    reset_progress_state(session_id)
 
     # Start processing in background using socketio's method for proper context handling
     thread = socketio.start_background_task(
@@ -1257,24 +1286,38 @@ def resume_processing():
     return jsonify({"success": True, "session_id": session_id, "output_dir": str(output_path)})
 
 
+# Values derived from the source video / VR resolution; recomputed on every run
+_DERIVED_SETTINGS = (
+    "per_eye_width",
+    "per_eye_height",
+    "vr_output_width",
+    "vr_output_height",
+    "source_width",
+    "source_height",
+    "source_fps",
+)
+
+
 def detect_resume_settings(output_path):
-    """Detect processing settings from existing output directory"""
-    settings = {
-        "vr_format": "side_by_side",
-        "baseline": 0.065,
-        "focal_length": 1000,
-        "preserve_audio": True,
-        "keep_intermediates": True,
-        "device": "auto",
-        "super_sample": "auto",
-        "apply_distortion": True,
-        "fisheye_projection": "stereographic",
-        "fisheye_fov": 105,
-        "crop_factor": 1.0,
-        "vr_resolution": "auto",
-        "fisheye_crop_factor": 1.0,
-        "hole_fill_quality": "fast",
-    }
+    """
+    Settings for resuming a batch.
+
+    Uses the settings saved with the batch (``*-settings.json``) so a resumed run continues
+    with the same model, stereo and fisheye settings. Falls back to the current defaults,
+    guessing the VR format from existing frames, for batches without a settings file.
+    """
+    from src.depth_surge_3d.io.operations import find_settings_file, load_processing_settings
+
+    settings = {key: value for key, value in DEFAULT_SETTINGS.items() if key != "output_dir"}
+    settings["device"] = "auto"
+
+    settings_file = find_settings_file(Path(output_path))
+    saved = load_processing_settings(settings_file) if settings_file else None
+    if saved and isinstance(saved.get("processing_settings"), dict):
+        settings.update(saved["processing_settings"])
+        for key in _DERIVED_SETTINGS:
+            settings.pop(key, None)
+        return settings
 
     # Try to detect VR format from directory structure
     if (output_path / INTERMEDIATE_DIRS["vr_frames"]).exists():
@@ -1295,7 +1338,9 @@ def detect_resume_settings(output_path):
 @app.route("/status")
 def get_status():
     """Get current processing status"""
-    return jsonify(current_processing)
+    # "thread" holds the worker thread object, which isn't JSON serializable (this endpoint
+    # used to fail with a 500 error for as long as a job was running)
+    return jsonify({k: v for k, v in current_processing.items() if k != "thread"})
 
 
 @app.route("/system_info")
@@ -1622,7 +1667,9 @@ def handle_join_session(data):
         join_room(session_id)
         vprint(f"Client {request.sid} joined session {session_id[:SESSION_ID_DISPLAY_LENGTH]}...")
 
-        # Send initial status to joined client
+        # Send initial status to joined client (only for the job that is actually running)
+        if session_id != current_processing.get("session_id"):
+            return
         try:
             initial_data = {
                 "progress": current_processing.get("progress", 0),

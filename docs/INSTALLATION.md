@@ -31,26 +31,34 @@ The setup script will automatically:
 
 ## Model Management
 
-The project includes flexible model management:
+Depth Surge 3D doesn't ship model weights; it downloads them from Hugging Face. The setup
+script fetches Video-Depth-Anything-Large. Use the download script for the others:
 
 ```bash
-# Download specific models
-./scripts/download_models.sh large          # Large model (best quality)
-./scripts/download_models.sh small          # Small model (fastest)
-./scripts/download_models.sh small base     # Multiple models
-./scripts/download_models.sh all            # All models
-
-# Check model status
-./scripts/download_models.sh                # Shows current status
-
-# Models are automatically downloaded if missing
-python depth_surge_3d.py input.mp4  # Auto-downloads if needed
+./scripts/download_models.sh                       # status of all models + usage
+./scripts/download_models.sh recommended           # models used by the CLI and web UI defaults
+./scripts/download_models.sh vda-base da3-large    # specific models
+./scripts/download_models.sh vda-metric            # a group
+./scripts/download_models.sh all                   # everything
+# Windows: .\scripts\download_models.ps1 with the same arguments
 ```
 
-**Available Models:**
-- **Small** (24.8M params) - Fast processing, lower quality
-- **Base** (97.5M params) - Balanced performance and quality
-- **Large** (335.3M params) - Best quality (default)
+Missing models are also downloaded automatically on first use.
+
+**Available models:**
+
+| Name | Backend | Notes | Licence |
+|---|---|---|---|
+| `vda-small`, `vda-small-metric` | Video-Depth-Anything (V2) | Fastest | Apache-2.0 |
+| `vda-base`, `vda-base-metric` | Video-Depth-Anything (V2) | Balanced | CC BY-NC 4.0 |
+| `vda-large`, `vda-large-metric` | Video-Depth-Anything (V2) | Best V2 quality (CLI default) | CC BY-NC 4.0 |
+| `da3-small`, `da3-base` | Depth Anything V3 | Low VRAM | Apache-2.0 |
+| `da3-large` | Depth Anything V3 (DA3MONO-LARGE) | Monocular relative depth | Apache-2.0 |
+| `da3-large-metric` | Depth Anything V3 (DA3METRIC-LARGE) | Metric depth (web UI default) | Apache-2.0 |
+| `da3-giant`, `da3-giant-large` | Depth Anything V3 1.1 | Highest DA3 quality, most VRAM | CC BY-NC 4.0 |
+
+Groups: `recommended`, `vda`, `vda-metric`, `da3`. DA3 models are stored in the Hugging Face
+cache (`~/.cache/huggingface`), the Video-Depth-Anything files under `models/`.
 
 ## Manual Installation
 
@@ -108,13 +116,13 @@ pip install -r requirements.txt
 
 **Option A: Automatic download (recommended)**
 ```bash
-./scripts/download_models.sh large
+./scripts/download_models.sh recommended
 ```
 
 **Option B: Manual download**
 ```bash
 # Clone the repository
-git clone https://github.com/DepthAnything/Video-Depth-Anything.git video_depth_anything_repo
+git clone https://github.com/DepthAnything/Video-Depth-Anything.git vendor/Video-Depth-Anything
 
 # Create models directory
 mkdir -p models/Video-Depth-Anything-Large
