@@ -7,7 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-06
+
 ### Fixed
+- **Stereo generation crash** (#16, #17): `ValueError: operands could not be broadcast together`.
+  Super sampling upscaled frames for depth estimation but not for stereo generation, so every
+  depth map was 2x the size of its frame. Frames now go to the depth model at source resolution,
+  and super sampling happens in the stereo step (frame and depth upscaled together, aspect
+  preserved, disparity scaled to match). Depth maps of any size, e.g. from the cache, are resized
+  to their frame.
+- **Stereo generation hang** (#17): forked workers deadlocked on locks inherited from the
+  parent's torch/CUDA/OpenCV threads. Workers now start with `spawn`, are capped at 16, run
+  OpenCV single-threaded, and a crashed pool falls back to in-process generation instead of
+  hanging forever.
+- **Flat or garbled 3D output** (#16):
+  - Disparity was computed as `1 / normalized_depth`, so the 0-valued pixel in every frame was
+    shifted by thousands of pixels. Disparity is now linear in inverse depth and bounded by
+    `baseline * focal_length / 1 m` (65 px with defaults); the farthest point has zero parallax.
+  - Depth Anything V3 and metric models output depth (far = large) while the relative
+    Video-Depth-Anything model outputs inverse depth (near = large). Both are now converted to
+    normalized inverse depth.
+  - The global depth cache saved 16-bit PNGs but read them back as 8-bit, so every cache hit
+    returned depth ~0. Old cache entries are invalidated (cache format version 2).
+- **`--vr-resolution custom:WIDTHxHEIGHT` rejected by the CLI** (#17); invalid values now get a
+  clear error message.
+- CLI crash `'NoneType' object has no attribute 'update_progress'` in the distortion, upscaling
+  and assembly steps (same class as #14), via a no-op progress tracker for UI-less runs.
+- Output filenames for custom resolutions no longer contain `:` (invalid on Windows).
+- Video-Depth-Anything crashed with `No operator found for memory_efficient_attention_forward`
+  when the installed xformers didn't match the installed PyTorch build. Without xformers, its naive
+  attention needed ~20 GB at 720p. Missing or mismatched xformers kernels are now replaced with
+  PyTorch's `scaled_dot_product_attention`.
+- **Depth flicker / temporal consistency**: Video-Depth-Anything's temporal consistency was undone
+  by the pipeline. Videos were cut into independent ~32-frame chunks, each with its own
+  depth scale, and every frame was then normalized to 0-1 separately. On a 10 s test clip the
+  largest frame-to-frame depth jump drops from 0.0148 to 0.0021 (7x) and the 99th percentile from
+  0.0079 to 0.0020 (4x), with peak RAM unchanged.
+  - Temporally consistent models (VDA) now get long, RAM-sized chunks; consecutive chunks overlap
+    by `temporal_window_overlap` frames (the web UI slider now has an effect), are scale/shift
+    aligned on the overlap and crossfaded.
+  - Per-frame models (DA3) align every frame to a running reference: about 23% less frame-to-frame
+    flicker on the same clip.
+  - One robust normalization range (0.5th-99.5th percentile) for the whole video replaces
+    per-frame min-max. Old depth cache entries are invalidated (cache format version 3).
+  - Removed the VDA wrapper's own 32-frame chunking, which also skipped alignment;
+    Video-Depth-Anything handles long inputs itself with constant VRAM.
+- **Web UI jobs failing on longer videos**: a Flask `teardown_appcontext` hook, which runs after
+  *every* request, called `pkill -f "ffmpeg.*depth-surge"`. Any browser request during a job
+  killed its frame extraction, audio extraction or encoding ("received signal 15", "Video
+  processing failed"). Short clips usually escaped. Process cleanup now only runs on shutdown and
+  only targets ffmpeg processes started by the server.
+- **Web UI not resetting between jobs**: a new job started with the previous job's final progress
+  (e.g. 59.7% "Applying distortion"), the previous job's output folder stayed on screen, and the
+  progress bar kept its finished/failed styling. Progress state is reset server- and client-side
+  when a job starts. The old output card hides on a new upload. The broken
+  `resetProgressDisplay()` (stale element IDs) was rewritten.
+- `/status` returned HTTP 500 for as long as a job was running (thread object not JSON
+  serializable).
+- Removed the unused `uploads/` folder (uploads are stored in their batch folder). Stitching's audio
+  detection now looks in the batch folder instead of `uploads/`.
+- Metric Video-Depth-Anything downloads returned 404: the weights moved to the
+  `depth-anything/Metric-Video-Depth-Anything-*` repos. Automatic downloads also used the
+  relative-model URL for metric files, and now download atomically (no half-written models).
+- Web UI resume ignored the batch's saved settings and used stale hardcoded values
+  (fisheye FOV 105, crop factor 1.0); it now continues with the saved settings.
+- `setup.ps1` cloned Video-Depth-Anything to the wrong folder (`video_depth_anything_repo`
+  instead of `vendor/Video-Depth-Anything`), so the V2 backend couldn't load on Windows.
+- A unit test re-downloaded the 1.5 GB VDA-Large model into `models/` on every test run. Unit
+  tests now block real downloads, and the suite runs about twice as fast.
 - **Stretched output**: with fisheye enabled (the default), `auto` resolution picked a 16:9 per-eye
   size for landscape video, and the square fisheye crop was stretched to it (~1.8x too wide).
   Auto now picks a square per-eye preset for fisheye output. Whenever content and per-eye aspect
@@ -33,6 +100,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web UI output files were named `..._auto.mp4` instead of after the resolution actually used.
 
 ### Added
+- **Python 3.13 support** (#11): open3d 0.20 ships 3.13 wheels, and uv overrides
+  Depth-Anything-3's `numpy<2` pin.
+- Web UI "Force 1080p" / "Force 4K" super sampling options now do what they say.
 - `scripts/download_models.sh` / `.ps1` (backed by `scripts/download_models.py`) download every
   supported model: Video-Depth-Anything Small/Base/Large in relative and metric versions, and
   all Depth Anything V3 variants, plus a `recommended` set for the default settings. The script
@@ -66,84 +136,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source (the corners of the square crop) is black, the standard circular-fisheye look. Content
   appears about 18% smaller at the default crop factor. Fisheye maps are computed once per video
   instead of twice per frame.
-
-### Fixed
-- **Web UI jobs failing on longer videos**: a Flask `teardown_appcontext` hook, which runs after
-  *every* request, called `pkill -f "ffmpeg.*depth-surge"`. Any browser request during a job
-  killed its frame extraction, audio extraction or encoding ("received signal 15", "Video
-  processing failed"). Short clips usually escaped. Process cleanup now only runs on shutdown and
-  only targets ffmpeg processes started by the server.
-- **Web UI not resetting between jobs**: a new job started with the previous job's final progress
-  (e.g. 59.7% "Applying distortion"), the previous job's output folder stayed on screen, and the
-  progress bar kept its finished/failed styling. Progress state is reset server- and client-side
-  when a job starts. The old output card hides on a new upload. The broken
-  `resetProgressDisplay()` (stale element IDs) was rewritten.
-- `/status` returned HTTP 500 for as long as a job was running (thread object not JSON
-  serializable).
-- Removed the unused `uploads/` folder (uploads are stored in their batch folder). Stitching's audio
-  detection now looks in the batch folder instead of `uploads/`.
-- Metric Video-Depth-Anything downloads returned 404: the weights moved to the
-  `depth-anything/Metric-Video-Depth-Anything-*` repos. Automatic downloads also used the
-  relative-model URL for metric files, and now download atomically (no half-written models).
-- Web UI resume ignored the batch's saved settings and used stale hardcoded values
-  (fisheye FOV 105, crop factor 1.0); it now continues with the saved settings.
-- `setup.ps1` cloned Video-Depth-Anything to the wrong folder (`video_depth_anything_repo`
-  instead of `vendor/Video-Depth-Anything`), so the V2 backend couldn't load on Windows.
-- A unit test re-downloaded the 1.5 GB VDA-Large model into `models/` on every test run. Unit
-  tests now block real downloads, and the suite runs about twice as fast.
-- **Depth flicker / temporal consistency**: Video-Depth-Anything's temporal consistency was undone
-  by the pipeline. Videos were cut into independent ~32-frame chunks, each with its own
-  depth scale, and every frame was then normalized to 0-1 separately. On a 10 s test clip the
-  largest frame-to-frame depth jump drops from 0.0148 to 0.0021 (7x) and the 99th percentile from
-  0.0079 to 0.0020 (4x), with peak RAM unchanged.
-  - Temporally consistent models (VDA) now get long, RAM-sized chunks; consecutive chunks overlap
-    by `temporal_window_overlap` frames (the web UI slider now has an effect), are scale/shift
-    aligned on the overlap and crossfaded.
-  - Per-frame models (DA3) align every frame to a running reference: about 23% less frame-to-frame
-    flicker on the same clip.
-  - One robust normalization range (0.5th-99.5th percentile) for the whole video replaces
-    per-frame min-max. Old depth cache entries are invalidated (cache format version 3).
-  - Removed the VDA wrapper's own 32-frame chunking, which also skipped alignment;
-    Video-Depth-Anything handles long inputs itself with constant VRAM.
-
-## [0.10.0] - 2026-11-06
-
-### Fixed
-- **Stereo generation crash** (#16, #17): `ValueError: operands could not be broadcast together`.
-  Super sampling upscaled frames for depth estimation but not for stereo generation, so every
-  depth map was 2x the size of its frame. Frames now go to the depth model at source resolution,
-  and super sampling happens in the stereo step (frame and depth upscaled together, aspect
-  preserved, disparity scaled to match). Depth maps of any size, e.g. from the cache, are resized
-  to their frame.
-- **Stereo generation hang** (#17): forked workers deadlocked on locks inherited from the
-  parent's torch/CUDA/OpenCV threads. Workers now start with `spawn`, are capped at 16, run
-  OpenCV single-threaded, and a crashed pool falls back to in-process generation instead of
-  hanging forever.
-- **Flat or garbled 3D output** (#16):
-  - Disparity was computed as `1 / normalized_depth`, so the 0-valued pixel in every frame was
-    shifted by thousands of pixels. Disparity is now linear in inverse depth and bounded by
-    `baseline * focal_length / 1 m` (65 px with defaults); the farthest point has zero parallax.
-  - Depth Anything V3 and metric models output depth (far = large) while the relative
-    Video-Depth-Anything model outputs inverse depth (near = large). Both are now converted to
-    normalized inverse depth.
-  - The global depth cache saved 16-bit PNGs but read them back as 8-bit, so every cache hit
-    returned depth ~0. Old cache entries are invalidated (cache format version 2).
-- **`--vr-resolution custom:WIDTHxHEIGHT` rejected by the CLI** (#17); invalid values now get a
-  clear error message.
-- CLI crash `'NoneType' object has no attribute 'update_progress'` in the distortion, upscaling
-  and assembly steps (same class as #14), via a no-op progress tracker for UI-less runs.
-- Output filenames for custom resolutions no longer contain `:` (invalid on Windows).
-- Video-Depth-Anything crashed with `No operator found for memory_efficient_attention_forward`
-  when the installed xformers didn't match the installed PyTorch build. Without xformers, its naive
-  attention needed ~20 GB at 720p. Missing or mismatched xformers kernels are now replaced with
-  PyTorch's `scaled_dot_product_attention`.
-
-### Added
-- **Python 3.13 support** (#11): open3d 0.20 ships 3.13 wheels, and uv overrides
-  Depth-Anything-3's `numpy<2` pin.
-- Web UI "Force 1080p" / "Force 4K" super sampling options now do what they say.
-
-### Changed
 - Supported Python versions: 3.10-3.13 (3.9 is end-of-life; Python 3.14+ only warns).
 - Dependencies upgraded, and `uv.lock` is now committed (it was gitignored, so every `uv sync`
   re-resolved from scratch; the local copy was also missing Depth-Anything-3): PyTorch 2.15
