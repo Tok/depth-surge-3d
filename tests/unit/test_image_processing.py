@@ -855,3 +855,131 @@ class TestRenderStereoPair:
         left_center = np.nonzero(left[40] > 127)[0].mean()
         right_center = np.nonzero(right[40] > 127)[0].mean()
         assert left_center - right_center == pytest.approx(40, abs=3)
+
+
+class TestOcclusionAwareWarp:
+    """Forward warping with a z-buffer and background-side hole filling."""
+
+    @staticmethod
+    def _scene(width=120, height=6, bar=(50, 70), fg_disp=20.0):
+        """Textured background (disparity 0) with a uniform near bar in front of it."""
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view  # noqa
+
+        bg = (np.arange(width) % 7 * 30).astype(np.uint8)  # background texture
+        image = np.tile(bg, (height, 1))
+        image[:, bar[0] : bar[1]] = 255  # foreground bar
+        disparity = np.zeros((height, width), np.float32)
+        disparity[:, bar[0] : bar[1]] = fg_disp
+        return image, disparity
+
+    def test_nearer_pixel_wins(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import forward_warp_disparity
+
+        disp = np.array([[0, 0, 0, 0, 4, 0, 0, 0, 0, 0]], np.float32)
+        warped = forward_warp_disparity(disp, 0.5)
+        # pixel 4 (disparity 4) moves 2 px right and covers the background pixels there
+        assert warped[0, 6] == 4
+
+    def test_disocclusion_is_hole(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import stereo_source_coordinates
+
+        _, disp = self._scene()
+        _, holes = stereo_source_coordinates(disp, "left")
+        # left eye: the bar moves right by 10 px and reveals background on its left
+        assert holes[0, 52:58].all()
+        assert not holes[0, 75:110].any()
+
+    def test_hole_filled_with_background_not_foreground(self):
+        """Regression: backward warping smeared the foreground into revealed areas."""
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene()
+        view, holes = create_stereo_view(image, disp, "left", "fast")
+        assert holes.any()
+        assert (view[holes] < 255).all()  # no bar colour in the filled hole
+        assert (view[:, 62:78] == 255).all()  # bar shifted by +10 px, intact
+
+    def test_right_eye_mirrors(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene()
+        view, holes = create_stereo_view(image, disp, "right", "fast")
+        assert (view[:, 42:58] == 255).all()  # bar shifted by -10 px
+        assert holes[0, 62:68].all() and (view[holes] < 255).all()
+
+    def test_real_black_pixels_kept(self):
+        """Regression: the old hole filler inpainted every pure-black pixel of the footage."""
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image = np.full((20, 40, 3), 120, np.uint8)
+        image[5:15, 10:30] = 0  # dark object in the footage
+        view, holes = create_stereo_view(image, np.zeros((20, 40), np.float32), "left", "fast")
+        assert not holes.any()
+        assert (view[5:15, 10:30] == 0).all()
+
+    def test_none_leaves_holes_black(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene()
+        view, holes = create_stereo_view(image, disp, "left", "none")
+        assert (view[holes] == 0).all()
+
+    def test_advanced_only_touches_seams(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import create_stereo_view
+
+        image, disp = self._scene(width=200, bar=(80, 120))
+        fast, holes = create_stereo_view(image, disp, "left", "fast")
+        adv, _ = create_stereo_view(image, disp, "left", "advanced")
+        far_from_holes = np.ones_like(holes)
+        far_from_holes[:, 70:110] = False
+        assert np.array_equal(fast[far_from_holes], adv[far_from_holes])
+
+    def test_crack_bands_merged(self):
+        """Steep depth ramps leave interleaved 1 px cracks; they become one hole."""
+        from src.depth_surge_3d.utils.imaging.image_processing import stereo_source_coordinates
+
+        disp = np.zeros((1, 80), np.float32)
+        disp[0, 30:40] = np.linspace(0, 30, 10)  # soft edge: 3 px of disparity per px
+        disp[0, 40:] = 30
+        _, holes = stereo_source_coordinates(disp, "left")
+        run = holes[0].astype(int)
+        assert np.count_nonzero(np.diff(run) == 1) == 1  # a single contiguous hole
+
+
+class TestFittedFisheye:
+    """Regression: the fisheye mapping sampled outside the source and clamped into streaks."""
+
+    @pytest.mark.parametrize(
+        "projection", ["stereographic", "equidistant", "equisolid", "orthogonal"]
+    )
+    @pytest.mark.parametrize("crop", [0.5, 0.7, 1.0])
+    def test_kept_circle_samples_real_content(self, projection, crop):
+        w, h = 320, 180
+        x_map, y_map = calculate_fisheye_coordinates(w, h, 180, projection, fit_radius=crop)
+        yy, xx = np.mgrid[0:h, 0:w]
+        inside_circle = np.hypot(xx - w / 2, yy - h / 2) <= crop * h / 2 - 1
+        assert (y_map[inside_circle] >= -0.5).all() and (y_map[inside_circle] <= h - 0.5).all()
+        assert (x_map[inside_circle] >= -0.5).all() and (x_map[inside_circle] <= w - 0.5).all()
+
+    def test_circle_edge_hits_source_edge(self):
+        w, h = 320, 180
+        _, y_map = calculate_fisheye_coordinates(w, h, 180, "stereographic", fit_radius=0.7)
+        top_of_circle = int(round(h / 2 - 0.7 * h / 2))
+        assert y_map[top_of_circle, w // 2] == pytest.approx(0, abs=1.5)
+
+    def test_outside_source_is_black(self):
+        img = np.full((90, 160, 3), 200, np.uint8)
+        out = apply_fisheye_distortion(img, 180, "stereographic", fit_radius=0.7)
+        assert (out[0, 0] == 0).all()  # corner lies outside the source: black, not streaked
+        assert (out[45, 80] == 200).all()
+
+    def test_legacy_mapping_unchanged(self):
+        x_map, y_map = calculate_fisheye_coordinates(64, 64, 180, "stereographic")
+        assert x_map.min() >= 0 and x_map.max() <= 63 and y_map.max() <= 63
+
+    def test_maps_cached(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import _cached_fisheye_maps
+
+        a = _cached_fisheye_maps(64, 48, 180.0, "equidistant", 0.7)
+        b = _cached_fisheye_maps(64, 48, 180.0, "equidistant", 0.7)
+        assert a[0] is b[0] and not a[0].flags.writeable

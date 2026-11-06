@@ -73,12 +73,14 @@ class DistortionProcessor:
                     print(f"Warning: Could not load {left_file} or {right_file}")
                     continue
 
-                # Apply fisheye distortion
+                # Apply fisheye distortion, fitted so the circle kept by the crop step
+                # contains only real image content (no stretched edge streaks)
+                fit_radius = self._fisheye_crop_factor(settings)
                 left_distorted = apply_fisheye_distortion(
-                    left_img, settings["fisheye_fov"], settings["fisheye_projection"]
+                    left_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
                 )
                 right_distorted = apply_fisheye_distortion(
-                    right_img, settings["fisheye_fov"], settings["fisheye_projection"]
+                    right_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
                 )
 
                 # Save distorted frames if keeping intermediates
@@ -208,7 +210,7 @@ class DistortionProcessor:
 
         # Crop based on distortion setting
         crop_factor = (
-            max(0.5, min(2.0, float(settings.get("fisheye_crop_factor", 0.7))))
+            self._fisheye_crop_factor(settings)
             if settings["apply_distortion"]
             else max(0.5, min(1.0, float(settings.get("crop_factor", 1.0))))
         )
@@ -238,6 +240,11 @@ class DistortionProcessor:
             cv2.imwrite(str(directories["right_cropped"] / f"{frame_name}.png"), right_cropped)
 
         return True
+
+    @staticmethod
+    def _fisheye_crop_factor(settings: dict[str, Any]) -> float:
+        """PURE: Fisheye crop factor, clamped to the supported 0.5-2.0 range."""
+        return max(0.5, min(2.0, float(settings.get("fisheye_crop_factor", 0.7))))
 
     @staticmethod
     def _get_stereo_source_dirs(

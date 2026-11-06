@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Occlusion-aware stereo view synthesis**: Eye views were made by backward warping with the
+  disparity at the *target* position. That smeared and duplicated foreground edges over the
+  background (ghosted edge lines, chopped corners), so there were never real holes. Views are now
+  forward-warped with a z-buffer (nearer pixel wins). Revealed background is an explicit hole mask,
+  filled by mirroring the background-side neighbour's texture. That's deterministic, so it doesn't
+  flicker. Bands of 1 px cracks and "flying pixels" from soft depth edges are merged into a single
+  hole first.
+  - The old hole filler inpainted every pure-black pixel, including genuinely dark parts of the
+    footage. It's no longer used for stereo.
+  - `--hole-fill-quality high` previously skipped hole filling entirely; `advanced`/`high` now
+    mean mirror fill plus softened seams.
+- **Fisheye edge streaks removed**: The fisheye mapping sampled up to 2x beyond the source's
+  top/bottom edge and clamped those samples into stretched streaks. The projection is now fitted
+  so the circle kept by the fisheye crop contains only real image content. Anything outside the
+  source (the corners of the square crop) is black, the standard circular-fisheye look. Content
+  appears about 18% smaller at the default crop factor. Fisheye maps are computed once per video
+  instead of twice per frame.
+
 ### Fixed
 - **Depth flicker / temporal consistency**: Video-Depth-Anything's temporal consistency was undone
   by the pipeline. Videos were cut into independent ~32-frame chunks, each with its own

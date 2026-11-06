@@ -17,6 +17,8 @@ from .image_processing import (
     # Stereo operations
     create_shifted_image,
     render_stereo_pair,
+    create_stereo_view,
+    forward_warp_disparity,
     hole_fill_image,
     # VR operations
     apply_center_crop,
@@ -44,6 +46,8 @@ __all__ = [
     # Stereo operations
     "create_shifted_image",
     "render_stereo_pair",
+    "create_stereo_view",
+    "forward_warp_disparity",
     "hole_fill_image",
     # VR operations
     "apply_center_crop",

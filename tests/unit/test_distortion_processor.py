@@ -84,7 +84,7 @@ class TestApplyDistortion:
 
         with patch(
             "src.depth_surge_3d.processing.frames.distortion_processor.apply_fisheye_distortion",
-            side_effect=lambda img, fov, proj: img,  # Pass through
+            side_effect=lambda img, fov, proj, fit: img,  # Pass through
         ):
             result = processor.apply_distortion(
                 temp_frames["left_files"],
@@ -116,7 +116,7 @@ class TestApplyDistortion:
 
         with patch(
             "src.depth_surge_3d.processing.frames.distortion_processor.apply_fisheye_distortion",
-            side_effect=lambda img, fov, proj: img,
+            side_effect=lambda img, fov, proj, fit: img,
         ):
             result = processor.apply_distortion(
                 temp_frames["left_files"],
@@ -616,3 +616,33 @@ class TestGetStereoSourceDirs:
         result = DistortionProcessor._get_stereo_source_dirs(directories, settings)
 
         assert result is None
+
+
+class TestFisheyeFit:
+    """Distortion is fitted to the circle the crop step keeps (no edge streaks)."""
+
+    def test_crop_factor_passed_as_fit_radius(self, tmp_path):
+        import cv2
+        import numpy as np
+        from unittest.mock import Mock, patch
+
+        processor = DistortionProcessor()
+        frame = tmp_path / "frame_0001.png"
+        cv2.imwrite(str(frame), np.zeros((10, 10, 3), np.uint8))
+        settings = {
+            "keep_intermediates": False,
+            "fisheye_fov": 180,
+            "fisheye_projection": "stereographic",
+            "fisheye_crop_factor": 5.0,  # out of range: clamped to 2.0
+        }
+
+        with patch(
+            "src.depth_surge_3d.processing.frames.distortion_processor.apply_fisheye_distortion",
+            side_effect=lambda img, fov, proj, fit: img,
+        ) as mock_distort:
+            processor.apply_distortion([frame], [frame], {}, settings, Mock())
+
+        assert mock_distort.call_args[0][3] == 2.0
+
+    def test_default_crop_factor(self):
+        assert DistortionProcessor._fisheye_crop_factor({}) == 0.7
