@@ -231,6 +231,11 @@ class TestGenerateOutputFilename:
         assert "1080p" in filename
         assert filename.endswith(".mp4")
 
+    def test_generate_output_filename_custom_resolution(self):
+        """Custom resolutions must not put ':' in the filename (invalid on Windows)."""
+        result = generate_output_filename("video.mp4", "side_by_side", "custom:1376x768")
+        assert result == "video_3D_side-by-side_custom-1376x768.mp4"
+
     def test_generate_output_filename_with_path(self):
         """Test that filename extracts stem from path."""
         filename = generate_output_filename("/path/to/video.mp4", "side_by_side", "4k")

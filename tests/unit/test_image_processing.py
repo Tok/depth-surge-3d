@@ -1,6 +1,7 @@
 """Unit tests for image processing utilities."""
 
 import numpy as np
+import pytest
 from src.depth_surge_3d.utils.imaging.image_processing import (
     normalize_depth_map,
     depth_to_disparity,
@@ -93,20 +94,34 @@ class TestDepthToDisparity:
     """Test depth to disparity conversion function."""
 
     def test_depth_to_disparity_basic(self):
-        """Test basic depth to disparity conversion."""
+        """Inverse depth maps linearly to disparity: nearer = larger disparity."""
         depth_map = np.array([[0.5, 0.75], [0.25, 1.0]])
         baseline = 0.1  # 10cm
         focal_length = 1000.0  # pixels
 
         disparity = depth_to_disparity(depth_map, baseline, focal_length)
 
-        # Disparity should be inversely proportional to depth
-        # Closer objects (lower depth values) should have higher disparity
         assert disparity.shape == depth_map.shape
-        assert np.all(disparity > 0)
+        # nearest point (1.0) sits at STEREO_NEAR_PLANE_M = 1m -> baseline * focal px
+        assert np.isclose(disparity[1, 1], 100.0)
+        assert np.isclose(disparity[0, 0], 50.0)
+        assert disparity[1, 1] > disparity[0, 1] > disparity[0, 0] > disparity[1, 0]
 
-        # Check inverse relationship: lower depth = higher disparity
-        assert disparity[1, 0] > disparity[0, 0]  # 0.25 depth > 0.5 depth disparity
+    def test_depth_to_disparity_bounded(self):
+        """Regression #16: disparity never exceeds baseline * focal / near plane.
+
+        The old formula divided by normalized depth, so the 0-valued pixel present in
+        every min-max normalized frame was shifted by thousands of pixels.
+        """
+        depth_map = np.random.rand(64, 64)
+        depth_map[0, 0] = 0.0
+        depth_map[0, 1] = 1.0
+
+        disparity = depth_to_disparity(depth_map, baseline=0.065, focal_length=1000.0)
+
+        assert disparity.min() >= 0.0
+        assert disparity.max() <= 65.0 + 1e-4
+        assert disparity[0, 0] == 0.0  # farthest point -> infinity -> no parallax
 
     def test_depth_to_disparity_zero_depth_handling(self):
         """Test that zero depth values are handled safely."""
@@ -718,3 +733,125 @@ class TestHoleFillImage:
             # Should have filled the holes including residuals
             # Note: bilateral filter is applied, so values won't be exactly zero
             # but should be filled
+
+
+class TestDepthToInverseDepth:
+    """Test depth -> inverse depth conversion (DA3 / metric models)."""
+
+    def test_nearer_is_larger(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        depth = np.array([[1.0, 2.0], [4.0, 8.0]], dtype=np.float32)
+        inverse = depth_to_inverse_depth(depth, low_percentile=0.0)
+
+        assert np.allclose(inverse, 1.0 / depth)
+
+    def test_invalid_pixels_become_far(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        depth = np.array([[0.0, -1.0], [np.nan, 2.0]], dtype=np.float32)
+        inverse = depth_to_inverse_depth(depth)
+
+        assert inverse[0, 0] == 0.0 and inverse[0, 1] == 0.0 and inverse[1, 0] == 0.0
+        assert np.isclose(inverse[1, 1], 0.5)
+
+    def test_all_invalid(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        assert not depth_to_inverse_depth(np.zeros((4, 4))).any()
+
+    def test_outliers_clamped(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import depth_to_inverse_depth
+
+        depth = np.full((100, 100), 5.0, dtype=np.float32)
+        depth[0, 0] = 1e-9  # one bogus near-zero pixel
+        inverse = depth_to_inverse_depth(depth)
+
+        assert np.isclose(inverse.max(), 0.2)
+
+
+class TestSuperSampleSize:
+    """Test stereo warp resolution selection."""
+
+    def test_none(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(1376, 768, 2752, 1536, "none") == (1376, 768)
+
+    def test_auto_matches_source_when_output_not_larger(self):
+        """Regression #17: same-size output must not be upscaled."""
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(1376, 768, 1376, 768, "auto") == (1376, 768)
+
+    def test_auto_covers_output_preserving_aspect(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(1080, 1920, 1536, 1536, "auto") == (1536, 2731)
+
+    def test_auto_capped_at_2x(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(640, 360, 4096, 4096, "auto") == (1280, 720)
+
+    def test_2x(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(100, 50, 10, 10, "2x") == (200, 100)
+
+    @pytest.mark.parametrize(
+        "mode,src,expected",
+        [
+            ("1080p", (1280, 720), (1920, 1080)),
+            ("4k", (1920, 1080), (3840, 2160)),
+            ("4k", (1080, 1920), (2160, 3840)),  # portrait keeps aspect
+            ("1080p", (3840, 2160), (3840, 2160)),  # never downscales
+        ],
+    )
+    def test_ui_modes(self, mode, src, expected):
+        """Web UI options: 'Force 1080p' / 'Force 4K'."""
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_super_sample_size
+
+        assert calculate_super_sample_size(*src, 1920, 1080, mode) == expected
+
+
+class TestRenderStereoPair:
+    """Test full stereo pair rendering."""
+
+    def test_near_content_has_crossed_disparity(self):
+        """A near object appears further right in the left eye than in the right eye."""
+        from src.depth_surge_3d.utils.imaging.image_processing import render_stereo_pair
+
+        frame = np.zeros((40, 200), dtype=np.uint8)
+        frame[:, 95:105] = 255  # white bar in the middle
+        depth = np.zeros((40, 200), dtype=np.float32)
+        depth[:, 80:120] = 1.0  # bar region is nearest
+        settings = {"baseline": 0.02, "focal_length": 1000, "hole_fill_quality": "none"}
+
+        left, right = render_stereo_pair(frame, depth, settings)
+
+        left_center = np.nonzero(left[20] > 127)[0].mean()
+        right_center = np.nonzero(right[20] > 127)[0].mean()
+        assert left_center - right_center == pytest.approx(20, abs=2)
+
+    def test_disparity_scales_with_super_sampling(self):
+        """Super sampling doesn't change the relative 3D strength."""
+        from src.depth_surge_3d.utils.imaging.image_processing import render_stereo_pair
+
+        frame = np.zeros((40, 200), dtype=np.uint8)
+        frame[:, 95:105] = 255
+        depth = np.zeros((40, 200), dtype=np.float32)
+        depth[:, 80:120] = 1.0
+        settings = {
+            "baseline": 0.02,
+            "focal_length": 1000,
+            "hole_fill_quality": "none",
+            "super_sample": "2x",
+        }
+
+        left, right = render_stereo_pair(frame, depth, settings)
+
+        assert left.shape == (80, 400)
+        left_center = np.nonzero(left[40] > 127)[0].mean()
+        right_center = np.nonzero(right[40] > 127)[0].mean()
+        assert left_center - right_center == pytest.approx(40, abs=3)

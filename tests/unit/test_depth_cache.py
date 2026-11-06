@@ -196,6 +196,44 @@ class TestGetCachedDepthMaps:
         assert result.shape == (num_frames, 100, 100)
 
 
+class TestCacheRoundTrip:
+    """Regression #16: cached depth maps must come back with their values intact."""
+
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
+    def test_values_survive_round_trip(self, mock_cache_dir, tmp_path):
+        mock_cache_dir.return_value = tmp_path / "cache"
+        (tmp_path / "cache").mkdir()
+        video_file = tmp_path / "test.mp4"
+        video_file.write_bytes(b"video" * 100)
+        settings = {"depth_model_version": "v2"}
+
+        depth_maps = np.random.rand(2, 40, 60).astype(np.float32)
+        assert save_depth_maps_to_cache(str(video_file), settings, depth_maps)
+
+        loaded = get_cached_depth_maps(str(video_file), settings, 2)
+
+        assert loaded is not None
+        # stored with 3 decimal places; used to come back as ~0 (8-bit read of 16-bit PNG)
+        assert np.allclose(loaded, depth_maps, atol=1e-3)
+        assert loaded.max() > 0.9
+
+    @patch("src.depth_surge_3d.utils.domain.depth_cache.get_cache_dir")
+    def test_8bit_entry_is_a_miss(self, mock_cache_dir, tmp_path):
+        """Entries not in the expected 16-bit format are ignored, not misread."""
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        mock_cache_dir.return_value = cache_dir
+        video_file = tmp_path / "test.mp4"
+        video_file.write_bytes(b"video")
+        settings = {"depth_model_version": "v2"}
+        entry = cache_dir / compute_cache_key(str(video_file), settings)
+        entry.mkdir()
+        (entry / "metadata.json").write_text(json.dumps({"num_frames": 1}))
+        cv2.imwrite(str(entry / "depth_000000.png"), np.full((10, 10), 128, np.uint8))
+
+        assert get_cached_depth_maps(str(video_file), settings, 1) is None
+
+
 class TestSaveDepthMapsToCache:
     """Test save_depth_maps_to_cache function."""
 

@@ -8,6 +8,7 @@ side effects and clear separation of concerns.
 from __future__ import annotations
 
 import time
+from typing import Any
 from collections.abc import Callable
 from abc import ABC, abstractmethod
 
@@ -268,6 +269,21 @@ class ProgressTracker:
     def finish(self, message: str = "Processing complete") -> None:
         """Finish progress tracking."""
         self.reporter.report_completion(message)
+
+
+class NullProgressTracker:
+    """
+    No-op progress tracker for runs without a UI (e.g. the CLI).
+
+    Lets pipeline stages call update_progress()/finish() unconditionally. It has no
+    send_preview_* methods, so stages that check hasattr() skip preview generation.
+    """
+
+    def update_progress(self, *args: Any, **kwargs: Any) -> None:
+        """Ignore progress updates."""
+
+    def finish(self, *args: Any, **kwargs: Any) -> None:
+        """Ignore completion."""
 
 
 class ProgressCallback:

@@ -54,7 +54,7 @@ DEFAULT_SETTINGS = {
     "crop_factor": 1.0,  # default: 1.0 (no crop)
     "fisheye_crop_factor": 0.7,  # default: 0.7 (zoom into center ~70%, crops ~20% each edge to hide distortion)
     "hole_fill_quality": "fast",
-    "super_sample": "auto",
+    "super_sample": "auto",  # stereo warp resolution: auto (<=2x), 2x, 1080p, 4k, none
     "target_fps": 60,
     "min_resolution": "1080p",
     "preserve_audio": True,
@@ -239,6 +239,18 @@ DEPTH_MAP_SCALE = 255  # Scale factor for converting float depth [0-1] to uint8 
 DEPTH_MAP_SCALE_FLOAT = 255.0  # Float version for division operations
 MIN_DEPTH_VALUE = 0.0
 MAX_DEPTH_VALUE = 1.0
+
+# Stereo geometry
+# Depth maps are normalized inverse depth ("nearness"): 1.0 = nearest point, 0.0 = farthest.
+# The nearest point in each frame is treated as this many meters away and the farthest as
+# infinitely far, so max disparity (px) = baseline (m) * focal_length (px) / STEREO_NEAR_PLANE_M.
+STEREO_NEAR_PLANE_M = 1.0
+
+# Upper bound on stereo worker processes (each holds a full frame + depth map in RAM)
+MAX_STEREO_WORKERS = 16
+
+# Bump whenever the meaning of cached depth maps changes (invalidates the global depth cache)
+DEPTH_CACHE_FORMAT_VERSION = 2
 
 # Progress reporting
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every N frames processed

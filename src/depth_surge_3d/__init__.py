@@ -6,23 +6,27 @@ using state-of-the-art depth estimation models.
 """
 
 import sys
+import warnings
 
-__version__ = "0.9.1"
+__version__ = "0.10.0"
 __author__ = "Depth Surge 3D Team"
 __description__ = "Convert 2D videos to immersive 3D VR format using AI depth estimation"
 
 # Python version check - must be done early before any heavy imports
-if sys.version_info >= (3, 13):
+if sys.version_info < (3, 10):
     raise RuntimeError(
-        f"Depth Surge 3D requires Python 3.9-3.12, but you are using Python {sys.version_info[0]}.{sys.version_info[1]}.\n"
-        f"Python 3.13+ is not yet supported due to dependency limitations (specifically 'open3d' in Depth-Anything V3).\n"
-        f"Please use Python 3.12 or earlier. See https://github.com/Tok/depth-surge-3d/issues/11 for updates."
+        f"Depth Surge 3D requires Python 3.10 or newer, but you are using Python "
+        f"{sys.version_info[0]}.{sys.version_info[1]}.\n"
+        f"Please use Python 3.10-3.13 (3.12 recommended)."
     )
 
-if sys.version_info < (3, 9):
-    raise RuntimeError(
-        f"Depth Surge 3D requires Python 3.9 or newer, but you are using Python {sys.version_info[0]}.{sys.version_info[1]}.\n"
-        f"Please upgrade to Python 3.9-3.12."
+if sys.version_info >= (3, 14):
+    warnings.warn(
+        f"Depth Surge 3D is tested on Python 3.10-3.13; Python "
+        f"{sys.version_info[0]}.{sys.version_info[1]} is untested and some dependencies "
+        f"(e.g. Depth-Anything-3) may not install. Python 3.12 is recommended.",
+        RuntimeWarning,
+        stacklevel=2,
     )
 
 

@@ -19,6 +19,7 @@ from ...io.operations import (
     update_processing_status,
 )
 from ...utils.path_utils import generate_output_filename
+from ...utils.domain.progress import NullProgressTracker
 from ...utils import (
     step_complete,
     saved_to,
@@ -99,6 +100,10 @@ class ProcessingOrchestrator:
             - Filesystem state management
             - Delegates to all processor modules
         """
+        # CLI runs have no tracker; stages call it unconditionally (#14, #17)
+        if progress_tracker is None:
+            progress_tracker = NullProgressTracker()
+
         try:
             # Start timer
             self._start_time = time.time()

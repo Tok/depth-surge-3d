@@ -1,6 +1,7 @@
 """Unit tests for VideoDepthEstimatorDA3."""
 
 import numpy as np
+import pytest
 import torch
 from unittest.mock import patch, MagicMock
 
@@ -9,6 +10,45 @@ from src.depth_surge_3d.inference.depth.video_depth_estimator_da3 import (
     create_video_depth_estimator_da3,
 )
 from src.depth_surge_3d.core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
+
+
+@pytest.fixture(autouse=True)
+def _no_real_xformers(request):
+    """
+    Keep load_model() tests from importing the real xformers.
+
+    Tests patch sys.modules, which drops xformers again afterwards; re-importing it makes
+    xformers re-register its torch ops and aborts the interpreter.
+    """
+    if request.node.get_closest_marker("real_xformers_check"):
+        yield
+        return
+    with patch.object(VideoDepthEstimatorDA3, "_check_xformers"):
+        yield
+
+
+class TestXformersCheck:
+    """Test xformers availability reporting."""
+
+    @pytest.mark.real_xformers_check
+    def test_kernels_available(self, capsys):
+        fake = MagicMock(_has_cpp_library=True)
+        with patch.dict("sys.modules", {"xformers": fake}):
+            VideoDepthEstimatorDA3(device="cpu")._check_xformers()
+        assert "xformers detected" in capsys.readouterr().out
+
+    @pytest.mark.real_xformers_check
+    def test_kernels_unavailable_is_quiet(self, capsys):
+        fake = MagicMock(_has_cpp_library=False)
+        with patch.dict("sys.modules", {"xformers": fake}):
+            VideoDepthEstimatorDA3(device="cpu")._check_xformers()
+        assert "xformers" not in capsys.readouterr().out
+
+    @pytest.mark.real_xformers_check
+    def test_not_installed(self, capsys):
+        with patch.dict("sys.modules", {"xformers": None}):
+            VideoDepthEstimatorDA3(device="cpu")._check_xformers()
+        assert "xformers detected" not in capsys.readouterr().out
 
 
 class TestVideoDepthEstimatorDA3:

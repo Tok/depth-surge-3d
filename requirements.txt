@@ -1,30 +1,36 @@
-# IMPORTANT: Depth Surge 3D requires Python 3.9-3.12 (NOT Python 3.13+)
-# Python 3.13 is not yet supported due to open3d dependency in Depth-Anything V3
-# See: https://github.com/Tok/depth-surge-3d/issues/11
-
-# Core dependencies - install these first
-numpy>=1.24.0,<2.0.0
-opencv-python>=4.8.0
-Pillow>=10.0.0
-torch>=2.0.0
-torchvision>=0.15.0
-
-# Application dependencies
-tqdm>=4.65.0
-transformers>=4.30.0
-flask>=3.0.0
-flask-socketio>=5.3.0
-eventlet>=0.35.0
-einops>=0.7.0
-easydict>=1.9
-
-# Depth Anything V3 dependencies
-# IMPORTANT: Install with --no-build-isolation to avoid numpy recompilation issues
-# pip install --no-build-isolation git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
+# Depth Surge 3D requires Python 3.10-3.13 (3.12 recommended).
 #
-# Note: xformers is optional - provides performance optimization for DA3
-# Uncomment the line below if you want to install xformers (may fail on some systems):
-# xformers>=0.0.26
+# The recommended install is `uv sync` (see setup.sh / setup.ps1), which uses the tested
+# versions pinned in uv.lock. This file is for plain pip installs and mirrors pyproject.toml.
+#
+# pip note: Depth-Anything-3 pins numpy<2, which has no wheels for Python 3.13. uv lifts that
+# pin automatically (DA3 works with numpy 2). With pip on Python 3.13, install DA3 last with
+#   pip install --no-deps git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
+# after installing its dependencies from this file. See
+# https://github.com/Tok/depth-surge-3d/issues/11
+
+# Core dependencies
+torch>=2.7.0
+torchvision>=0.22.0
+opencv-python>=4.10.0
+numpy>=1.26.0
+Pillow>=10.4.0
+tqdm>=4.66.0
+
+# Web UI
+flask>=3.1.0
+flask-socketio>=5.5.0
+
+# Video-Depth-Anything (V2) model code
+einops>=0.8.0
+easydict>=1.13
+
+# Depth Anything V3
+# open3d >= 0.20 is needed for Python 3.13; addict is imported by DA3 but not declared by it.
+# xformers comes with DA3. If its CUDA build doesn't match your torch, Depth Surge 3D
+# automatically falls back to PyTorch's built-in attention.
+open3d>=0.19.0
+addict>=2.4.0
 git+https://github.com/ByteDance-Seed/Depth-Anything-3.git
 
 # AI Upscaling: Real-ESRGAN with standalone RRDB network (no extra dependencies)

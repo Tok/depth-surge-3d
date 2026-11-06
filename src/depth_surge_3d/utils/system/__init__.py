@@ -10,6 +10,7 @@ from .vram_manager import (
     calculate_optimal_chunk_size,
     get_vram_info,
 )
+from .xformers_guard import ensure_attention_backend
 from .console import (
     success,
     error,
@@ -29,6 +30,8 @@ __all__ = [
     "estimate_frame_vram_usage",
     "calculate_optimal_chunk_size",
     "get_vram_info",
+    # xformers
+    "ensure_attention_backend",
     # Console
     "success",
     "error",

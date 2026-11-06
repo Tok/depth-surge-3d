@@ -17,6 +17,8 @@ import numpy as np
 from typing import Any
 
 from ...core.constants import DA3_MODEL_NAMES, DEFAULT_DA3_MODEL
+from ...utils.imaging.image_processing import depth_to_inverse_depth
+from ...utils.system.xformers_guard import ensure_attention_backend
 
 
 @contextmanager
@@ -114,15 +116,18 @@ class VideoDepthEstimatorDA3:
     def _check_xformers(self) -> None:
         """Check if xformers is available for optimized attention."""
         try:
-            import xformers  # noqa: F401
+            import xformers
 
-            print("xformers detected - using optimized attention")
+            has_kernels = bool(getattr(xformers, "_has_cpp_library", True))
         except Exception:
-            print(
-                "Warning: xformers not available. "
-                "Install with 'pip install xformers' for better performance "
-                "(optional, may fail on some systems)"
-            )
+            has_kernels = False
+
+        if has_kernels:
+            print("xformers detected - using optimized attention")
+        elif self.verbose:
+            # Common and harmless: the xformers wheel targets a different CUDA/torch build
+            # than the installed torch. DA3 then uses PyTorch's built-in attention.
+            print("  xformers kernels unavailable - using PyTorch attention")
 
     def load_model(self) -> bool:
         """
@@ -134,6 +139,10 @@ class VideoDepthEstimatorDA3:
         try:
             # Setup logging suppression
             self._setup_logging_suppression()
+
+            # Use torch SDPA if xformers' kernels are missing or don't match this torch
+            if ensure_attention_backend() == "sdpa":
+                print("  Attention backend: PyTorch SDPA (xformers kernels unavailable)")
 
             # Import DA3 API with output suppressed
             with suppress_output():
@@ -249,13 +258,19 @@ class VideoDepthEstimatorDA3:
             raise RuntimeError(f"DA3 depth estimation failed: {e}")
 
     def _normalize_depths(self, depths: np.ndarray) -> np.ndarray:
-        """Normalize depth maps to 0-1 range."""
+        """
+        Convert DA3 depth maps to normalized inverse depth (0-1 range, 1 = nearest).
+
+        DA3 outputs depth (larger = farther); the stereo pipeline expects inverse depth,
+        the same convention Video-Depth-Anything uses.
+        """
         # Convert to numpy if torch tensor
         if torch.is_tensor(depths):
             depths = depths.cpu().numpy()
 
         normalized_depths = []
-        for depth in depths:
+        for raw_depth in depths:
+            depth = depth_to_inverse_depth(raw_depth)
             if depth.max() == depth.min():
                 normalized = np.zeros_like(depth)
             else:

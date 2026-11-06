@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-06
+
+### Fixed
+- **Stereo generation crash** (#16, #17): `ValueError: operands could not be broadcast together`.
+  Super sampling upscaled frames for depth estimation but not for stereo generation, so every
+  depth map was 2x the size of its frame. Frames now go to the depth model at source resolution,
+  and super sampling happens in the stereo step (frame and depth upscaled together, aspect
+  preserved, disparity scaled to match). Depth maps of any size, e.g. from the cache, are resized
+  to their frame.
+- **Stereo generation hang** (#17): forked workers deadlocked on locks inherited from the
+  parent's torch/CUDA/OpenCV threads. Workers now start with `spawn`, are capped at 16, run
+  OpenCV single-threaded, and a crashed pool falls back to in-process generation instead of
+  hanging forever.
+- **Flat or garbled 3D output** (#16):
+  - Disparity was computed as `1 / normalized_depth`, so the 0-valued pixel in every frame was
+    shifted by thousands of pixels. Disparity is now linear in inverse depth and bounded by
+    `baseline * focal_length / 1 m` (65 px with defaults); the farthest point has zero parallax.
+  - Depth Anything V3 and metric models output depth (far = large) while the relative
+    Video-Depth-Anything model outputs inverse depth (near = large). Both are now converted to
+    normalized inverse depth.
+  - The global depth cache saved 16-bit PNGs but read them back as 8-bit, so every cache hit
+    returned depth ~0. Old cache entries are invalidated (cache format version 2).
+- **`--vr-resolution custom:WIDTHxHEIGHT` rejected by the CLI** (#17); invalid values now get a
+  clear error message.
+- CLI crash `'NoneType' object has no attribute 'update_progress'` in the distortion, upscaling
+  and assembly steps (same class as #14), via a no-op progress tracker for UI-less runs.
+- Output filenames for custom resolutions no longer contain `:` (invalid on Windows).
+- Video-Depth-Anything crashed with `No operator found for memory_efficient_attention_forward`
+  when the installed xformers didn't match the installed PyTorch build. Without xformers, its naive
+  attention needed ~20 GB at 720p. Missing or mismatched xformers kernels are now replaced with
+  PyTorch's `scaled_dot_product_attention`.
+
+### Added
+- **Python 3.13 support** (#11): open3d 0.20 ships 3.13 wheels, and uv overrides
+  Depth-Anything-3's `numpy<2` pin.
+- Web UI "Force 1080p" / "Force 4K" super sampling options now do what they say.
+
+### Changed
+- Supported Python versions: 3.10-3.13 (3.9 is end-of-life; Python 3.14+ only warns).
+- Dependencies upgraded, and `uv.lock` is now committed (it was gitignored, so every `uv sync`
+  re-resolved from scratch; the local copy was also missing Depth-Anything-3): PyTorch 2.15
+  (CUDA 13.2, needs NVIDIA driver 580+), numpy 2.x, OpenCV 5, open3d 0.20, Flask-SocketIO 5.7.
+- Added `addict`: Depth-Anything-3 imports it but doesn't declare it (it used to come with
+  open3d < 0.20).
+- Removed unused dependencies: transformers, eventlet, six, decord, matplotlib, imageio,
+  imageio-ffmpeg.
+- Dev dependencies moved from the deprecated `tool.uv.dev-dependencies` to `[dependency-groups]`.
+- CI now installs from `uv.lock`, tests Python 3.10-3.13, and uses current action versions.
+- `settings.json` records the actual package version instead of a hardcoded "0.9.0".
+
 ## [0.9.2] - 2026-01-19
 
 ### Fixed
@@ -58,5 +108,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For changelog entries prior to v0.9.2, see [docs/archive/CHANGELOG.md](docs/archive/CHANGELOG.md)
 
-[Unreleased]: https://github.com/Tok/depth-surge-3d/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/Tok/depth-surge-3d/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Tok/depth-surge-3d/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/Tok/depth-surge-3d/compare/v0.9.1...v0.9.2

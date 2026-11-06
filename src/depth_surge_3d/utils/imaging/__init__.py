@@ -11,8 +11,12 @@ from .image_processing import (
     # Depth operations
     normalize_depth_map,
     depth_to_disparity,
+    depth_to_inverse_depth,
+    match_depth_to_frame,
+    calculate_super_sample_size,
     # Stereo operations
     create_shifted_image,
+    render_stereo_pair,
     hole_fill_image,
     # VR operations
     apply_center_crop,
@@ -34,8 +38,12 @@ __all__ = [
     # Depth operations
     "normalize_depth_map",
     "depth_to_disparity",
+    "depth_to_inverse_depth",
+    "match_depth_to_frame",
+    "calculate_super_sample_size",
     # Stereo operations
     "create_shifted_image",
+    "render_stereo_pair",
     "hole_fill_image",
     # VR operations
     "apply_center_crop",

@@ -335,19 +335,18 @@ class TestLoadChunkFrames:
         assert len(result) == 3
         assert all(isinstance(frame, np.ndarray) for frame in result)
 
-    def test_load_chunk_frames_with_super_sampling(self, processor, temp_frames):
-        """Test frame loading with super sampling."""
-        settings = {"super_sample": "2x", "per_eye_width": 200, "per_eye_height": 200}
+    def test_load_chunk_frames_never_upscales(self, processor, temp_frames):
+        """Regression #16/#17: frames reach the depth model at source resolution.
 
-        with patch(
-            "src.depth_surge_3d.processing.frames.depth_processor.resize_image"
-        ) as mock_resize:
-            mock_resize.side_effect = lambda img, w, h: np.zeros((h, w, 3), dtype=np.uint8)
-            result = processor._load_chunk_frames(temp_frames, settings)
+        Super sampling used to upscale frames here, producing depth maps that didn't
+        match the frames used for stereo generation.
+        """
+        settings = {"super_sample": "auto", "per_eye_width": 200, "per_eye_height": 200}
+
+        result = processor._load_chunk_frames(temp_frames, settings)
 
         assert result is not None
-        assert len(result) == 3
-        assert mock_resize.call_count == 3
+        assert all(frame.shape == (100, 100, 3) for frame in result)
 
     def test_load_chunk_frames_missing_file(self, processor, temp_frames):
         """Test loading with missing file."""

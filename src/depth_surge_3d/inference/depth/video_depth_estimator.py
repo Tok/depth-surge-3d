@@ -16,6 +16,8 @@ import torch
 import numpy as np
 
 from ...utils.system.console import success as console_success, error as console_error
+from ...utils.imaging.image_processing import depth_to_inverse_depth
+from ...utils.system.xformers_guard import ensure_attention_backend
 from ...core.constants import (
     DEFAULT_MODEL_PATH,
     VIDEO_DEPTH_ANYTHING_REPO_DIR,
@@ -42,7 +44,7 @@ class VideoDepthEstimator:
         self.metric = metric
         self.temporal_window_overlap = temporal_window_overlap
         self.model = None
-        self.model_config = None
+        self.model_config: dict[str, Any] | None = None
 
     def _determine_device(self, device: str) -> str:
         """Determine the best device to use for inference."""
@@ -73,15 +75,20 @@ class VideoDepthEstimator:
                 print(f"Cannot determine model type from path: {self.model_path}")
                 return False
 
-            self.model_config = MODEL_CONFIGS[model_type]  # type: ignore[assignment]
+            self.model_config = MODEL_CONFIGS[model_type]
 
             # Import and load model
             repo_path = Path(VIDEO_DEPTH_ANYTHING_REPO_DIR)
             if str(repo_path) not in sys.path:
                 sys.path.insert(0, str(repo_path))
 
+            # Use torch SDPA if xformers' kernels are missing or don't match this torch
+            if ensure_attention_backend() == "sdpa":
+                print("  Attention backend: PyTorch SDPA (xformers kernels unavailable)")
+
             from video_depth_anything.video_depth import VideoDepthAnything
 
+            assert self.model_config is not None
             self.model = VideoDepthAnything(**self.model_config, metric=self.metric)
 
             # Load state dict and fix key names if needed
@@ -361,9 +368,15 @@ class VideoDepthEstimator:
         return depths
 
     def _normalize_depths(self, depths: np.ndarray) -> np.ndarray:
-        """Normalize depth maps to 0-1 range."""
+        """
+        Normalize to inverse depth in the 0-1 range (1 = nearest).
+
+        Relative models already output inverse depth (disparity); metric models output
+        depth in meters and are inverted first.
+        """
         normalized_depths = []
-        for depth in depths:
+        for raw_depth in depths:
+            depth = depth_to_inverse_depth(raw_depth) if self.metric else raw_depth
             if depth.max() == depth.min():
                 normalized = np.zeros_like(depth)
             else:

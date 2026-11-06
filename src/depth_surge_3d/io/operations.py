@@ -31,6 +31,13 @@ from ..utils.path_utils import (
 )
 
 
+def _project_version() -> str:
+    """Return the package version (imported lazily to avoid a circular import)."""
+    from .. import __version__
+
+    return __version__
+
+
 def validate_video_file(video_path: str) -> bool:
     """
     Validate if file exists and is a supported video format.
@@ -427,7 +434,7 @@ def save_processing_settings(
             "source_video_name": Path(source_video_path).name,
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "created_timestamp": time.time(),
-            "project_version": "0.9.0",
+            "project_version": _project_version(),
             "processing_status": "in_progress",
         },
         "video_properties": video_properties,

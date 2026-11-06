@@ -37,7 +37,6 @@ from ...utils import (
     get_cache_size,
 )
 from ...utils import calculate_optimal_chunk_size, get_vram_info
-from ...utils import resize_image
 
 
 class DepthMapProcessor:
@@ -254,11 +253,11 @@ class DepthMapProcessor:
 
     def _load_chunk_frames(self, chunk_files: list[Path], settings: dict[str, Any]) -> list | None:
         """
-        Load chunk of frames into memory.
+        Load chunk of frames into memory at source resolution.
 
         Args:
             chunk_files: List of frame file paths for this chunk
-            settings: Processing settings
+            settings: Processing settings (unused, kept for API compatibility)
 
         Returns:
             List of loaded frame images
@@ -273,12 +272,9 @@ class DepthMapProcessor:
                 print(f"Warning: Could not load {frame_file}")
                 continue
 
-            # Apply super sampling if needed
-            if settings["super_sample"] != "none":
-                target_width = max(frame.shape[1], settings["per_eye_width"] * 2)
-                target_height = max(frame.shape[0], settings["per_eye_height"] * 2)
-                frame = resize_image(frame, target_width, target_height)
-
+            # Frames go to the depth model at source resolution. The model resizes to
+            # input_size internally, so upscaling here only wastes memory; super sampling
+            # is applied later, during stereo generation (see render_stereo_pair).
             chunk_frames.append(frame)
 
         return chunk_frames if chunk_frames else None

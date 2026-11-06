@@ -1,11 +1,10 @@
-# Test dependencies
-pytest>=7.4.0
-pytest-cov>=4.1.0
-pytest-mock>=3.11.0
-pytest-asyncio>=0.21.0
-pytest-timeout>=2.1.0
+# Test and code-quality tools (mirrors [dependency-groups].dev in pyproject.toml;
+# `uv sync` installs these automatically)
+pytest>=8.3.0
+pytest-cov>=6.0.0
+pytest-mock>=3.14.0
+pytest-timeout>=2.3.0
 
-# Code quality
-black>=23.7.0
-flake8>=6.1.0
-mypy>=1.5.0
+black>=25.1.0
+flake8>=7.2.0
+mypy>=1.15.0

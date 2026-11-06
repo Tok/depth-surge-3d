@@ -10,8 +10,9 @@ from __future__ import annotations
 import cv2
 import numpy as np
 import math
+from typing import Any
 
-from ...core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE
+from ...core.constants import MIN_DEPTH_VALUE, MAX_DEPTH_VALUE, STEREO_NEAR_PLANE_M
 
 
 def resize_image(
@@ -52,28 +53,116 @@ def normalize_depth_map(depth_map: np.ndarray) -> np.ndarray:
     return np.clip(normalized, MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
 
 
-def depth_to_disparity(depth_map: np.ndarray, baseline: float, focal_length: float) -> np.ndarray:
+def depth_to_inverse_depth(depth: np.ndarray, low_percentile: float = 1.0) -> np.ndarray:
     """
-    Convert depth map to disparity map for stereo generation.
+    Convert a depth map (larger = farther) to inverse depth (larger = nearer).
+
+    The pipeline works on inverse depth, which is what relative depth models such as
+    Video-Depth-Anything output natively. Models that output depth (Depth Anything V3,
+    metric models) must be converted first. Depths are clamped at a low percentile of the
+    valid values so a few near-zero pixels can't blow up the range.
 
     Args:
-        depth_map: Normalized depth map (0-1 range)
+        depth: Depth map (any positive scale); non-positive values are treated as invalid
+        low_percentile: Percentile of valid depths used as the minimum depth
+
+    Returns:
+        Inverse depth map (float32, >= 0); invalid pixels become 0 (infinitely far)
+    """
+    depth = np.asarray(depth, dtype=np.float32)
+    valid = np.isfinite(depth) & (depth > 0)
+    if not valid.any():
+        return np.zeros_like(depth)
+
+    min_depth = max(float(np.percentile(depth[valid], low_percentile)), 1e-6)
+    inverse = np.zeros_like(depth)
+    inverse[valid] = 1.0 / np.maximum(depth[valid], min_depth)
+    return inverse
+
+
+def depth_to_disparity(depth_map: np.ndarray, baseline: float, focal_length: float) -> np.ndarray:
+    """
+    Convert a normalized inverse-depth map to a pixel disparity map.
+
+    Depth maps throughout the pipeline are normalized inverse depth ("nearness"):
+    1.0 is the nearest point in the frame and 0.0 the farthest. The nearest point is
+    placed at STEREO_NEAR_PLANE_M meters and the farthest at infinity (zero disparity),
+    so disparity = baseline * focal_length * nearness / STEREO_NEAR_PLANE_M.
+
+    Args:
+        depth_map: Normalized inverse depth map (0-1 range, 1 = near)
         baseline: Stereo baseline in meters
         focal_length: Camera focal length in pixels
 
     Returns:
-        Disparity map array
+        Disparity map array in pixels (float32, >= 0)
     """
-    # Avoid division by zero
-    safe_depth = np.where(depth_map > 0.001, depth_map, 0.001)
+    nearness = np.clip(np.nan_to_num(depth_map, nan=0.0), MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
+    max_disparity = (baseline * focal_length) / STEREO_NEAR_PLANE_M
+    return (nearness * max_disparity).astype(np.float32)
 
-    # Convert normalized depth to actual depth (assuming 1 unit = 10 meters)
-    actual_depth = safe_depth * 10.0
 
-    # Calculate disparity: d = (baseline * focal_length) / depth
-    disparity = (baseline * focal_length) / actual_depth
+def match_depth_to_frame(depth_map: np.ndarray, width: int, height: int) -> np.ndarray:
+    """
+    Resize a depth map to the given frame size if it doesn't already match.
 
-    return disparity
+    Args:
+        depth_map: Depth map array (H, W)
+        width: Target width in pixels
+        height: Target height in pixels
+
+    Returns:
+        Depth map of shape (height, width)
+    """
+    if depth_map.shape[:2] == (height, width):
+        return depth_map
+    return cv2.resize(depth_map.astype(np.float32), (width, height), interpolation=cv2.INTER_LINEAR)
+
+
+def calculate_super_sample_size(
+    frame_width: int,
+    frame_height: int,
+    per_eye_width: int,
+    per_eye_height: int,
+    super_sample: str = "auto",
+) -> tuple[int, int]:
+    """
+    Determine the working resolution for stereo warping.
+
+    Warping at a higher resolution than the source reduces resampling artifacts when
+    the per-eye output is larger than the source. The source aspect ratio is preserved.
+
+    Modes:
+        none:  work at source resolution
+        auto:  upscale so the frame covers the per-eye output, at most 2x the source
+        2x:    upscale by 2x
+        1080p: upscale so the shorter side is at least 1080 px
+        4k:    upscale so the shorter side is at least 2160 px
+        any other value is treated like "auto"; the frame is never downscaled
+
+    Args:
+        frame_width: Source frame width
+        frame_height: Source frame height
+        per_eye_width: Target per-eye width
+        per_eye_height: Target per-eye height
+        super_sample: Super sampling mode
+
+    Returns:
+        Tuple of (width, height) for stereo warping
+    """
+    if super_sample == "none" or frame_width <= 0 or frame_height <= 0:
+        return frame_width, frame_height
+
+    short_side_targets = {"1080p": 1080, "4k": 2160}
+    if super_sample == "2x":
+        scale = 2.0
+    elif super_sample in short_side_targets:
+        scale = max(short_side_targets[super_sample] / min(frame_width, frame_height), 1.0)
+    else:
+        scale = max(per_eye_width / frame_width, per_eye_height / frame_height)
+        scale = min(max(scale, 1.0), 2.0)
+
+    return int(round(frame_width * scale)), int(round(frame_height * scale))
 
 
 def create_shifted_image(
@@ -123,6 +212,52 @@ def create_shifted_image(
         )
 
     return shifted_image
+
+
+def render_stereo_pair(
+    frame: np.ndarray, depth_map: np.ndarray, settings: dict[str, Any]
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Render a left/right stereo pair from a frame and its normalized inverse-depth map.
+
+    The depth map may come at any resolution (e.g. from the depth cache); it is resized
+    to the warp resolution. When super sampling is enabled the frame is upscaled first
+    and the disparity is scaled by the same factor, so the 3D strength is independent of
+    the super sampling mode.
+
+    Args:
+        frame: Source frame (H, W, C) or (H, W)
+        depth_map: Normalized inverse depth map (any resolution, 1 = near)
+        settings: Needs baseline, focal_length, hole_fill_quality; optionally
+            super_sample, per_eye_width, per_eye_height
+
+    Returns:
+        Tuple of (left_image, right_image) at the warp resolution
+    """
+    src_h, src_w = frame.shape[:2]
+    work_w, work_h = calculate_super_sample_size(
+        src_w,
+        src_h,
+        int(settings.get("per_eye_width") or src_w),
+        int(settings.get("per_eye_height") or src_h),
+        str(settings.get("super_sample", "none")),
+    )
+    if (work_w, work_h) != (src_w, src_h):
+        frame = cv2.resize(frame, (work_w, work_h), interpolation=cv2.INTER_CUBIC)
+
+    depth_map = match_depth_to_frame(depth_map, work_w, work_h)
+    disparity_map = depth_to_disparity(depth_map, settings["baseline"], settings["focal_length"])
+    disparity_map *= work_w / src_w
+
+    left_img = create_shifted_image(frame, disparity_map, "left")
+    right_img = create_shifted_image(frame, disparity_map, "right")
+
+    hole_fill_quality = settings.get("hole_fill_quality", "none")
+    if hole_fill_quality in ["fast", "advanced"]:
+        left_img = hole_fill_image(left_img, method=hole_fill_quality)
+        right_img = hole_fill_image(right_img, method=hole_fill_quality)
+
+    return left_img, right_img
 
 
 def apply_center_crop(image: np.ndarray, crop_factor: float) -> np.ndarray:
@@ -321,8 +456,7 @@ def _create_hole_mask(image: np.ndarray) -> np.ndarray:
 
     # Dilate mask slightly to catch edge artifacts
     kernel = np.ones((3, 3), np.uint8)
-    mask = cv2.dilate(mask, kernel, iterations=1)
-    return mask
+    return np.asarray(cv2.dilate(mask, kernel, iterations=1))
 
 
 def _calculate_adaptive_radius(mask: np.ndarray) -> int:
