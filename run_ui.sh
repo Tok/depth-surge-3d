@@ -1,32 +1,34 @@
 #!/bin/bash
 
-# Store the PID of this script
-SCRIPT_PID=$$
 APP_PID=""
 
-# Function to cleanup processes
+# Stop the web server started by this script, and only that.
+# (This used to `pkill -f` broad patterns such as "depth_surge_3d\.py" and "python.*app\.py",
+# which also killed CLI conversions running in other terminals and any other process whose
+# command line happened to match.)
 cleanup() {
+    trap - SIGINT SIGTERM EXIT
     echo ""
     echo "Stopping Depth Surge 3D Web UI..."
 
-    # Kill the Flask app if it's running
-    if [ ! -z "$APP_PID" ] && kill -0 "$APP_PID" 2>/dev/null; then
+    if [ -n "$APP_PID" ] && kill -0 "$APP_PID" 2>/dev/null; then
         echo "   Stopping web server (PID: $APP_PID)..."
-        kill -TERM "$APP_PID" 2>/dev/null || kill -KILL "$APP_PID" 2>/dev/null
-        wait "$APP_PID" 2>/dev/null
+        # SIGINT, not SIGTERM: the server shuts down gracefully on SIGINT (stopping its ffmpeg
+        # jobs). SIGTERM is intercepted by the glog crash handler that pycolmap (a DA3
+        # dependency) installs, which prints a crash dump and aborts instead.
+        kill -INT "$APP_PID" 2>/dev/null
+        for _ in $(seq 1 30); do
+            kill -0 "$APP_PID" 2>/dev/null || break
+            sleep 0.5
+        done
+        if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "   Server didn't stop in time, forcing..."
+            pkill -KILL -P "$APP_PID" 2>/dev/null || true
+            kill -KILL "$APP_PID" 2>/dev/null || true
+        fi
     fi
 
-    # Kill any other Python processes related to this app
-    echo "   Cleaning up any remaining processes..."
-    pkill -f "python.*app\.py" 2>/dev/null || true
-    pkill -f "flask.*run" 2>/dev/null || true
-
-    # Kill any ongoing processing jobs
-    echo "   Stopping any active video processing..."
-    pkill -f "depth_surge_3d\.py" 2>/dev/null || true
-    pkill -f "ffmpeg.*depth-surge" 2>/dev/null || true
-
-    echo "All processes stopped successfully"
+    echo "Web UI stopped"
     exit 0
 }
 
@@ -45,10 +47,7 @@ else
     exit 1
 fi
 
-# Install additional Flask dependencies if needed (quietly)
-python -m pip install flask flask-socketio > /dev/null 2>&1
-
-# Create upload and output directories
+# Create output directory (uploaded videos are stored in their batch folder under output/)
 mkdir -p output
 
 # Start the Flask application

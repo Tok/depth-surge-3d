@@ -83,19 +83,16 @@ class DistortionProcessor:
                     right_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
                 )
 
-                # Save distorted frames if keeping intermediates
-                if settings["keep_intermediates"]:
-                    frame_name = left_file.stem
-                    if "left_distorted" in directories:
-                        cv2.imwrite(
-                            str(directories["left_distorted"] / f"{frame_name}.png"),
-                            left_distorted,
-                        )
-                    if "right_distorted" in directories:
-                        cv2.imwrite(
-                            str(directories["right_distorted"] / f"{frame_name}.png"),
-                            right_distorted,
-                        )
+                # Always save: the crop step reads the distorted frames from disk
+                frame_name = left_file.stem
+                if "left_distorted" in directories:
+                    cv2.imwrite(
+                        str(directories["left_distorted"] / f"{frame_name}.png"), left_distorted
+                    )
+                if "right_distorted" in directories:
+                    cv2.imwrite(
+                        str(directories["right_distorted"] / f"{frame_name}.png"), right_distorted
+                    )
 
                 # Update progress
                 if i % 5 == 0 or i == len(left_files) - 1:
@@ -164,7 +161,7 @@ class DistortionProcessor:
                         f"Cropping frame {i + 1}/{len(left_files)}",
                         phase="cropping",
                         frame_num=i + 1,
-                        step_name="Frame Cropping",
+                        step_name="Crop Frames",  # must match the web UI step list
                         step_progress=i + 1,
                         step_total=len(left_files),
                     )

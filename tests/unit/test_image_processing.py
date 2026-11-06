@@ -983,3 +983,35 @@ class TestFittedFisheye:
         a = _cached_fisheye_maps(64, 48, 180.0, "equidistant", 0.7)
         b = _cached_fisheye_maps(64, 48, 180.0, "equidistant", 0.7)
         assert a[0] is b[0] and not a[0].flags.writeable
+
+
+class TestFitToCanvas:
+    """Regression: per-eye scaling stretched content whose aspect didn't match the target."""
+
+    def test_same_aspect_is_plain_resize(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import fit_to_canvas
+
+        out = fit_to_canvas(np.full((90, 160, 3), 200, np.uint8), 1280, 720)
+        assert out.shape == (720, 1280, 3) and (out == 200).all()
+
+    def test_square_into_wide_is_pillarboxed(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import fit_to_canvas
+
+        out = fit_to_canvas(np.full((100, 100, 3), 200, np.uint8), 160, 90)
+        assert out.shape == (90, 160, 3)
+        assert (out[:, 35:125] == 200).all()  # 90x90 square centred
+        assert (out[:, :35] == 0).all() and (out[:, 125:] == 0).all()
+
+    def test_portrait_into_wide(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import fit_to_canvas
+
+        out = fit_to_canvas(np.full((160, 90), 50, np.uint8), 160, 90)
+        assert out.shape == (90, 160)
+        assert out[45, 80] == 50 and out[45, 0] == 0
+
+    def test_fisheye_crop_not_stretched(self):
+        """A square fisheye crop into a 16:9 eye keeps the circle round."""
+        img = np.full((100, 200, 3), 255, np.uint8)
+        out = apply_fisheye_square_crop(img, 320, 180, crop_factor=1.0)
+        assert out.shape == (180, 320, 3)
+        assert (out[:, :60] == 0).all() and (out[:, 70:250] == 255).all()

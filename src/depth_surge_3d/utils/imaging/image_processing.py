@@ -41,6 +41,36 @@ def resize_image(
     return cv2.resize(image, (target_width, target_height), interpolation=interpolation)
 
 
+def fit_to_canvas(image: np.ndarray, target_width: int, target_height: int) -> np.ndarray:
+    """
+    PURE: Scale an image into a target size without distorting it.
+
+    If the aspect ratios match (within a pixel), this is a plain resize. Otherwise the image is
+    scaled to fit and centred on a black canvas (letterbox/pillarbox) instead of being stretched.
+
+    Args:
+        image: Input image (H, W) or (H, W, C)
+        target_width: Output width
+        target_height: Output height
+
+    Returns:
+        Image of exactly (target_height, target_width)
+    """
+    height, width = image.shape[:2]
+    scale = min(target_width / width, target_height / height)
+    new_w = max(1, int(round(width * scale)))
+    new_h = max(1, int(round(height * scale)))
+    if abs(new_w - target_width) <= 1 and abs(new_h - target_height) <= 1:
+        return resize_image(image, target_width, target_height)
+
+    scaled = resize_image(image, new_w, new_h)
+    canvas = np.zeros((target_height, target_width) + image.shape[2:], dtype=image.dtype)
+    y0 = (target_height - new_h) // 2
+    x0 = (target_width - new_w) // 2
+    canvas[y0 : y0 + new_h, x0 : x0 + new_w] = scaled
+    return canvas
+
+
 def normalize_depth_map(depth_map: np.ndarray) -> np.ndarray:
     """
     Normalize depth map to 0-1 range.
@@ -575,12 +605,12 @@ def apply_fisheye_square_crop(
     # Crop to square
     cropped = image[y_start:y_end, x_start:x_end]
 
-    # Resize to target dimensions
+    # Scale to the target size; a non-square target gets black bars instead of a stretched circle
     if cropped.size > 0:
-        scaled = resize_image(cropped, target_width, target_height)
+        scaled = fit_to_canvas(cropped, target_width, target_height)
     else:
         # Fallback if crop failed
-        scaled = resize_image(image, target_width, target_height)
+        scaled = fit_to_canvas(image, target_width, target_height)
 
     return scaled
 

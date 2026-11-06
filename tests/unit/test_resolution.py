@@ -6,6 +6,8 @@ Basic tests to verify the modular architecture is working correctly.
 
 import unittest
 
+import pytest
+
 from src.depth_surge_3d.utils.domain.resolution import (
     parse_custom_resolution,
     get_resolution_dimensions,
@@ -76,3 +78,26 @@ class TestResolutionUtils(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAutoResolutionFisheye:
+    """Fisheye (VR180) eyes are square: auto must not pick a 16:9 preset for them."""
+
+    @pytest.mark.parametrize(
+        "width,height,expected",
+        [
+            (1920, 1080, "square-2k"),
+            (1280, 720, "square-1k"),
+            (3840, 2160, "square-4k"),
+            (1080, 1920, "square-2k"),
+        ],
+    )
+    def test_fisheye_picks_square(self, width, height, expected):
+        from src.depth_surge_3d.utils.domain.resolution import auto_detect_resolution
+
+        assert auto_detect_resolution(width, height, "side_by_side", fisheye=True) == expected
+
+    def test_flat_keeps_source_aspect(self):
+        from src.depth_surge_3d.utils.domain.resolution import auto_detect_resolution
+
+        assert auto_detect_resolution(1920, 1080, "side_by_side", fisheye=False) == "16x9-1080p"

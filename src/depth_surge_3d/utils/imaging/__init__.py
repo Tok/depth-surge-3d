@@ -6,6 +6,7 @@ Core image transformations and video processing functions.
 from .image_processing import (
     # Image operations
     resize_image,
+    fit_to_canvas,
     validate_image_array,
     calculate_image_statistics,
     # Depth operations
@@ -35,6 +36,7 @@ from .video_processing import (
 __all__ = [
     # Image operations
     "resize_image",
+    "fit_to_canvas",
     "validate_image_array",
     "calculate_image_statistics",
     # Depth operations

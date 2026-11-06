@@ -205,7 +205,7 @@ class StereoProjector:
 
             # Process using simplified pipeline
             from ..utils import (
-                resize_image,
+                fit_to_canvas,
                 render_stereo_pair,
                 apply_center_crop,
                 create_vr_frame,
@@ -222,8 +222,8 @@ class StereoProjector:
             right_cropped = apply_center_crop(right_img, settings["crop_factor"])
 
             # Resize to target dimensions
-            left_final = resize_image(left_cropped, per_eye_width, per_eye_height)
-            right_final = resize_image(right_cropped, per_eye_width, per_eye_height)
+            left_final = fit_to_canvas(left_cropped, per_eye_width, per_eye_height)
+            right_final = fit_to_canvas(right_cropped, per_eye_width, per_eye_height)
 
             # Create VR frame
             vr_frame = create_vr_frame(left_final, right_final, settings["vr_format"])
@@ -305,7 +305,10 @@ class StereoProjector:
         # Resolve VR resolution
         if resolved["vr_resolution"] == "auto":
             resolved["vr_resolution"] = auto_detect_resolution(
-                video_props["width"], video_props["height"], resolved["vr_format"]
+                video_props["width"],
+                video_props["height"],
+                resolved["vr_format"],
+                fisheye=bool(resolved.get("apply_distortion", True)),
             )
 
         # Validate resolution settings

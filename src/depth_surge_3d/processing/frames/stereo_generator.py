@@ -160,18 +160,18 @@ class StereoPairGenerator:
         settings: dict[str, Any],
     ) -> list[tuple]:
         """PURE: Build worker argument tuples."""
-        save = settings.get("keep_intermediates", True)
+        # Stereo pairs are always written: the distortion/crop steps read them from disk
         args_list = []
         for frame, depth_map, frame_file in zip(frames, depth_maps, frame_files):
             frame_name = frame_file.stem
             left_path = (
                 str(directories["left_frames"] / f"{frame_name}.png")
-                if save and "left_frames" in directories
+                if "left_frames" in directories
                 else None
             )
             right_path = (
                 str(directories["right_frames"] / f"{frame_name}.png")
-                if save and "right_frames" in directories
+                if "right_frames" in directories
                 else None
             )
             args_list.append((frame, depth_map, frame_name, left_path, right_path, settings))

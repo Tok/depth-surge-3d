@@ -7,6 +7,7 @@ This module handles loading and interfacing with the Video-Depth-Anything model,
 which provides temporal consistency for video depth estimation.
 """
 
+import gc
 import os
 import sys
 import urllib.request
@@ -218,17 +219,24 @@ class VideoDepthEstimator:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
         frames_rgb = frames[..., ::-1].copy()
+        depths = None
         try:
             depths = self._infer(frames_rgb, target_fps, input_size, fp32)
         except RuntimeError as e:
             if "out of memory" not in str(e).lower():
                 raise RuntimeError(f"Video depth estimation failed: {e}")
-            depths = self._retry_chunk_with_reduced_resolution(
-                frames_rgb, target_fps, input_size, fp32
-            )
         finally:
             if self.device == "cuda" and torch.cuda.is_available():
                 torch.cuda.empty_cache()
+
+        if depths is None:
+            # Retry outside the except block: while handling the exception its traceback still
+            # references the failed attempt's GPU tensors, so that memory couldn't be freed and
+            # the retry ran out of memory too
+            gc.collect()
+            depths = self._retry_chunk_with_reduced_resolution(
+                frames_rgb, target_fps, input_size, fp32
+            )
 
         inverse = self._to_inverse_depth(depths)
         return normalize_depth_sequence(inverse) if normalize else inverse

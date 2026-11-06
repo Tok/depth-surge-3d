@@ -197,13 +197,13 @@ class TestCreateStereoPairs:
             assert self._run(temp_frames, BASE_SETTINGS, None) is True
 
     def test_create_stereo_pairs_without_intermediates(self, temp_frames, mock_progress_tracker):
-        """No files are written when keep_intermediates is False."""
+        """Regression: pairs must be written even without intermediates (later steps read them)."""
         settings = {**BASE_SETTINGS, "keep_intermediates": False}
         with patch(f"{MODULE}.get_stereo_worker_count", return_value=1):
             assert self._run(temp_frames, settings, mock_progress_tracker) is True
 
-        assert not list(temp_frames["directories"]["left_frames"].glob("*.png"))
-        mock_progress_tracker.send_preview_frame.assert_not_called()
+        assert len(list(temp_frames["directories"]["left_frames"].glob("*.png"))) == 3
+        assert len(list(temp_frames["directories"]["right_frames"].glob("*.png"))) == 3
 
     def test_broken_pool_falls_back_to_sequential(self, temp_frames):
         """Regression #17: dead workers must not hang the pipeline."""

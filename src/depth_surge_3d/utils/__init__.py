@@ -50,6 +50,7 @@ from .domain import (
 # Imaging utilities
 from .imaging import (
     resize_image,
+    fit_to_canvas,
     validate_image_array,
     calculate_image_statistics,
     normalize_depth_map,
@@ -112,6 +113,7 @@ __all__ = [
     "format_time_duration",
     # Imaging utilities
     "resize_image",
+    "fit_to_canvas",
     "validate_image_array",
     "calculate_image_statistics",
     "normalize_depth_map",

@@ -102,3 +102,25 @@ def test_join_sends_initial_progress_only_for_running_session():
     finally:
         client.disconnect()
         state["session_id"] = None
+
+
+def test_skipped_steps_carry_no_progress_weight():
+    """Regression: disabled upscaling kept its 18% weight, so progress jumped past it."""
+    steps = app_module.ProgressCallback("s", 10).steps
+    weights = app_module._effective_step_weights(steps, {"AI Upscaling"})
+    assert weights[steps.index("AI Upscaling")] == 0
+    assert abs(sum(weights) - 1.0) < 1e-9
+
+
+def test_crop_step_name_matches_progress_steps():
+    """Regression: the crop step reported "Frame Cropping", which isn't in the step list, so
+    overall progress fell back to the start of the distortion step."""
+    import inspect
+
+    from src.depth_surge_3d.processing.frames import distortion_processor
+
+    steps = app_module.ProgressCallback("s", 10).steps
+    names = set(
+        __import__("re").findall(r'step_name="([^"]+)"', inspect.getsource(distortion_processor))
+    )
+    assert names and names <= set(steps)

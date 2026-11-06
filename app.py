@@ -256,6 +256,10 @@ def cleanup_processes() -> None:
 
 def signal_handler(signum: int, frame: Any) -> None:
     """Handle shutdown signals"""
+    global SHUTDOWN_FLAG
+    if SHUTDOWN_FLAG:
+        return  # already shutting down (Ctrl+C reaches us from the terminal and from run_ui.sh)
+    SHUTDOWN_FLAG = True
     print(f"\nReceived signal {signum}, shutting down gracefully...")
 
     # Stop any active processing
@@ -420,6 +424,20 @@ def get_system_info() -> dict[str, Any]:
     return info
 
 
+def _effective_step_weights(
+    steps: list[str], skipped_steps: set[str] | frozenset[str]
+) -> list[float]:
+    """
+    PURE: Progress weight per step, with disabled optional steps weighted 0.
+
+    The remaining weights are rescaled to sum to 1, so overall progress doesn't jump (e.g. by
+    18% when AI upscaling is off) when a skipped step is passed.
+    """
+    weights = [0.0 if name in skipped_steps else w for name, w in zip(steps, PROGRESS_STEP_WEIGHTS)]
+    total = sum(weights)
+    return [w / total for w in weights] if total > 0 else list(PROGRESS_STEP_WEIGHTS)
+
+
 class ProgressCallback:
     """Enhanced callback class to track processing progress for both serial and batch modes"""
 
@@ -430,6 +448,7 @@ class ProgressCallback:
         processing_mode: str = "serial",
         enable_live_preview: bool = True,
         preview_update_interval: float = PREVIEW_UPDATE_INTERVAL,
+        skipped_steps: set[str] | frozenset[str] = frozenset(),
     ) -> None:
         self.session_id = session_id
         self.total_frames = total_frames
@@ -463,7 +482,7 @@ class ProgressCallback:
         ]
         # Weighted progress based on actual timing measurements
         # [2%, 35%, 20%, 8%, 2%, 18%, 8%, 7%] = 100%
-        self.step_weights = PROGRESS_STEP_WEIGHTS
+        self.step_weights = _effective_step_weights(self.steps, skipped_steps)
         self.current_step_index = 0
         self.step_progress = 0
         self.step_total = 0
@@ -950,12 +969,18 @@ def process_video_async(  # noqa: C901
         processing_mode = settings.get("processing_mode", "serial")
         enable_live_preview = settings.get("enable_live_preview", True)
         preview_update_interval = settings.get("preview_update_interval", PREVIEW_UPDATE_INTERVAL)
+        skipped_steps = set()
+        if not settings.get("apply_distortion", True):
+            skipped_steps.add("Fisheye Distortion")
+        if settings.get("upscale_model", "none") == "none":
+            skipped_steps.add("AI Upscaling")
         callback = ProgressCallback(
             session_id,
             expected_frames,
             processing_mode,
             enable_live_preview,
             preview_update_interval,
+            skipped_steps=skipped_steps,
         )
 
         # Give client time to join the session room before starting processing
@@ -983,7 +1008,11 @@ def process_video_async(  # noqa: C901
                 video_info["width"],
                 video_info["height"],
                 settings.get("vr_format", "side_by_side"),
+                fisheye=bool(settings.get("apply_distortion", True)),
             )
+
+        # Keep the resolved preset (output filename, saved settings) instead of "auto"
+        settings["vr_resolution"] = vr_resolution
 
         # Get resolution dimensions
         per_eye_width, per_eye_height = get_resolution_dimensions(vr_resolution)

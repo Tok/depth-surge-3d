@@ -17,7 +17,7 @@
 
 ### Resolution Options
 
-- **`--vr-resolution`**: Resolution format including all aspect ratios (default: auto)
+- **`--vr-resolution`**: Per-eye resolution: a preset, `custom:WIDTHxHEIGHT`, or `auto` (default). Auto picks a square preset when fisheye is enabled (VR180 eyes are square) and a preset matching the source aspect for flat 3D (`--no-distortion`). If the content's aspect differs from the chosen resolution, it's fitted with black bars, never stretched.
   - **Square**: square-480, square-720, square-1k, square-2k, square-3k, square-4k, square-5k
   - **16:9**: 16x9-480p, 16x9-720p, 16x9-1080p, 16x9-1440p, 16x9-4k, 16x9-5k, 16x9-8k
   - **Legacy Wide**: wide-2k, wide-4k, ultrawide

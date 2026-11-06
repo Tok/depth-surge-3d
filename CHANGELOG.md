@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Stretched output**: with fisheye enabled (the default), `auto` resolution picked a 16:9 per-eye
+  size for landscape video, and the square fisheye crop was stretched to it (~1.8x too wide).
+  Auto now picks a square per-eye preset for fisheye output. Whenever content and per-eye aspect
+  differ (an explicit 16:9 eye, portrait video), the image is fitted with black bars instead
+  of being stretched.
+- **`--no-intermediates` / "Keep intermediates" off** broke the pipeline: stereo pairs and
+  distorted frames weren't written, so later steps found nothing. AI-upscaled frames weren't
+  written either, so assembly silently used the non-upscaled frames. Pipeline frames are now
+  always written, and the intermediate folders are removed after a successful run.
+- Video-Depth-Anything's out-of-memory retry at lower resolution always failed as well: it ran
+  inside the `except` block, where the traceback kept the failed attempt's GPU memory alive.
+- `run_ui.sh` stopped processes by broad name patterns (`pkill -f "depth_surge_3d\.py"`,
+  `"python.*app\.py"`, `"ffmpeg.*depth-surge"`). Stopping the web UI also killed CLI
+  conversions in other terminals, other web UI instances, and any process whose command line
+  matched. It now stops only the server it started (and that server's children). Also removed
+  its unpinned `pip install flask flask-socketio`.
+- Stopping the web UI printed a crash dump ("*** Aborted ... SIGTERM received ... stack trace"):
+  `pycolmap` (a DA3 dependency) installs glog's crash handler, which intercepts SIGTERM.
+  `run_ui.sh` now stops the server with SIGINT (graceful), and duplicate signals are ignored.
+- Web UI progress went backwards when cropping started (the crop step reported a step name the
+  progress tracker didn't know) and jumped over disabled steps (e.g. 18% for upscaling when it's
+  off). Disabled steps now carry no weight.
+- Web UI output files were named `..._auto.mp4` instead of after the resolution actually used.
+
 ### Added
 - `scripts/download_models.sh` / `.ps1` (backed by `scripts/download_models.py`) download every
   supported model: Video-Depth-Anything Small/Base/Large in relative and metric versions, and

@@ -15,6 +15,7 @@ import numpy as np
 
 from ...io.operations import (
     create_output_directories,
+    remove_intermediate_directories,
     save_processing_settings,
     update_processing_status,
 )
@@ -348,6 +349,10 @@ class ProcessingOrchestrator:
         # Finalize and cleanup
         if progress_tracker and hasattr(progress_tracker, "finish"):
             progress_tracker.finish("Video processing complete")
+        if success and not settings.get("keep_intermediates", True):
+            removed = remove_intermediate_directories(directories["base"])
+            if removed:
+                print(saved_to(f"Removed {removed} intermediate directories (--no-intermediates)"))
         self._finalize_processing(success, output_path, video_path, settings, num_frames)
         return success
 
