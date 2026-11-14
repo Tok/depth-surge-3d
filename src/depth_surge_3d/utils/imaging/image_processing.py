@@ -154,9 +154,9 @@ def stereo_depth_stats(
         its 2nd and 98th percentile) and ``shift_px`` (difference in disparity between
         those near and far parts, in pixels; 0 means no 3D effect)
     """
-    values = np.asarray(depth_map, dtype=np.float32).reshape(-1)
-    values = values[:: max(1, values.size // max_samples)]
-    values = np.clip(np.nan_to_num(values, nan=0.0), MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
+    flat = np.asarray(depth_map, dtype=np.float32).reshape(-1)
+    sample = flat[:: max(1, flat.size // max_samples)]
+    values = np.clip(np.nan_to_num(sample, nan=0.0), MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
     if values.size == 0:
         return {"depth_spread": 0.0, "shift_px": 0.0}
     far, near = np.percentile(values, [2, 98])
