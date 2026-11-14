@@ -19,6 +19,8 @@ import numpy as np
 import cv2
 from pathlib import Path
 
+from ...core.constants import UPSCALE_MODEL_DIR
+
 UpscaleModel = Literal["none", "x2", "x4", "x4-conservative"]
 
 # Model SHA-256 checksums for security verification
@@ -266,8 +268,8 @@ class RealESRGANUpscaler(ImageUpscaler):
                 model_url = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
                 netscale = 4
 
-            # Create models cache directory
-            cache_dir = Path.home() / ".cache" / "depth-surge-3d" / "realesrgan"
+            # Weights live in the project's models directory, like the depth models
+            cache_dir = Path(UPSCALE_MODEL_DIR)
             cache_dir.mkdir(parents=True, exist_ok=True)
 
             model_filename = model_url.split("/")[-1]
