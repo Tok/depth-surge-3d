@@ -60,19 +60,61 @@ DEFAULT_SETTINGS = {
     "fisheye_fov": 180,  # degrees - full 180° dome view
     "crop_factor": 1.0,  # default: 1.0 (no crop)
     "fisheye_crop_factor": 0.7,  # default: 0.7 (zoom into center ~70%, crops ~20% each edge to hide distortion)
+    # How much of a wide (or tall) video the square fisheye view shows:
+    # 0 = fill the view, cutting off the long sides; 1 = the whole frame, with black bars
+    "fisheye_frame_fit": 0.5,
     "hole_fill_quality": "fast",
     "super_sample": "auto",  # stereo warp resolution: auto (<=2x), 2x, 1080p, 4k, none
     "target_fps": 60,
     "min_resolution": "1080p",
     "preserve_audio": True,
-    "keep_intermediates": True,
+    # Off: disk use stays near the extracted frames plus one batch. On: every step's
+    # images are kept (about 18 MB per frame for 1080p to 1536 px eyes).
+    "keep_intermediates": False,
     "apply_distortion": True,
     "output_dir": "./output",
     "experimental_frame_interpolation": False,  # Experimental feature with quality warnings
     "temporal_window_size": DEPTH_MODEL_CHUNK_SIZE,  # V2 only: frames per temporal window
     "temporal_window_overlap": DEPTH_MODEL_CHUNK_OVERLAP,  # V2 only: frame overlap between windows
     "upscale_model": "none",  # AI upscaling: none, x2, x4, x4-conservative
+    # "batched": run steps 2-7 batch by batch (finished VR frames appear early, resumable)
+    # "sequential": finish each step for the whole video before starting the next
+    "processing_mode": "batched",
+    # Frames per batch (both modes work through the video in batches). 120 is a whole
+    # number of seconds at 24, 30 and 60 fps, so batches and partial videos end on a second.
+    "batch_size": 120,
 }
+
+PROCESSING_MODES = ["batched", "sequential"]
+BATCH_SIZE_RANGE = (10, 2000)
+
+# Pipeline steps in order; these names are the `step_name` values the stages report
+PIPELINE_STEP_NAMES = [
+    "Frame Extraction",
+    "Depth Map Generation",
+    "Stereo Pair Creation",
+    "Fisheye Distortion",
+    "Crop Frames",
+    "AI Upscaling",
+    "VR Assembly",
+    "Video Creation",  # encodes the VR frames (per batch into segments, or in one pass)
+    "Final Video",  # joins the segments and adds the audio
+]
+# Steps that run once per batch in batched mode (the inner loop); "Video Creation" joins
+# them when the video is encoded in segments
+PIPELINE_LOOP_STEP_NAMES = PIPELINE_STEP_NAMES[1:7]
+
+# Resume state of a batch directory
+PIPELINE_STATE_FILE = "pipeline_state.json"
+DEPTH_STATE_FILE = "depth_stream_state.npz"
+
+# Depth maps are stored as 16-bit PNGs (8-bit files from older versions are still read)
+DEPTH_MAP_PNG_SCALE = 65535
+# Frames after which the running depth range has moved halfway towards a narrower range
+DEPTH_RANGE_HALF_LIFE_FRAMES = 600
+
+# Minimum seconds between progress emissions to the UI / console
+PROGRESS_EMIT_INTERVAL = 0.2
 
 # VR resolution configurations (per eye)
 VR_RESOLUTIONS: dict[str, tuple[int, int]] = {
@@ -183,7 +225,8 @@ PROGRESS_STEP_WEIGHTS = [
     0.02,  # Step 5: Crop Frames (fast)
     0.18,  # Step 6: AI Upscaling (slow, optional)
     0.08,  # Step 7: VR Assembly (moderate - side-by-side combining)
-    0.07,  # Step 8: Video Creation (moderate - FFmpeg encoding)
+    0.06,  # Step 8: Video Creation (moderate - FFmpeg encoding, one segment per batch)
+    0.01,  # Step 9: Final Video (fast - joins the segments and adds the audio)
 ]  # Weighted progress distribution (sums to 1.00)
 PROCESSING_STEPS = [
     "Frame Extraction",
@@ -256,8 +299,12 @@ STEREO_NEAR_PLANE_M = 1.0
 # Upper bound on stereo worker processes (each holds a full frame + depth map in RAM)
 MAX_STEREO_WORKERS = 16
 
-# Bump whenever the meaning of cached depth maps changes (invalidates the global depth cache)
-DEPTH_CACHE_FORMAT_VERSION = 3
+# Constant-quality target for NVENC H.265 (lower = better; comparable to x264 CRF 18).
+# Without it NVENC falls back to a low default bitrate (about 2 Mbit/s).
+NVENC_CONSTANT_QUALITY = 20
+
+# Real-ESRGAN weights are downloaded next to the depth models (not into ~/.cache)
+UPSCALE_MODEL_DIR = "models/Real-ESRGAN"
 
 # Progress reporting
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every N frames processed
@@ -297,6 +344,7 @@ INTERMEDIATE_DIRS = {
     "right_upscaled": "07_right_upscaled",  # Step 6: AI upscaled - right (optional)
     "left_final": "08_left_final",  # Legacy: kept for compatibility
     "right_final": "08_right_final",  # Legacy: kept for compatibility
+    "video_segments": "98_video_segments",  # Step 8: encoded video segments (one per batch)
     "vr_frames": "99_vr_frames",  # Step 7: Final VR assembled frames
 }
 
@@ -380,6 +428,7 @@ VALIDATION_RANGES = {
     "focal_length": (100, 5000),  # pixels
     "fisheye_fov": (MIN_FOV, MAX_FOV),  # degrees (75-180)
     "crop_factor": (0.5, 1.0),  # ratio for non-fisheye crop
+    "fisheye_frame_fit": (0.0, 1.0),  # 0 = fill the view, 1 = show the whole frame
     "fisheye_crop_factor": (
         0.5,
         2.0,

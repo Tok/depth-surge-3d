@@ -99,6 +99,13 @@
             border-color: #075985;
             color: #bfdbfe;
         }
+
+        /* Warnings stay on the dark palette (Bootstrap's default is a light beige) */
+        .alert-warning {
+            background-color: #1a1500;
+            border-color: #ffd60a;
+            color: #ffe566;
+        }
         
         .video-preview {
             max-width: 100%;
@@ -279,6 +286,187 @@
             margin: 8px 0;
         }
 
+        /* Status in the progress card's header: the current activity */
+        .progress-status {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-lime);
+        }
+
+        /* Overall bar: the label lies over the whole track (not inside the filled part), dark
+           on both the light track and the lime bar, so it is readable at any progress */
+        .overall-progress {
+            position: relative;
+        }
+
+        .overall-progress-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 0.5rem;
+            color: #000;
+            font-size: 0.8rem;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        /* Batched mode: batch counter with the steps of the inner loop nested below it */
+        /* The loop is marked by a white bracket on the left of its steps: a vertical line
+           with short rounded hooks at both ends */
+        .batch-loop.batched .batch-steps {
+            position: relative;
+            margin-left: 0.6rem;
+            padding: 0 0 0 1.4rem;
+        }
+
+        /* Spans exactly from the first label to the last bar */
+        .batch-loop.batched .batch-steps::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 3px;
+            bottom: 0;
+            width: 14px;
+            border: 3px solid #f5f5f5;
+            border-right: none;
+            border-radius: 10px 0 0 10px;
+        }
+
+        .batch-loop.batched #batchRow {
+            display: block !important;
+        }
+
+        .progress-bar.bg-batch {
+            background-color: var(--accent-green) !important;
+            background-image: linear-gradient(45deg, var(--accent-green) 0%, var(--accent-lime) 100%);
+        }
+
+        /* Framing preview: schematic of how the frame sits in each eye's view */
+        .crop-preview {
+            background-color: #0a0a0a;
+            border: 1px solid var(--bs-border-color);
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .crop-preview-title {
+            font-size: 0.8rem;
+            color: var(--accent-lime);
+            font-family: 'Courier New', monospace;
+            margin-bottom: 0.4rem;
+        }
+
+        .crop-preview-title span {
+            color: #9a9a9a;
+        }
+
+        #cropPreview {
+            display: block;
+            width: 100%;
+            max-width: 280px;
+            margin: 0 auto;
+        }
+
+        #cropPreview .view { fill: #000; stroke: var(--accent-lime); stroke-width: 0.03; }
+        #cropPreview .picture { fill: rgba(57, 255, 20, 0.2); stroke: var(--accent-lime); stroke-width: 0.02; }
+        #cropPreview .grid { fill: none; stroke: rgba(57, 255, 20, 0.45); stroke-width: 0.008; }
+        #cropPreview .cut { fill: rgba(255, 255, 255, 0.05); stroke: #8a8a8a; stroke-width: 0.015; stroke-dasharray: 0.05 0.04; }
+
+        .crop-preview-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem 0.9rem;
+            font-size: 0.72rem;
+            color: #9a9a9a;
+            margin-top: 0.5rem;
+        }
+
+        .legend-swatch {
+            display: inline-block;
+            width: 0.7rem;
+            height: 0.7rem;
+            vertical-align: -1px;
+            margin-right: 0.2rem;
+        }
+
+        .legend-visible { background: rgba(57, 255, 20, 0.35); border: 1px solid var(--accent-lime); }
+        .legend-black { background: #000; border: 1px solid var(--accent-lime); }
+        .legend-cut { background: rgba(255, 255, 255, 0.05); border: 1px dashed #8a8a8a; }
+
+        .crop-preview-numbers {
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            margin-top: 0.4rem;
+        }
+
+        /* Selected preset button */
+        .btn-outline-success.active {
+            background-color: var(--accent-lime) !important;
+            border-color: var(--accent-lime) !important;
+            color: #000 !important;
+            font-weight: bold;
+        }
+
+        /* Jobs list */
+        .job-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.45rem 0;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+
+        .job-row:last-child {
+            border-bottom: none;
+        }
+
+        .job-name {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .job-info {
+            min-width: 0;
+        }
+
+        .job-status {
+            font-size: 0.75rem;
+            color: #9a9a9a;
+        }
+
+        .job-status .state-running { color: var(--accent-lime); }
+        .job-status .state-queued { color: #00d9ff; }
+        .job-status .state-failed { color: #ff5c5c; }
+        .job-status .state-paused, .job-status .state-interrupted { color: #ffd60a; }
+
+        .job-actions {
+            flex-shrink: 0;
+        }
+
+        /* Paths that copy themselves when clicked */
+        .copy-path {
+            cursor: pointer;
+            border-bottom: 1px dashed var(--accent-lime);
+        }
+
+        .copy-path:hover,
+        .copy-path.copied {
+            color: var(--accent-lime);
+        }
+
+        .step-count {
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+        }
+
         /* Optional step styling (golden ratio smaller, opacity based on enabled state) */
         .step-optional {
             opacity: 0.6;
@@ -287,6 +475,11 @@
 
         .step-optional.step-enabled {
             opacity: 1;
+        }
+
+        /* Steps that are switched off: darker track, so they read as inactive, not as empty */
+        .step-optional.step-disabled .progress {
+            background-color: #3a3a3a;
         }
 
         .step-optional .step-number {
@@ -809,23 +1002,33 @@
             <div class="col-md-6">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-play"></i> Resume Processing</h5>
+                        <h5><i class="fas fa-list"></i> Jobs</h5>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label for="resumeDirectory" class="form-label">Output Directory to Resume</label>
-                            <input type="text" class="form-control" id="resumeDirectory" 
-                                   placeholder="e.g., output/video_name_20231215_143022">
+                        <div id="jobsList">
+                            <small class="text-muted">No running, queued or unfinished jobs.</small>
                         </div>
-                        <button type="button" class="btn btn-secondary" id="resumeBtn">
-                            <i class="fas fa-play"></i> Resume Processing
-                        </button>
-                        <small class="form-text text-muted mt-2">
-                            Resumes an interrupted processing job from the output directory timestamp.
+                        <div id="jobsNotice" class="job-status mt-2" style="display: none;"></div>
+                        <small class="form-text text-muted mt-2 d-block">
+                            Jobs run one after another. Resume continues an unfinished job where it stopped, with its original settings;
+                            Assemble encodes the frames it has finished so far.
                         </small>
+                        <details class="mt-3">
+                            <summary class="job-status">Resume a directory that isn't listed</summary>
+                            <div class="mt-2 mb-2">
+                                <input type="text" class="form-control" id="resumeDirectory"
+                                       placeholder="Output directory of an unfinished job">
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" id="resumeBtn">
+                                <i class="fas fa-play"></i> Resume
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="assemblePartialBtn" title="Create a video from the VR frames finished so far, without resuming">
+                                <i class="fas fa-film"></i> Assemble Partial Video
+                            </button>
+                        </details>
                     </div>
                 </div>
-                
+
                 <!-- System Information -->
                 <div class="system-info">
                     <h6><i class="fas fa-desktop"></i> System Information</h6>
@@ -840,7 +1043,7 @@
                         </div>
                         <div class="stat-item">
                             <div class="stat-value" id="deviceMode">--</div>
-                            <div class="stat-label">Processing Mode</div>
+                            <div class="stat-label">Device</div>
                         </div>
                     </div>
                 </div>
@@ -877,7 +1080,7 @@
                                     <strong>Duration:</strong> <span id="rangeDuration">--</span>
                                 </div>
                                 <div class="col-6">
-                                    <strong>Est. Frames:</strong> <span id="rangeFrames">--</span>
+                                    <strong>Selected Frames:</strong> <span id="rangeFrames">--</span>
                                 </div>
                             </div>
                         </div>
@@ -1038,12 +1241,14 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">3D Strength Presets</label>
-                            <div class="btn-group w-100" role="group">
-                                <button type="button" class="btn btn-outline-success btn-sm" onclick="set3DPreset('subtle')">Subtle & Clean</button>
-                                <button type="button" class="btn btn-outline-success btn-sm" onclick="set3DPreset('balanced')">Balanced</button>
-                                <button type="button" class="btn btn-outline-success btn-sm" onclick="set3DPreset('strong')">Strong & Dirty</button>
+                            <div class="btn-group w-100" role="group" id="strengthPresets">
+                                <button type="button" class="btn btn-outline-success btn-sm" data-preset="subtle" title="Baseline 0.035 m, focal length 700 px" onclick="set3DPreset('subtle')">Subtle & Clean</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" data-preset="balanced" title="Baseline 0.065 m, focal length 1000 px (default)" onclick="set3DPreset('balanced')">Balanced</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" data-preset="strong" title="Baseline 0.10 m, focal length 1200 px" onclick="set3DPreset('strong')">Strong & Dirty</button>
                             </div>
-                            <small class="form-text text-muted">Quick presets for common use cases</small>
+                            <small class="form-text text-muted">
+                                Presets set Baseline and Focal Length above. <span id="strengthPresetState"></span>
+                            </small>
                         </div>
                         <div class="step-indicator">Preview showing [L][R] disparity</div>
                     </div>
@@ -1061,17 +1266,34 @@
                                     Enable Fisheye Processing
                                 </label>
                             </div>
-                            <small class="form-text text-muted">Enable fisheye distortion for hemispherical VR projection</small>
+                            <small class="form-text text-muted">
+                                Fisheye distortion for hemispherical VR projection (VR180), with a square view per eye.
+                                Off: flat 3D at the video's aspect ratio.
+                            </small>
+                        </div>
+                        <div class="mb-3" id="frameFitOptions">
+                            <label class="form-label">Frame Fit <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="The fisheye view is square, most videos are not. Fill View crops the sides of a wide video; Whole Frame zooms out until everything is visible, leaving black above and below."></i></label>
+                            <input type="range" class="form-range" id="fisheyeFrameFit" min="0" max="1" step="0.05" value="0.5">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">Fill view (crops the sides)</small>
+                                <small><strong id="fisheyeFrameFitValue">0.50</strong></small>
+                                <small class="text-muted">Whole frame (black bars)</small>
+                            </div>
+                            <small class="form-text text-muted d-block mt-1" id="frameFitInfo">Upload a video to see what this means for it.</small>
+                            <div class="alert alert-warning aspect-warning mt-2 mb-0" style="display: none;"></div>
                         </div>
                         <div class="mb-3" id="distortionOptions">
-                            <label class="form-label">Fisheye Projection</label>
+                            <label class="form-label">Fisheye Projection <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="How the flat picture is spread over the curved view, from its centre to its edge. All four show the same part of the frame (set by Frame Fit); they differ in whether the centre or the edges get more room. Stereographic keeps the shapes of objects natural everywhere and is the closest to looking at a flat picture. The others give the edges more room and the centre less, which bends straight lines more."></i></label>
                             <select class="form-select" id="fisheyeProjection">
-                                <option value="equidistant">Equidistant (f*θ)</option>
-                                <option value="stereographic" selected>Stereographic (2f*tan(θ/2))</option>
-                                <option value="equisolid">Equisolid Angle (2f*sin(θ/2))</option>
-                                <option value="orthogonal">Orthographic (f*sin(θ))</option>
+                                <option value="stereographic" selected>Stereographic - natural shapes, centre slightly enlarged (Recommended)</option>
+                                <option value="equidistant">Equidistant - picture spread evenly from centre to edge</option>
+                                <option value="equisolid">Equisolid - edges stretched a little, centre a little smaller</option>
+                                <option value="orthogonal">Orthographic - edges stretched strongly, centre smallest</option>
                             </select>
-                            <small class="form-text text-muted">Mathematical projection model for fisheye lens</small>
+                            <small class="form-text text-muted">
+                                How the picture is distributed between the centre and the edge of the view. The differences are moderate:
+                                halfway out from the centre you see the point 46% (stereographic), 50% (equidistant), 52% (equisolid) or 59% (orthographic) of the way to the frame's edge.
+                            </small>
                         </div>
                         <div class="mb-3" id="distortionK2Options">
                             <label class="form-label">Field of View (degrees)</label>
@@ -1087,6 +1309,8 @@
                             <span class="step-number">5</span>
                             <h6 class="step-title">Frame Cropping</h6>
                         </div>
+                        <div class="row">
+                            <div class="col-lg-8">
                         <div class="mb-3">
                             <label class="form-label">Crop Factor (Standard) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Applied when fisheye is disabled. Crops from center to remove stereo edge artifacts. 1.0 = no crop, 0.5 = keep center 50%."></i></label>
                             <input type="number" class="form-control" id="cropFactor" value="1.0" step="0.05" min="0.5" max="1.0">
@@ -1102,6 +1326,20 @@
     <i class="fas fa-search-plus"></i> How much of the fisheye circle is kept; the video is fitted into it, so edges are never stretched<br>
     <strong>0.5</strong> = zoomed in | <strong>0.7</strong> = balanced (default) | <strong>1.0</strong> = full circle | <strong>>1.0</strong> = wider, with black corners
 </small>
+                        </div>
+                            </div>
+                            <div class="col-lg-4">
+                                <div class="crop-preview">
+                                    <div class="crop-preview-title">Framing Preview <span id="cropPreviewSource"></span></div>
+                                    <svg id="cropPreview" viewBox="-1.6 -1.6 3.2 3.2" role="img" aria-label="How the video frame is placed in each eye's view"></svg>
+                                    <div class="crop-preview-legend">
+                                        <span><i class="legend-swatch legend-visible"></i> picture in the view</span>
+                                        <span><i class="legend-swatch legend-black"></i> black</span>
+                                        <span><i class="legend-swatch legend-cut"></i> cut off</span>
+                                    </div>
+                                    <div class="crop-preview-numbers" id="cropPreviewNumbers">--</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Hole Filling <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="When the viewpoint shifts, background hidden behind near objects becomes visible. These areas are filled by mirroring the neighbouring background texture (never the foreground), the same way every frame, so the fill does not flicker."></i></label>
@@ -1247,15 +1485,6 @@
                                 Preserve Audio
                             </label>
                         </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="keepIntermediates" checked>
-                            <label class="form-check-label" for="keepIntermediates">
-                                Keep Intermediate Files
-                            </label>
-                            <small class="text-muted d-block ms-4">
-                                <i class="fas fa-exclamation-triangle"></i> May use significant disk space (~10-50GB for long videos)
-                            </small>
-                        </div>
                         <div class="mb-3">
                             <label class="form-label">Video Encoder <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Auto detects NVENC (NVIDIA GPU) and falls back to software. Software encoding is slower but works on all systems."></i></label>
                             <select class="form-select" id="videoEncoder">
@@ -1282,6 +1511,38 @@
                         <div class="step-indicator">Final output: Calculated at runtime</div>
                     </div>
 
+                    <!-- Processing mode -->
+                    <div class="pipeline-step" style="border-top: 2px dashed var(--bs-border-color); margin-top: 2rem; padding-top: 1.5rem;">
+                        <div class="step-header">
+                            <span class="step-number"><i class="fas fa-sync-alt"></i></span>
+                            <h6 class="step-title">Processing Mode</h6>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Mode <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Batched runs steps 2-7 for one batch of frames, then the next batch: finished VR frames appear early and an interrupted job loses at most one batch. Sequential finishes each step for the whole video first."></i></label>
+                            <select class="form-select" id="processingMode">
+                                <option value="batched" selected>Batched (Recommended)</option>
+                                <option value="sequential">Sequential (one step at a time)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Batch Size (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="120 frames are a whole number of seconds at 24, 30 and 60 fps (5 s, 4 s, 2 s), so batches and partial videos end on a full second."></i></label>
+                            <input type="number" class="form-control" id="batchSize" value="120" step="10" min="10" max="2000">
+                            <small class="form-text text-muted">
+                                <i class="fas fa-save"></i> Progress is saved after every batch in both modes, so a stopped or failed job can be resumed, or its finished part assembled into a video
+                            </small>
+                        </div>
+                        <small class="form-text text-muted d-block mb-2">
+                            {% if keep_intermediates %}
+                            <i class="fas fa-folder-open"></i> Intermediate files are kept: the server was started with <code>--keep-intermediates</code>, so every step's images stay in the output directory. This needs many times the disk space.
+                            {% else %}
+                            <i class="fas fa-broom"></i> Intermediate files are deleted as the job goes (a stopped job can still be resumed). To keep every step's images, start the server with <code>--keep-intermediates</code>.
+                            {% endif %}
+                        </small>
+                        <div class="step-indicator">
+                            <strong>Estimated disk space:</strong> <span id="diskEstimate">upload a video to see the estimate</span>
+                        </div>
+                    </div>
+
                     <!-- Live Preview Settings -->
                     <div class="pipeline-step" style="border-top: 2px dashed var(--bs-border-color); margin-top: 2rem; padding-top: 1.5rem;">
                         <div class="step-header">
@@ -1296,7 +1557,7 @@
                                 </label>
                             </div>
                             <small class="form-text text-muted">
-                                <i class="fas fa-info-circle"></i> Shows real-time depth maps, stereo pairs, and VR frames while processing<br>
+                                <i class="fas fa-info-circle"></i> Shows the newest depth map and VR frame while processing<br>
                                 <i class="fas fa-network-wired"></i> Bandwidth usage: ~25-100 KB/sec (negligible performance impact)
                             </small>
                         </div>
@@ -1314,6 +1575,8 @@
                         </div>
                     </div>
 
+                    <div class="alert alert-warning aspect-warning mt-3 mb-0" style="display: none;"></div>
+
                     <!-- Process Button -->
                     <div class="text-center mt-3">
                         <button type="button" class="btn btn-success btn-lg" id="processBtn" disabled>
@@ -1328,7 +1591,7 @@
                                 <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
                                 <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
                             </svg>
-                            Start Processing
+                            <span id="processBtnText">Start Processing</span>
                         </button>
                         <button type="button" class="btn btn-danger btn-lg ms-2" id="stopBtn" style="display: none;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 6px;">
@@ -1359,7 +1622,7 @@
                     <div class="card-body">
                         <div class="row">
                             <!-- Depth Map Preview -->
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <div class="preview-item">
                                     <div class="preview-label mb-2"><strong id="depthMapLabel">Depth Map</strong></div>
                                     <img id="depthMapPreview"
@@ -1370,20 +1633,8 @@
                                 </div>
                             </div>
 
-                            <!-- Stereo Left Preview -->
-                            <div class="col-md-4">
-                                <div class="preview-item">
-                                    <div class="preview-label mb-2"><strong id="stereoLeftLabel">Stereo Pair (Left)</strong></div>
-                                    <img id="stereoLeftPreview"
-                                         src=""
-                                         alt="Left eye preview"
-                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
-                                    <small class="text-muted d-block mt-1" id="stereoLeftFrame">Frame: --</small>
-                                </div>
-                            </div>
-
                             <!-- VR Frame Preview -->
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <div class="preview-item">
                                     <div class="preview-label mb-2"><strong id="vrFrameLabel">VR Output</strong></div>
                                     <img id="vrFramePreview"
@@ -1410,14 +1661,11 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <strong>Processing output saved to:</strong><br>
-                                <code id="outputPath">--</code>
+                                <code id="outputPath" class="copy-path" title="Click to copy">--</code>
                             </div>
                             <div>
                                 <button type="button" class="btn btn-primary" id="openDirectoryBtn">
                                     <i class="fas fa-folder-open"></i> Open in File Explorer
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" id="copyPathBtn">
-                                    <i class="fas fa-copy"></i> Copy Path
                                 </button>
                             </div>
                         </div>
@@ -1431,8 +1679,10 @@
             <div class="col-12">
                 <div class="progress-container">
                     <div class="card">
-                        <div class="card-header">
-                            <h5><i class="fas fa-spinner fa-spin"></i> Processing Progress</h5>
+                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                            <h5 class="mb-0"><i class="fas fa-spinner fa-spin"></i> Processing Progress</h5>
+                            <!-- what is being worked on right now (the bars below show how far it is) -->
+                            <span class="progress-status" id="currentActivity"></span>
                         </div>
                         <div class="card-body">
                             <!-- Overall Progress -->
@@ -1441,7 +1691,7 @@
                                     <strong>Overall Progress</strong>
                                     <span id="overallProgressText">0%</span>
                                 </div>
-                                <div class="progress" style="height: 24px;">
+                                <div class="progress overall-progress" style="height: 24px;">
                                     <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
                                          role="progressbar"
                                          id="overallProgressBar"
@@ -1449,8 +1699,8 @@
                                          aria-valuenow="0"
                                          aria-valuemin="0"
                                          aria-valuemax="100">
-                                        <span id="overallProgressPhase">Initializing...</span>
                                     </div>
+                                    <span class="overall-progress-label" id="overallProgressPhase">Initializing...</span>
                                 </div>
                             </div>
 
@@ -1458,101 +1708,118 @@
                             <div class="mb-3">
                                 <small class="text-muted d-block mb-2"><strong>Processing Steps</strong></small>
 
-                                <!-- Step 1: Frame Extraction -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
                                         <span><i class="fas fa-film"></i> 1. Extract Frames</span>
-                                        <span id="step1Progress">0%</span>
+                                        <span class="step-count" id="step1Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step1Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
 
-                                <!-- Step 2: Depth Maps -->
+                                <!-- Steps 2-7: in batched mode they repeat for every batch (inner loop) -->
+                                <div class="batch-loop" id="batchLoop">
+                                    <div class="mb-2" id="batchRow" style="display: none;">
+                                        <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
+                                            <span><i class="fas fa-sync-alt"></i> <strong>Batch <span id="batchLabel">--</span></strong></span>
+                                            <span class="step-count" id="batchFrames">--</span>
+                                        </div>
+                                        <div class="progress sub-progress">
+                                            <div class="progress-bar bg-batch" id="batchBar" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="batch-steps">
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
                                         <span><i class="fas fa-layer-group"></i> 2. Generate Depth Maps</span>
-                                        <span id="step2Progress">0%</span>
+                                        <span class="step-count" id="step2Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step2Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
-
-                                <!-- Step 3: Stereo Pairs -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
                                         <span><i class="fas fa-glasses"></i> 3. Create Stereo Pairs</span>
-                                        <span id="step3Progress">0%</span>
+                                        <span class="step-count" id="step3Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step3Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
-
-                                <!-- Step 4: Fisheye Distortion (Optional) -->
                                 <div class="mb-2 step-optional step-enabled" id="step4Container">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
                                         <span><i class="fas fa-circle-notch"></i> 4. Apply Distortion <small class="text-muted">(optional)</small></span>
-                                        <span id="step4Progress">0%</span>
+                                        <span class="step-count" id="step4Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step4Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
-
-                                <!-- Step 5: Crop Frames -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
                                         <span><i class="fas fa-crop"></i> 5. Crop Frames</span>
-                                        <span id="step5Progress">0%</span>
+                                        <span class="step-count" id="step5Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step5Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
-
-                                <!-- Step 6: AI Upscaling (Optional) -->
                                 <div class="mb-2 step-optional step-disabled" id="step6Container">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
                                         <span><i class="fas fa-expand-arrows-alt"></i> 6. AI Upscaling <small class="text-muted">(optional)</small></span>
-                                        <span id="step6Progress">0%</span>
+                                        <span class="step-count" id="step6Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step6Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
-
-                                <!-- Step 7: Assemble VR Frames -->
                                 <div class="mb-2">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
                                         <span><i class="fas fa-vr-cardboard"></i> 7. Assemble VR Frames</span>
-                                        <span id="step7Progress">0%</span>
+                                        <span class="step-count" id="step7Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step7Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
+                                    </div>
+                                </div>
 
-                                <!-- Step 8: Final Video -->
-                                <div class="mb-2">
+                                <div class="mb-2" id="step8Row">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-video"></i> 8. Create Final Video</span>
-                                        <span id="step8Progress">0%</span>
+                                        <span><i class="fas fa-video"></i> 8. <span id="step8Label">Create Final Video</span></span>
+                                        <span class="step-count" id="step8Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
                                         <div class="progress-bar bg-info" id="step8Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
+
+                                <div class="mb-2" id="step9Row">
+                                    <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
+                                        <span><i class="fas fa-film"></i> 9. Assemble Final Video</span>
+                                        <span class="step-count" id="step9Progress">0%</span>
+                                    </div>
+                                    <div class="progress sub-progress">
+                                        <div class="progress-bar bg-info" id="step9Bar" style="width: 0%;"></div>
+                                    </div>
+                                </div>
                             </div>
+
+                            <small class="job-status mb-3" id="segmentNote" style="display: none;">
+                                <i class="fas fa-info-circle"></i> Each batch is encoded into a video segment as soon as its frames are done
+                                (<code>98_video_segments</code> in the output directory). Step 9 joins the segments into the final video
+                                and adds the audio; stopping earlier leaves them for a partial video or for resuming.
+                            </small>
 
                             <!-- Batch Directory Info -->
                             <div class="mb-3" id="currentBatchDirectory" style="display: none;">
                                 <h6><i class="fas fa-folder"></i> Current Batch Directory</h6>
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <code id="currentBatchPath">--</code>
+                                        <code id="currentBatchPath" class="copy-path" title="Click to copy">--</code>
                                     </div>
                                     <div>
                                         <button type="button" class="btn btn-outline-primary btn-sm" id="openCurrentBatchBtn">
@@ -1730,9 +1997,33 @@
         </div>
     </div>
 
+    <div class="modal fade" id="stoppedModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-pause-circle"></i> Processing Stopped</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="stoppedMessage">Processing stopped.</p>
+                    <p class="job-status mb-0">The job stays in the Jobs list and can be resumed at any time, also after creating the video.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" id="stoppedAssembleBtn">
+                        <i class="fas fa-film"></i> Create Video from Finished Frames
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <script>
+        // Server option (--keep-intermediates), the same for all jobs
+        const KEEP_INTERMEDIATES = {{ 'true' if keep_intermediates else 'false' }};
+
         // Global variables
         let socket;
         let currentSessionId = null;
@@ -1746,6 +2037,10 @@
             
             socket.on('connect', function() {
                 console.log('Connected to server');
+                // A reconnect drops the session room: join again or progress stops arriving
+                if (currentSessionId) {
+                    socket.emit('join_session', {session_id: currentSessionId});
+                }
             });
 
             socket.on('disconnect', function() {
@@ -1847,10 +2142,9 @@
                     uploadedFilename = data.filename;
                     uploadedOutputDir = data.output_dir;
                     displayVideoInfo(data.video_info, file);
-                    document.getElementById('processBtn').disabled = false;
+                    updateProcessButton();
+                    updateDiskEstimate();
                     btnText.innerHTML = '<i class="fas fa-check"></i> ' + file.name;
-                    // Auto-populate resume field with output directory
-                    document.getElementById('resumeDirectory').value = data.output_dir;
                 } else {
                     alert('Upload failed: ' + data.error);
                     btnText.textContent = 'Upload Video';
@@ -1883,7 +2177,9 @@
                 // Reset to auto/default settings
                 document.getElementById('vrResolution').value = 'auto';
                 document.getElementById('fisheyeFov').value = '180';
-                document.getElementById('customResolution').value = '';
+                document.getElementById('customWidth').value = '';
+                document.getElementById('customHeight').value = '';
+                document.getElementById('vrResolution').dispatchEvent(new Event('change'));
                 return;
             }
 
@@ -1891,8 +2187,10 @@
             if (settings) {
                 // Set custom resolution
                 const customRes = `${settings.width}x${settings.height}`;
-                document.getElementById('customResolution').value = customRes;
+                document.getElementById('customWidth').value = settings.width;
+                document.getElementById('customHeight').value = settings.height;
                 document.getElementById('vrResolution').value = 'custom';
+                document.getElementById('vrResolution').dispatchEvent(new Event('change'));
 
                 // Set FOV
                 document.getElementById('fisheyeFov').value = settings.fov;
@@ -1984,12 +2282,11 @@
             // Update Step 1 display
             updateStep1Display();
 
-            // Set default end time to video duration only if not already set
-            if (!document.getElementById('endTime').value) {
-                const minutes = Math.floor(info.duration / 60);
-                const seconds = Math.floor(info.duration % 60);
-                document.getElementById('endTime').value = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
+            updateAspectWarning();
+
+            // A new video always starts with its full length selected
+            document.getElementById('startTime').value = '00:00';
+            document.getElementById('endTime').value = formatTime(info.duration);
 
             // Calculate range info
             updateRangeInfo();
@@ -2049,59 +2346,69 @@
             document.getElementById('step1FinalFps').textContent = finalFps;
         }
 
-        // Parse time string to seconds
+        // Parse time string (mm:ss or hh:mm:ss) to seconds; null if empty or invalid
         function timeToSeconds(timeStr) {
             if (!timeStr || timeStr.trim() === '') return null;
-            
-            const parts = timeStr.split(':');
+
+            const parts = timeStr.trim().split(':').map(Number);
+            if (parts.some(part => !Number.isInteger(part) || part < 0)) return null;
             if (parts.length === 2) {
-                const [minutes, seconds] = parts.map(Number);
-                return minutes * 60 + seconds;
+                return parts[0] * 60 + parts[1];
             } else if (parts.length === 3) {
-                const [hours, minutes, seconds] = parts.map(Number);
-                return hours * 3600 + minutes * 60 + seconds;
+                return parts[0] * 3600 + parts[1] * 60 + parts[2];
             }
             return null;
         }
 
-        // Update range information
-        function updateRangeInfo() {
-            if (!currentVideoInfo) return;
-            
-            const startTime = document.getElementById('startTime').value;
-            const endTime = document.getElementById('endTime').value;
-            
-            let startSeconds = timeToSeconds(startTime) || 0;
-            let endSeconds = timeToSeconds(endTime) || currentVideoInfo.duration;
-            
-            // Ensure end is after start
-            if (endSeconds <= startSeconds) {
-                document.getElementById('rangeInfo').style.display = 'none';
-                return;
-            }
-            
-            const duration = endSeconds - startSeconds;
-            const targetFps = document.getElementById('targetFps').value;
-            const fps = targetFps === 'original' ? currentVideoInfo.fps : parseInt(targetFps);
-            const estimatedFrames = Math.round(duration * fps);
-            
-            // Format duration
-            const durationMinutes = Math.floor(duration / 60);
-            const durationSeconds = Math.floor(duration % 60);
-            const durationStr = `${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}`;
-            
-            document.getElementById('rangeDuration').textContent = durationStr;
-            document.getElementById('rangeFrames').textContent = estimatedFrames.toLocaleString();
-            document.getElementById('rangeInfo').style.display = 'block';
+        // Format seconds as mm:ss (hh:mm:ss from one hour), rounded up so the last
+        // partial second of a video is included
+        function formatTime(totalSeconds) {
+            const whole = Math.ceil(totalSeconds);
+            const hours = Math.floor(whole / 3600);
+            const minutes = Math.floor((whole % 3600) / 60);
+            const seconds = whole % 60;
+            const pad = value => value.toString().padStart(2, '0');
+            return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
         }
 
-        // Start processing
-        document.getElementById('processBtn').addEventListener('click', function() {
-            if (!uploadedFilename || !uploadedOutputDir) {
-                alert('Please upload a video first');
+        // Frames the selected time range covers (same calculation as the server)
+        function selectedFrameRange() {
+            const info = currentVideoInfo;
+            const startSeconds = timeToSeconds(document.getElementById('startTime').value);
+            const endSeconds = timeToSeconds(document.getElementById('endTime').value);
+            let startFrame = startSeconds === null ? 0 : Math.floor(startSeconds * info.fps);
+            let endFrame = endSeconds === null ? info.frame_count : Math.min(info.frame_count, Math.floor(endSeconds * info.fps));
+            startFrame = Math.max(0, Math.min(startFrame, info.frame_count - 1));
+            endFrame = Math.max(startFrame + 1, Math.min(endFrame, info.frame_count));
+            const valid = endSeconds === null || startSeconds === null || endSeconds > startSeconds;
+            return {startFrame, endFrame, valid};
+        }
+
+        // Show the duration and number of frames of the selected time range
+        function updateRangeInfo() {
+            if (!currentVideoInfo) return;
+
+            const rangeInfo = document.getElementById('rangeInfo');
+            const range = selectedFrameRange();
+            rangeInfo.style.display = 'block';
+            rangeInfo.classList.toggle('alert-info', range.valid);
+            rangeInfo.classList.toggle('alert-warning', !range.valid);
+            if (!range.valid) {
+                document.getElementById('rangeDuration').textContent = 'End must be after start';
+                document.getElementById('rangeFrames').textContent = '--';
                 return;
             }
-            
+
+            const frames = range.endFrame - range.startFrame;
+            const seconds = currentVideoInfo.fps > 0 ? frames / currentVideoInfo.fps : 0;
+            document.getElementById('rangeDuration').textContent = `${seconds.toFixed(1)}s`;
+            document.getElementById('rangeFrames').textContent =
+                `${frames.toLocaleString()} of ${currentVideoInfo.frame_count.toLocaleString()}`;
+            updateDiskEstimate();
+        }
+
+        // Read the processing settings from the form (null if they are incomplete)
+        function collectSettings(showErrors) {
             // Handle custom resolution
             let vrResolution = document.getElementById('vrResolution').value;
             if (vrResolution === 'custom') {
@@ -2110,8 +2417,8 @@
                 if (customWidth && customHeight) {
                     vrResolution = `custom:${customWidth}x${customHeight}`;
                 } else {
-                    alert('Please specify both width and height for custom resolution');
-                    return;
+                    if (showErrors) alert('Please specify both width and height for custom resolution');
+                    return null;
                 }
             }
 
@@ -2125,7 +2432,6 @@
                 baseline: parseFloat(document.getElementById('baseline').value),
                 focal_length: parseInt(document.getElementById('focalLength').value),
                 preserve_audio: document.getElementById('preserveAudio').checked,
-                keep_intermediates: document.getElementById('keepIntermediates').checked,
                 video_encoder: document.getElementById('videoEncoder').value,
                 device: document.getElementById('device').value,
                 model_size: document.getElementById('modelSize').value,
@@ -2137,83 +2443,570 @@
                 apply_distortion: document.getElementById('applyDistortion').checked,
                 fisheye_projection: document.getElementById('fisheyeProjection').value,
                 fisheye_fov: parseFloat(document.getElementById('fisheyeFov').value),
+                fisheye_frame_fit: parseFloat(document.getElementById('fisheyeFrameFit').value),
                 crop_factor: document.getElementById('cropFactor') ? parseFloat(document.getElementById('cropFactor').value) : 0.7,
                 fisheye_crop_factor: parseFloat(document.getElementById('fisheyeCropFactor').value),
                 hole_fill_quality: document.getElementById('holeFillQuality').value,
                 upscale_model: document.getElementById('applyUpscaling').checked ? document.getElementById('upscaleModel').value : 'none',
                 experimental_frame_interpolation: document.getElementById('experimentalFrameInterpolation').checked,
+                processing_mode: document.getElementById('processingMode').value,
+                batch_size: parseInt(document.getElementById('batchSize').value) || 120,
                 enable_live_preview: document.getElementById('enableLivePreview').checked,
                 preview_update_interval: parseFloat(document.getElementById('previewUpdateInterval').value)
             };
-            
-            fetch('/process', {
+            return settings;
+        }
+
+        // Start a job, or add it to the queue if one is running
+        function submitJob(url, body, failureLabel) {
+            return fetch(url, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    output_dir: uploadedOutputDir,
-                    settings: settings
-                })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    currentSessionId = data.session_id;
-                    socket.emit('join_session', {session_id: currentSessionId});
-                    resetProgressDisplay();
-                    hidePreviousOutput();
-                    showProgressPanel();
-                    showCurrentBatchDirectory(data.output_dir);
-                    // Auto-populate resume field for easy resuming
-                    document.getElementById('resumeDirectory').value = data.output_dir;
+                if (!data.success) {
+                    alert(failureLabel + ': ' + data.error);
+                } else if (data.queued) {
+                    notify(`Added to the queue (position ${data.position}).`);
                 } else {
-                    alert('Failed to start processing: ' + data.error);
+                    attachToJob(data.session_id, data.output_dir, true, body.settings ? body.settings.processing_mode : null);
                 }
+                refreshJobs();
+                return data;
             })
             .catch(error => {
-                console.error('Processing error:', error);
-                alert('Failed to start processing');
+                console.error(failureLabel, error);
+                alert(failureLabel);
+                return {success: false};
             });
+        }
+
+        // Show the progress of a job
+        function attachToJob(sessionId, outputDir, scrollToProgress, processingMode) {
+            currentSessionId = sessionId;
+            socket.emit('join_session', {session_id: sessionId});
+            resetProgressDisplay(processingMode);
+            hidePreviousOutput();
+            showProgressPanel(scrollToProgress);
+            if (outputDir) showCurrentBatchDirectory(outputDir);
+        }
+
+        // Short status message below the jobs list
+        function notify(message) {
+            const notice = document.getElementById('jobsNotice');
+            notice.textContent = message;
+            notice.style.display = 'block';
+        }
+
+        // The upload belongs to the job it was submitted with: clear it for the next video
+        function resetUploadState() {
+            uploadedFilename = null;
+            uploadedOutputDir = null;
+            currentVideoInfo = null;
+            document.getElementById('videoFile').value = '';
+            document.getElementById('videoPreview').style.display = 'none';
+            document.getElementById('videoInfo').style.display = 'none';
+            document.getElementById('rangeInfo').style.display = 'none';
+            document.getElementById('uploadBtnText').textContent = 'Choose Video File';
+            updateProcessButton();
+            updateAspectWarning();
+        }
+
+        // "Start" needs an uploaded video; while a job runs, new ones are queued
+        function updateProcessButton() {
+            document.getElementById('processBtn').disabled = !uploadedOutputDir;
+            document.getElementById('processBtnText').textContent =
+                currentSessionId ? 'Add to Queue' : 'Start Processing';
+        }
+
+        // Start processing
+        document.getElementById('processBtn').addEventListener('click', function() {
+            if (!uploadedFilename || !uploadedOutputDir) {
+                alert('Please upload a video first');
+                return;
+            }
+            const settings = collectSettings(true);
+            if (!settings) return;
+
+            submitJob('/process', {output_dir: uploadedOutputDir, settings: settings}, 'Failed to start processing')
+                .then(data => {
+                    if (data.success) resetUploadState();
+                });
         });
-        
-        // Resume processing
+
+        // Resume the directory typed into the field
         document.getElementById('resumeBtn').addEventListener('click', function() {
             const resumeDirectory = document.getElementById('resumeDirectory').value.trim();
-            
             if (!resumeDirectory) {
                 alert('Please enter an output directory to resume');
                 return;
             }
-            
-            fetch('/resume', {
+            submitJob('/resume', {output_dir: resumeDirectory}, 'Failed to resume processing');
+        });
+
+        // Create a video from the frames an unfinished job has completed
+        function assemblePartial(directory, btn) {
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Encoding...';
+            return fetch('/assemble_partial', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    output_dir: resumeDirectory
-                })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({output_dir: directory})
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    currentSessionId = data.session_id;
-                    socket.emit('join_session', {session_id: currentSessionId});
-                    resetProgressDisplay();
-                    hidePreviousOutput();
-                    showProgressPanel();
-                    showCurrentBatchDirectory(data.output_dir);
+                    document.getElementById('outputPath').textContent = data.output_dir;
+                    document.getElementById('outputDirectoryCard').style.display = 'block';
+                    notify(`Partial video created from ${data.frames} frames (see the output directory below).`);
                 } else {
-                    alert('Failed to resume processing: ' + data.error);
+                    alert('Could not assemble a partial video: ' + data.error);
                 }
             })
             .catch(error => {
-                console.error('Resume error:', error);
-                alert('Failed to resume processing');
+                console.error('Assemble error:', error);
+                alert('Could not assemble a partial video');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
             });
+        }
+
+        document.getElementById('assemblePartialBtn').addEventListener('click', function() {
+            const directory = document.getElementById('resumeDirectory').value.trim();
+            if (!directory) {
+                alert('Please enter the output directory of an unfinished job');
+                return;
+            }
+            assemblePartial(directory, this);
         });
-        
+
+        // Jobs list: the running job, the queue and unfinished jobs
+        const MAX_LISTED_JOBS = 8;
+
+        function jobButton(label, icon, style, onClick) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `btn btn-sm ${style} ms-1`;
+            btn.innerHTML = `<i class="fas ${icon}"></i> `;
+            btn.appendChild(document.createTextNode(label));
+            btn.addEventListener('click', () => onClick(btn));
+            return btn;
+        }
+
+        function jobRow(job, state, stateText, buttons) {
+            const row = document.createElement('div');
+            row.className = 'job-row';
+            const info = document.createElement('div');
+            info.className = 'job-info';
+            const name = document.createElement('div');
+            name.className = 'job-name';
+            name.textContent = job.name;
+            name.title = job.path;
+            const status = document.createElement('div');
+            status.className = 'job-status';
+            const stateSpan = document.createElement('span');
+            stateSpan.className = `state-${state}`;
+            stateSpan.textContent = stateText;
+            status.appendChild(stateSpan);
+            if (job.total_frames) {
+                status.appendChild(document.createTextNode(` · ${job.finished_frames}/${job.total_frames} frames`));
+            }
+            info.appendChild(name);
+            info.appendChild(status);
+            const actions = document.createElement('div');
+            actions.className = 'job-actions';
+            buttons.forEach(btn => actions.appendChild(btn));
+            row.appendChild(info);
+            row.appendChild(actions);
+            return row;
+        }
+
+        function openFolder(path) {
+            fetch('/open_directory', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({path: path})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) alert('Could not open directory: ' + data.error);
+            })
+            .catch(() => alert('Error opening directory'));
+        }
+
+        function renderJobs(data) {
+            const list = document.getElementById('jobsList');
+            const rows = [];
+            if (data.running) {
+                rows.push(jobRow(data.running, 'running', `Running · ${Number(data.running.progress || 0).toFixed(1)}%`, []));
+            }
+            data.queued.forEach((job, index) => {
+                rows.push(jobRow(job, 'queued', `Queued #${index + 1}`, [
+                    jobButton('Remove', 'fa-times', 'btn-outline-secondary', () => {
+                        fetch('/queue/remove', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({session_id: job.session_id})
+                        }).then(refreshJobs);
+                    })
+                ]));
+            });
+            const labels = {paused: 'Stopped', failed: 'Failed', interrupted: 'Unfinished'};
+            data.incomplete.slice(0, MAX_LISTED_JOBS).forEach(job => {
+                const buttons = [
+                    jobButton('Resume', 'fa-play', 'btn-secondary', () => {
+                        submitJob('/resume', {output_dir: job.path}, 'Failed to resume processing');
+                    })
+                ];
+                if (job.finished_frames > 0) {
+                    buttons.push(jobButton('Assemble', 'fa-film', 'btn-outline-secondary', btn => assemblePartial(job.path, btn)));
+                }
+                buttons.push(jobButton('Open', 'fa-folder-open', 'btn-outline-secondary', () => openFolder(job.path)));
+                rows.push(jobRow(job, job.status, labels[job.status] || 'Unfinished', buttons));
+            });
+
+            list.replaceChildren(...rows);
+            if (rows.length === 0) {
+                const empty = document.createElement('small');
+                empty.className = 'text-muted';
+                empty.textContent = 'No running, queued or unfinished jobs.';
+                list.appendChild(empty);
+            }
+            if (data.incomplete.length > MAX_LISTED_JOBS) {
+                const more = document.createElement('div');
+                more.className = 'job-status mt-1';
+                more.textContent = `+ ${data.incomplete.length - MAX_LISTED_JOBS} older unfinished jobs in the output folder`;
+                list.appendChild(more);
+            }
+        }
+
+        // Refresh the jobs list; show the running job's progress if none is shown yet
+        // (page reload, or the next queued job has started)
+        function refreshJobs() {
+            return fetch('/jobs')
+                .then(response => response.json())
+                .then(data => {
+                    renderJobs(data);
+                    if (data.running && !currentSessionId) {
+                        attachToJob(data.running.session_id, data.running.path, false, data.running.processing_mode);
+                    }
+                })
+                .catch(error => console.error('Error loading jobs:', error));
+        }
+
+        // What the fisheye view shows of a video that isn't square. The view is square, so
+        // it either cuts the long sides (Frame Fit towards "fill") or leaves black bars
+        // (towards "whole frame"). Normal settings get a neutral line; only the extremes warn.
+        const WIDE_ASPECT = 1.2;
+        const CUT_WARNING = 0.35;    // share of the long side that is cut off
+        const BARS_WARNING = 0.40;   // share of the view that is black
+
+        function selectedEyeAspect() {
+            const resolution = document.getElementById('vrResolution').value;
+            if (resolution.startsWith('square')) return 1;
+            if (resolution === 'custom') {
+                const width = parseFloat(document.getElementById('customWidth').value);
+                const height = parseFloat(document.getElementById('customHeight').value);
+                return width > 0 && height > 0 ? width / height : null;
+            }
+            return null;  // auto and the wide presets follow the video
+        }
+
+        // Fisheye geometry, the same as the pipeline's: a point of the square view at
+        // distance rho from its centre shows the frame at distance scale * shape(theta)
+        const FISHEYE_SHAPES = {
+            stereographic: {forward: t => Math.tan(t / 2), inverse: r => 2 * Math.atan(r)},
+            equidistant: {forward: t => t, inverse: r => r},
+            equisolid: {forward: t => Math.sin(t / 2), inverse: r => (r <= 1 ? 2 * Math.asin(r) : null)},
+            orthogonal: {forward: t => Math.sin(t), inverse: r => (r <= 1 ? Math.asin(r) : null)}
+        };
+
+        function fisheyeGeometry(width, height) {
+            const shape = FISHEYE_SHAPES[document.getElementById('fisheyeProjection').value] || FISHEYE_SHAPES.stereographic;
+            const halfFov = (parseFloat(document.getElementById('fisheyeFov').value) || 180) * Math.PI / 360;
+            const crop = Math.max(0.5, Math.min(2, parseFloat(document.getElementById('fisheyeCropFactor').value) || 0.7));
+            const fit = Math.max(0, Math.min(1, parseFloat(document.getElementById('fisheyeFrameFit').value) || 0));
+            const shortHalf = Math.min(width, height) / 2;
+            const zoom = 1 + fit * (Math.max(width, height) / Math.min(width, height) - 1);
+            const fitRho = Math.min(crop, 1);  // radius (of the inscribed circle) fitted to the frame
+            const scale = zoom * shortHalf / shape.forward(fitRho * halfFov);
+            return {
+                // frame point (relative to the frame centre) -> view coordinates (-1..1), or null
+                toView(x, y) {
+                    const theta = shape.inverse(Math.hypot(x, y) / scale);
+                    if (theta === null) return null;
+                    const rho = theta / halfFov / crop;
+                    const angle = Math.atan2(y, x);
+                    return [rho * Math.cos(angle), rho * Math.sin(angle)];
+                },
+                // view coordinates -> is the frame visible there?
+                showsFrame(u, v) {
+                    const theta = Math.hypot(u, v) * crop * halfFov;
+                    if (theta >= Math.PI) return false;
+                    const r = scale * shape.forward(theta);
+                    const angle = Math.atan2(v, u);
+                    return Math.abs(r * Math.cos(angle)) <= width / 2 && Math.abs(r * Math.sin(angle)) <= height / 2;
+                }
+            };
+        }
+
+        // Share of the frame that is visible and share of the view that is black (sampled)
+        function fisheyeCoverage(width, height) {
+            const geometry = fisheyeGeometry(width, height);
+            const steps = 60;
+            let visible = 0;
+            let covered = 0;
+            for (let i = 0; i < steps; i++) {
+                for (let j = 0; j < steps; j++) {
+                    const a = (i + 0.5) / steps - 0.5;
+                    const b = (j + 0.5) / steps - 0.5;
+                    const point = geometry.toView(a * width, b * height);
+                    if (point && Math.abs(point[0]) <= 1 && Math.abs(point[1]) <= 1) visible++;
+                    if (geometry.showsFrame(a * 2, b * 2)) covered++;
+                }
+            }
+            return {visibleFrame: visible / (steps * steps), blackView: 1 - covered / (steps * steps)};
+        }
+
+        function svgElement(name, attributes) {
+            const element = document.createElementNS('http://www.w3.org/2000/svg', name);
+            Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+            return element;
+        }
+
+        function eyeAspect(videoAspect) {
+            const resolution = document.getElementById('vrResolution').value;
+            if (resolution.startsWith('square')) return 1;
+            if (resolution.startsWith('cinema')) return 2048 / 858;
+            if (resolution === 'custom') {
+                const w = parseFloat(document.getElementById('customWidth').value);
+                const h = parseFloat(document.getElementById('customHeight').value);
+                return w > 0 && h > 0 ? w / h : videoAspect;
+            }
+            return resolution === 'auto' ? videoAspect : 16 / 9;
+        }
+
+        // Schematic of how the frame ends up in one eye's view with the current settings
+        function updateCropPreview() {
+            const svg = document.getElementById('cropPreview');
+            const info = currentVideoInfo;
+            const width = info ? info.width : 1920;
+            const height = info ? info.height : 1080;
+            document.getElementById('cropPreviewSource').textContent =
+                info ? `(${width}×${height} video)` : '(example: 16:9 video)';
+            const numbers = document.getElementById('cropPreviewNumbers');
+            const percent = value => `${Math.round(value * 100)}%`;
+            const parts = [];
+
+            if (document.getElementById('applyDistortion').checked) {
+                const geometry = fisheyeGeometry(width, height);
+                const line = (x0, y0, x1, y1) => {
+                    const points = [];
+                    for (let i = 0; i <= 48; i++) {
+                        const point = geometry.toView(x0 + (x1 - x0) * i / 48, y0 + (y1 - y0) * i / 48);
+                        if (point) points.push(point.map(c => c.toFixed(3)).join(','));
+                    }
+                    return points.join(' ');
+                };
+                const w = width / 2;
+                const h = height / 2;
+                const outline = [line(-w, -h, w, -h), line(w, -h, w, h), line(w, h, -w, h), line(-w, h, -w, -h)].join(' ');
+                const clip = svgElement('clipPath', {id: 'cropPreviewView'});
+                clip.appendChild(svgElement('rect', {x: -1, y: -1, width: 2, height: 2}));
+                const inView = svgElement('g', {'clip-path': 'url(#cropPreviewView)'});
+                inView.appendChild(svgElement('polygon', {class: 'picture', points: outline}));
+                for (let i = 1; i < 8; i++) {
+                    const x = -w + width * i / 8;
+                    inView.appendChild(svgElement('polyline', {class: 'grid', points: line(x, -h, x, h)}));
+                }
+                for (let i = 1; i < 4; i++) {
+                    const y = -h + height * i / 4;
+                    inView.appendChild(svgElement('polyline', {class: 'grid', points: line(-w, y, w, y)}));
+                }
+                parts.push(
+                    svgElement('polygon', {class: 'cut', points: outline}),
+                    svgElement('rect', {class: 'view', x: -1, y: -1, width: 2, height: 2}),
+                    clip,
+                    inView
+                );
+                const coverage = fisheyeCoverage(width, height);
+                numbers.textContent = `Visible: ${percent(coverage.visibleFrame)} of the frame · Black: ${percent(coverage.blackView)} of the view`;
+            } else {
+                // Flat 3D: centre crop, then fitted into the eye with black bars if the shapes differ
+                const crop = Math.max(0.5, Math.min(1, parseFloat(document.getElementById('cropFactor').value) || 1));
+                const videoAspect = width / height;
+                const aspect = eyeAspect(videoAspect);
+                const eyeW = aspect >= 1 ? 1.2 : 1.2 * aspect;
+                const eyeH = aspect >= 1 ? 1.2 / aspect : 1.2;
+                const fitScale = Math.min(eyeW / videoAspect, eyeH);   // half-height of the picture
+                const picW = fitScale * videoAspect;
+                const picH = fitScale;
+                parts.push(
+                    svgElement('rect', {class: 'view', x: -eyeW, y: -eyeH, width: 2 * eyeW, height: 2 * eyeH}),
+                    svgElement('rect', {class: 'cut', x: -picW / crop, y: -picH / crop, width: 2 * picW / crop, height: 2 * picH / crop}),
+                    svgElement('rect', {class: 'picture', x: -picW, y: -picH, width: 2 * picW, height: 2 * picH})
+                );
+                const black = 1 - (picW * picH) / (eyeW * eyeH);
+                numbers.textContent = `Visible: ${percent(crop * crop)} of the frame · Black: ${percent(black)} of the view`;
+            }
+            svg.replaceChildren(...parts);
+        }
+
+        ['fisheyeProjection', 'fisheyeFov', 'fisheyeCropFactor', 'cropFactor', 'vrFormat'].forEach(id => {
+            const element = document.getElementById(id);
+            element.addEventListener('change', updateAspectWarning);
+            element.addEventListener('input', updateAspectWarning);
+        });
+
+        function setFrameFit(value) {
+            const slider = document.getElementById('fisheyeFrameFit');
+            slider.value = value;
+            slider.dispatchEvent(new Event('input', {bubbles: true}));
+            saveSettings();
+        }
+
+        function useVideoAspect() {
+            const resolution = document.getElementById('vrResolution');
+            resolution.value = 'auto';
+            resolution.dispatchEvent(new Event('change', {bubbles: true}));
+            saveSettings();
+            updateAspectWarning();
+        }
+
+        function updateAspectWarning() {
+            const fit = parseFloat(document.getElementById('fisheyeFrameFit').value);
+            document.getElementById('fisheyeFrameFitValue').textContent = fit.toFixed(2);
+            const fisheye = document.getElementById('applyDistortion').checked;
+            document.getElementById('frameFitOptions').style.display = fisheye ? 'block' : 'none';
+
+            const info = currentVideoInfo;
+            const fitInfo = document.getElementById('frameFitInfo');
+            let warning = null;
+            let actionLabel = null;
+            let action = null;
+            fitInfo.textContent = 'Upload a video to see what this means for it.';
+
+            if (info && info.width > 0 && info.height > 0) {
+                const wide = info.width >= info.height;
+                const longSide = Math.max(info.width, info.height);
+                const shortSide = Math.min(info.width, info.height);
+                const ratio = `${info.width}×${info.height}`;
+                if (fisheye) {
+                    // Same calculation as the pipeline: zoom from 1 (fill) to long/short (whole frame)
+                    const cut = (1 - fit) * (1 - shortSide / longSide);
+                    const bars = fisheyeCoverage(info.width, info.height).blackView;
+                    const longName = wide ? 'width' : 'height';
+                    const cutEdges = wide ? 'left and right edges' : 'top and bottom';
+                    const barsWhere = wide ? 'above and below' : 'left and right';
+                    fitInfo.textContent = longSide === shortSide
+                        ? 'This video is square: the whole frame fills the view.'
+                        : `For this ${ratio} video: ${Math.round((1 - cut) * 100)}% of its ${longName} is visible, `
+                          + `and about ${Math.round(bars * 100)}% of the view is black (${barsWhere}).`;
+                    if (cut >= CUT_WARNING) {
+                        warning = `Fisheye view: about ${Math.round(cut * 100)}% of this ${ratio} video's ${longName} (the ${cutEdges}) is cut off.`;
+                        actionLabel = 'Show more of the frame (Frame Fit 0.5)';
+                        action = () => setFrameFit(0.5);
+                    } else if (bars >= BARS_WARNING) {
+                        warning = `Fisheye view: the whole frame is shown, but about ${Math.round(bars * 100)}% of the view is black (${barsWhere}) and the picture appears smaller.`;
+                        actionLabel = 'Fill more of the view (Frame Fit 0.5)';
+                        action = () => setFrameFit(0.5);
+                    }
+                } else if (info.width / info.height > WIDE_ASPECT) {
+                    const eyeAspect = selectedEyeAspect();
+                    if (eyeAspect !== null && eyeAspect < WIDE_ASPECT) {
+                        warning = `The selected per-eye resolution is not wide: this ${ratio} video will get black bars above and below (nothing is cut off).`;
+                        actionLabel = 'Use the video\'s aspect ratio';
+                        action = useVideoAspect;
+                    }
+                }
+            }
+
+            updateCropPreview();
+
+            document.querySelectorAll('.aspect-warning').forEach(box => {
+                box.replaceChildren();
+                box.style.display = warning ? 'block' : 'none';
+                if (!warning) return;
+                const icon = document.createElement('i');
+                icon.className = 'fas fa-exclamation-triangle';
+                box.appendChild(icon);
+                box.appendChild(document.createTextNode(' ' + warning + ' '));
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-sm btn-outline-secondary ms-1';
+                button.textContent = actionLabel;
+                button.addEventListener('click', action);
+                box.appendChild(button);
+            });
+        }
+
+        ['applyDistortion', 'vrResolution', 'customWidth', 'customHeight'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateAspectWarning);
+        });
+        document.getElementById('fisheyeFrameFit').addEventListener('input', updateAspectWarning);
+
+        // Disk space the current settings need (rough), next to what is free
+        let diskEstimateTimer = null;
+
+        function formatBytes(bytes) {
+            const gb = bytes / (1024 ** 3);
+            return gb >= 10 ? `${gb.toFixed(0)} GB` : gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / (1024 ** 2)).toFixed(0)} MB`;
+        }
+
+        function updateDiskEstimate() {
+            clearTimeout(diskEstimateTimer);
+            diskEstimateTimer = setTimeout(() => {
+                const target = document.getElementById('diskEstimate');
+                const settings = uploadedOutputDir ? collectSettings(false) : null;
+                if (!settings) {
+                    target.textContent = 'upload a video to see the estimate';
+                    target.style.color = '';
+                    return;
+                }
+                fetch('/estimate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({output_dir: uploadedOutputDir, settings: settings})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (!data.success) {
+                        target.textContent = '--';
+                        return;
+                    }
+                    const tooSmall = data.free_bytes > 0 && data.estimated_bytes > data.free_bytes;
+                    // Largest parts first, so it is clear where the space goes
+                    const labels = {
+                        original_frames: 'extracted frames', depth_maps: 'depth maps', stereo_frames: 'stereo pairs',
+                        distorted_frames: 'distorted', cropped_frames: 'cropped', upscaled_frames: 'upscaled',
+                        vr_frames: 'VR frames', video: 'video'
+                    };
+                    const parts = Object.entries(data.breakdown || {})
+                        .filter(([, bytes]) => bytes >= data.estimated_bytes * 0.03)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([name, bytes]) => `${labels[name] || name} ${formatBytes(bytes)}`);
+                    let text = `about ${formatBytes(data.estimated_bytes)} at peak for ${data.frames.toLocaleString()} frames`
+                        + ` (${parts.join(', ')}); ${formatBytes(data.free_bytes)} free`;
+                    if (tooSmall) {
+                        text += KEEP_INTERMEDIATES
+                            ? ' — may not fit; without --keep-intermediates far less is needed'
+                            : ' — may not fit';
+                    }
+                    target.textContent = text;
+                    target.style.color = tooSmall ? '#ffd60a' : '';
+                })
+                .catch(() => { target.textContent = '--'; });
+            }, 400);
+        }
+
+        // Most settings change the estimate (sizes, optional steps, time range, batch size)
+        document.querySelector('.settings-panel').addEventListener('change', updateDiskEstimate);
+
         // Stop processing
         document.getElementById('stopBtn').addEventListener('click', function() {
             if (currentSessionId) {
@@ -2229,10 +3022,11 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        hideProgressPanel();
-                        currentSessionId = null;
-                        // Reset progress displays
-                        resetProgressDisplay();
+                        // The job stops at its next progress update; the 'processing_stopped'
+                        // event then resets the panel
+                        const phase = document.getElementById('overallProgressPhase');
+                        if (phase) phase.textContent = 'Stopping...';
+                        document.getElementById('stopBtn').disabled = true;
                     } else {
                         alert('Failed to stop processing: ' + data.error);
                     }
@@ -2254,31 +3048,31 @@
         // Reset end time to video duration
         document.getElementById('resetEndTime').addEventListener('click', function() {
             if (currentVideoInfo) {
-                const minutes = Math.floor(currentVideoInfo.duration / 60);
-                const seconds = Math.floor(currentVideoInfo.duration % 60);
-                document.getElementById('endTime').value = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                document.getElementById('endTime').value = formatTime(currentVideoInfo.duration);
                 updateRangeInfo();
                 saveSettings();
             }
         });
 
         // Show progress panel
-        function showProgressPanel() {
+        function showProgressPanel(scrollToProgress) {
             document.querySelector('.progress-container').style.display = 'block';
-            document.getElementById('processBtn').style.display = 'none';
             document.getElementById('stopBtn').style.display = 'inline-block';
-            document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight;
+            document.getElementById('stopBtn').disabled = false;
+            updateProcessButton();
+            if (scrollToProgress) {
+                document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight;
+            }
         }
-        
+
         // Hide progress panel
         function hideProgressPanel() {
             document.querySelector('.progress-container').style.display = 'none';
-            document.getElementById('processBtn').style.display = 'inline-block';
-            document.getElementById('processBtn').disabled = false;
             document.getElementById('stopBtn').style.display = 'none';
             hideCurrentBatchDirectory();
+            updateProcessButton();
         }
-        
+
         // Show current batch directory
         function showCurrentBatchDirectory(outputDir) {
             document.getElementById('currentBatchPath').textContent = outputDir;
@@ -2291,7 +3085,7 @@
         }
         
         // Reset progress display to its initial state (called whenever a new job starts)
-        function resetProgressDisplay() {
+        function resetProgressDisplay(processingMode) {
             const overallBar = document.getElementById('overallProgressBar');
             if (overallBar) {
                 overallBar.style.width = '0%';
@@ -2303,8 +3097,10 @@
             if (overallText) overallText.textContent = '0%';
             const overallPhase = document.getElementById('overallProgressPhase');
             if (overallPhase) overallPhase.textContent = 'Initializing...';
+            const activity = document.getElementById('currentActivity');
+            if (activity) activity.textContent = 'Starting...';
 
-            for (let i = 1; i <= 8; i++) {
+            for (let i = 1; i <= 9; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
                 if (bar) {
@@ -2314,12 +3110,18 @@
                 }
                 if (text) text.textContent = '0%';
             }
+            // Batched jobs show the batch loop from the start, not only once the first batch runs.
+            // An unknown mode (resumed job) is corrected by the first progress update.
+            showBatchLoop(processingMode ? processingMode === 'batched' : true, true);
+            document.getElementById('batchBar').style.width = '0%';
+            document.getElementById('batchLabel').textContent = '--';
+            document.getElementById('batchFrames').textContent = 'starts after frame extraction';
 
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
@@ -2360,48 +3162,90 @@
                 overallText.textContent = data.progress.toFixed(1) + '%';
             }
             if (overallPhase) {
-                const etaSuffix = data.eta ? ` (ETA: ${data.eta})` : '';
-                overallPhase.textContent = (data.stage || 'Processing...') + etaSuffix;
+                // Always overall figures (never the current step's or batch's counts)
+                const etaSuffix = data.eta ? ` · ETA ${data.eta}` : '';
+                if (data.total_frames > 0 && data.finished_frames !== undefined) {
+                    overallPhase.textContent =
+                        `${data.finished_frames.toLocaleString()} of ${data.total_frames.toLocaleString()} frames finished${etaSuffix}`;
+                } else {
+                    overallPhase.textContent = `${data.progress.toFixed(1)}%${etaSuffix}`;
+                }
+            }
+            // What is being worked on right now goes below the bar, not into it
+            const activity = document.getElementById('currentActivity');
+            if (activity) {
+                const batchPrefix = data.batch ? `Batch ${data.batch.index + 1}/${data.batch.count}: ` : '';
+                activity.textContent = data.stage ? `${batchPrefix}${data.stage}` : '';
             }
 
             // Update step-specific progress bars
             updateStepProgress(data);
         }
 
-        // Update individual step progress bars
+        // Batched jobs show the batch counter with the looped steps nested below it. The
+        // video step is part of the loop when the video is encoded per batch (the usual case).
+        function showBatchLoop(batched, videoInLoop) {
+            const loop = document.getElementById('batchLoop');
+            loop.classList.toggle('batched', batched);
+            const inLoop = batched && videoInLoop !== false;
+            const row = document.getElementById('step8Row');
+            // inside the loop, or back in its place after it (before step 9)
+            if (inLoop && row.parentNode !== loop.querySelector('.batch-steps')) {
+                loop.querySelector('.batch-steps').appendChild(row);
+            } else if (!inLoop && row.parentNode !== loop.parentNode) {
+                loop.parentNode.insertBefore(row, document.getElementById('step9Row'));
+            }
+            document.getElementById('step8Label').textContent = inLoop ? 'Encode Video Segment' : 'Create Final Video';
+            document.getElementById('segmentNote').style.display = inLoop ? 'block' : 'none';
+        }
+
+        // Update the step bars and, in batched mode, the batch counter.
+        // data.steps has one entry per step; for steps of the inner loop (in_batch) the
+        // counts are frames of the current batch, otherwise frames of the whole video.
         function updateStepProgress(data) {
-            // Use step_index from backend (0-based, so add 1 for display)
-            const stepNum = (data.step_index !== undefined) ? data.step_index + 1 : 1;
-            const stepProgress = data.step_progress || 0;
-            const stepTotal = data.step_total || 1;
-            const stepPercent = stepTotal > 0 ? (stepProgress / stepTotal) * 100 : 0;
+            if (data.processing_mode || data.batch) {
+                showBatchLoop(data.processing_mode === 'batched' || !!data.batch, data.video_in_loop);
+            }
+            if (!Array.isArray(data.steps)) return;
 
-            // Mark previous steps as complete (100%)
-            for (let i = 1; i <= 8; i++) {
-                const bar = document.getElementById(`step${i}Bar`);
-                const text = document.getElementById(`step${i}Progress`);
+            data.steps.forEach((step, index) => {
+                const bar = document.getElementById(`step${index + 1}Bar`);
+                const text = document.getElementById(`step${index + 1}Progress`);
+                if (!bar || !text) return;
 
-                if (!bar || !text) continue;
-
-                if (i < stepNum) {
-                    // Previous steps: 100%
-                    bar.style.width = '100%';
-                    bar.classList.remove('bg-info');
-                    bar.classList.add('bg-success');
-                    text.textContent = '100%';
-                } else if (i === stepNum) {
-                    // Current step: show actual progress
-                    bar.style.width = stepPercent + '%';
-                    bar.classList.remove('bg-success');
-                    bar.classList.add('bg-info');
-                    text.textContent = stepPercent.toFixed(0) + '%';
+                const percent = step.total > 0 ? Math.min(100, (step.progress / step.total) * 100) : 0;
+                const done = percent >= 100;
+                bar.style.width = percent + '%';
+                bar.classList.toggle('bg-success', done);
+                bar.classList.toggle('bg-info', !done);
+                // Optional steps follow the running job's settings, not the form's
+                const container = document.getElementById(`step${index + 1}Container`);
+                if (container) {
+                    container.classList.toggle('step-disabled', !!step.skipped);
+                    container.classList.toggle('step-enabled', !step.skipped);
+                }
+                // Step 9 joins video segments; without segments there is nothing to join
+                if (index === 8) {
+                    document.getElementById('step9Row').style.display = step.skipped ? 'none' : 'block';
+                }
+                if (step.skipped) {
+                    text.textContent = 'off';
+                } else if (index === 8) {
+                    text.textContent = percent >= 100 ? '100%' : (step.total > 0 ? 'joining...' : '0%');
+                } else if (step.total > 0) {
+                    text.textContent = `${step.progress}/${step.total} · ${percent.toFixed(0)}%`;
                 } else {
-                    // Future steps: 0%
-                    bar.style.width = '0%';
-                    bar.classList.remove('bg-success');
-                    bar.classList.add('bg-info');
                     text.textContent = '0%';
                 }
+            });
+
+            if (data.batch) {
+                const batch = data.batch;
+                document.getElementById('batchLabel').textContent = `${batch.index + 1}/${batch.count}`;
+                document.getElementById('batchFrames').textContent =
+                    `frames ${batch.start + 1}–${batch.start + batch.size}`;
+                const batchPercent = ((batch.index + (batch.progress || 0)) / batch.count) * 100;
+                document.getElementById('batchBar').style.width = Math.min(100, batchPercent) + '%';
             }
         }
 
@@ -2424,7 +3268,7 @@
             }
 
             // Mark all steps as complete
-            for (let i = 1; i <= 8; i++) {
+            for (let i = 1; i <= 9; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
                 if (bar && text) {
@@ -2433,15 +3277,12 @@
                     text.textContent = '100%';
                 }
             }
+            document.getElementById('batchBar').style.width = '100%';
 
             // Hide progress panel and clean up session state
-            document.querySelector('.progress-container').style.display = 'none';
-            document.getElementById('stopBtn').style.display = 'none';
-            const processBtn = document.getElementById('processBtn');
-            processBtn.style.display = 'inline-block';
-            processBtn.disabled = true;  // Disable until new video is uploaded
-            hideCurrentBatchDirectory();
             currentSessionId = null;
+            hideProgressPanel();
+            setTimeout(refreshJobs, 500);  // the next queued job, if any, has started by then
 
             // Hide preview panel and clear preview images
             const previewCard = document.getElementById('livePreviewCard');
@@ -2449,51 +3290,24 @@
                 previewCard.style.display = 'none';
             }
             // Clear preview images
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
             // Reset frame counters
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
-            const stereoLabel = document.getElementById('stereoLeftLabel');
             const vrLabel = document.getElementById('vrFrameLabel');
             if (depthLabel) depthLabel.textContent = 'Depth Map';
-            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
             if (vrLabel) vrLabel.textContent = 'VR Output';
 
             // Show output directory card
             document.getElementById('outputPath').textContent = data.output_dir;
             document.getElementById('outputDirectoryCard').style.display = 'block';
-
-            // Reset upload state immediately (don't wait for modal dismiss)
-            uploadedFilename = null;
-            uploadedOutputDir = null;
-
-            // Reset file input to allow uploading new videos
-            const videoFile = document.getElementById('videoFile');
-            if (videoFile) {
-                videoFile.value = '';
-            }
-
-            // Hide video preview and info
-            const videoPreview = document.getElementById('videoPreview');
-            const videoInfo = document.getElementById('videoInfo');
-            if (videoPreview) videoPreview.style.display = 'none';
-            if (videoInfo) videoInfo.style.display = 'none';
-
-            // Reset upload button text
-            const uploadBtnText = document.getElementById('uploadBtnText');
-            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
-
-            // Disable process button until new video is uploaded
-            if (processBtn) {
-                processBtn.disabled = true;
-            }
 
             // Show success modal (after all state is reset)
             document.getElementById('successMessage').textContent = data.message;
@@ -2531,8 +3345,9 @@
             }
 
             // Hide stop button, show start button
-            hideProgressPanel();
             currentSessionId = null;
+            hideProgressPanel();
+            setTimeout(refreshJobs, 500);
 
             // Hide preview panel and clear preview images
             const previewCard = document.getElementById('livePreviewCard');
@@ -2540,51 +3355,28 @@
                 previewCard.style.display = 'none';
             }
             // Clear preview images
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
             // Reset frame counters
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
-            const stereoLabel = document.getElementById('stereoLeftLabel');
             const vrLabel = document.getElementById('vrFrameLabel');
             if (depthLabel) depthLabel.textContent = 'Depth Map';
-            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
             if (vrLabel) vrLabel.textContent = 'VR Output';
 
-            // Reset upload state immediately (don't wait for modal dismiss)
-            uploadedFilename = null;
-            uploadedOutputDir = null;
-
-            // Reset file input to allow uploading new videos
-            const videoFile = document.getElementById('videoFile');
-            if (videoFile) {
-                videoFile.value = '';
-            }
-
-            // Hide video preview and info
-            const videoPreview = document.getElementById('videoPreview');
-            const videoInfo = document.getElementById('videoInfo');
-            if (videoPreview) videoPreview.style.display = 'none';
-            if (videoInfo) videoInfo.style.display = 'none';
-
-            // Reset upload button text
-            const uploadBtnText = document.getElementById('uploadBtnText');
-            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
-
-            // Disable process button until new video is uploaded
-            const processBtnError = document.getElementById('processBtn');
-            if (processBtnError) {
-                processBtnError.disabled = true;
-            }
-
             // Show error modal (after all state is reset)
-            document.getElementById('errorMessage').textContent = data.error;
+            let errorText = data.error;
+            if (data.output_dir) {
+                document.getElementById('resumeDirectory').value = data.output_dir;
+                errorText += ' Finished frames are kept: the job is in the Jobs list, where it can be resumed or its finished part assembled.';
+            }
+            document.getElementById('errorMessage').textContent = errorText;
             const errorModalEl = document.getElementById('errorModal');
             const errorModal = new bootstrap.Modal(errorModalEl, {
                 backdrop: true,
@@ -2615,8 +3407,9 @@
             if (overallPhase) overallPhase.textContent = 'Processing stopped';
 
             // Hide stop button, show start button
-            hideProgressPanel();
             currentSessionId = null;
+            hideProgressPanel();
+            setTimeout(refreshJobs, 500);
 
             // Hide preview panel and clear preview images
             const previewCard = document.getElementById('livePreviewCard');
@@ -2624,41 +3417,34 @@
                 previewCard.style.display = 'none';
             }
             // Clear preview images
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
             // Reset frame counters
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
-            const stereoLabel = document.getElementById('stereoLeftLabel');
             const vrLabel = document.getElementById('vrFrameLabel');
             if (depthLabel) depthLabel.textContent = 'Depth Map';
-            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
             if (vrLabel) vrLabel.textContent = 'VR Output';
 
-            // Show info message
-            alert('Processing has been stopped: ' + data.message);
+            // The job stays resumable from the jobs list; offer a video of the finished part
+            const finished = data.finished_frames || 0;
+            notify(`Processing stopped with ${finished} VR frames finished. The job is in the list above.`);
 
-            // Reset upload state to allow new processing
-            const videoFile = document.getElementById('videoFile');
-            if (videoFile) {
-                videoFile.value = '';
-            }
-
-            // Hide video preview and info
-            const videoPreview = document.getElementById('videoPreview');
-            const videoInfo = document.getElementById('videoInfo');
-            if (videoPreview) videoPreview.style.display = 'none';
-            if (videoInfo) videoInfo.style.display = 'none';
-
-            // Reset upload button text
-            const uploadBtnText = document.getElementById('uploadBtnText');
-            if (uploadBtnText) uploadBtnText.textContent = 'Choose Video File';
+            const seconds = data.fps > 0 ? ` (${(finished / data.fps).toFixed(1)} s)` : '';
+            document.getElementById('stoppedMessage').textContent = finished > 0
+                ? `${finished} VR frames${seconds} are finished. Create a video from them now?`
+                : 'No VR frames are finished yet, so there is nothing to create a video from.';
+            const assembleBtn = document.getElementById('stoppedAssembleBtn');
+            assembleBtn.style.display = finished > 0 && data.output_dir ? 'inline-block' : 'none';
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('stoppedModal'));
+            assembleBtn.onclick = () => assemblePartial(data.output_dir, assembleBtn).then(() => modal.hide());
+            modal.show();
         }
 
         // Handle frame preview
@@ -2677,8 +3463,6 @@
             // Map frame types to descriptive labels
             const frameTypeLabels = {
                 'depth_map': 'Depth Map',
-                'stereo_left': 'Stereo Pair (Left)',
-                'upscaled_left': 'Upscaled (Left)',
                 'vr_frame': 'VR Output'
             };
 
@@ -2689,13 +3473,6 @@
                 if (img) img.src = imageData;
                 if (label) label.textContent = `Frame: ${frameNumber}`;
                 if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'Depth Map';
-            } else if (frameType === 'stereo_left' || frameType === 'upscaled_left') {
-                const img = document.getElementById('stereoLeftPreview');
-                const label = document.getElementById('stereoLeftFrame');
-                const titleLabel = document.getElementById('stereoLeftLabel');
-                if (img) img.src = imageData;
-                if (label) label.textContent = `Frame: ${frameNumber}`;
-                if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'Left Eye';
             } else if (frameType === 'vr_frame') {
                 const img = document.getElementById('vrFramePreview');
                 const label = document.getElementById('vrFrameFrame');
@@ -2705,38 +3482,6 @@
                 if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'VR Output';
             }
         }
-
-        // Update range info based on video duration and selected range
-        function updateRangeInfo() {
-            if (!currentVideoInfo) return;
-            
-            const startTime = document.getElementById('startTime').value;
-            const endTime = document.getElementById('endTime').value;
-            
-            // Convert time to seconds for calculation
-            function timeToSeconds(timeStr) {
-                if (!timeStr) return null;
-                const parts = timeStr.split(':').map(Number);
-                if (parts.length === 2) {
-                    return parts[0] * 60 + parts[1]; // mm:ss
-                } else if (parts.length === 3) {
-                    return parts[0] * 3600 + parts[1] * 60 + parts[2]; // hh:mm:ss
-                }
-                return null;
-            }
-            
-            const startSeconds = timeToSeconds(startTime) || 0;
-            const endSeconds = timeToSeconds(endTime) || currentVideoInfo.duration;
-            const duration = Math.max(0, endSeconds - startSeconds);
-            const frameCount = Math.round(duration * currentVideoInfo.fps);
-            
-            // Update display elements if they exist
-            const rangeInfo = document.getElementById('rangeInfo');
-            if (rangeInfo) {
-                rangeInfo.textContent = `${duration.toFixed(1)}s (${frameCount} frames)`;
-            }
-        }
-
 
         // Directory operations
         document.getElementById('openCurrentBatchBtn').addEventListener('click', function() {
@@ -2789,25 +3534,21 @@
             });
         });
 
-        document.getElementById('copyPathBtn').addEventListener('click', function() {
-            const outputPath = document.getElementById('outputPath').textContent;
-            if (!outputPath || outputPath === '--' || outputPath.trim() === '') {
-                alert('No output path available to copy yet. Please complete processing first.');
-                return;
-            }
-            navigator.clipboard.writeText(outputPath).then(() => {
-                // Visual feedback
-                const btn = document.getElementById('copyPathBtn');
-                const originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-                btn.classList.add('btn-success');
-                btn.classList.remove('btn-outline-secondary');
-                
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.classList.remove('btn-success');
-                    btn.classList.add('btn-outline-secondary');
-                }, 2000);
+        // Paths are copied by clicking them
+        document.querySelectorAll('.copy-path').forEach(function(element) {
+            element.addEventListener('click', function() {
+                const path = element.textContent.trim();
+                if (!path || path === '--' || element.classList.contains('copied')) return;
+                navigator.clipboard.writeText(path).then(() => {
+                    element.classList.add('copied');
+                    element.dataset.path = path;
+                    element.textContent = 'Copied!';
+                    setTimeout(() => {
+                        // Keep a path that was set while the confirmation was shown
+                        if (element.textContent === 'Copied!') element.textContent = element.dataset.path;
+                        element.classList.remove('copied');
+                    }, 1200);
+                });
             });
         });
 
@@ -2945,21 +3686,20 @@
             // For now, just show a hint about common locations
             const outputDirs = [
                 'output/',
-                './output/',
-                '/home/user/workspace/stereo-projector/output/'
+                './output/'
             ];
             alert('Common batch directory locations:\n\n' + outputDirs.join('\n') + '\n\nLook for directories with timestamp format like:\nvideo_name_20250615_143022/');
         });
 
         // Settings persistence functions
         function saveSettings() {
-            const SETTINGS_VERSION = 3; // Must match version in loadSettings()
+            const SETTINGS_VERSION = 5; // Must match version in loadSettings()
             const settings = {
                 version: SETTINGS_VERSION,
-                // Time range
-                startTime: document.getElementById('startTime').value,
-                endTime: document.getElementById('endTime').value,
-                
+                // Processing mode (the time range belongs to a video and isn't saved)
+                processingMode: document.getElementById('processingMode').value,
+                batchSize: document.getElementById('batchSize').value,
+
                 // VR settings
                 vrFormat: document.getElementById('vrFormat').value,
                 vrResolution: document.getElementById('vrResolution').value,
@@ -2976,13 +3716,13 @@
 
                 // Audio and intermediates
                 preserveAudio: document.getElementById('preserveAudio').checked,
-                keepIntermediates: document.getElementById('keepIntermediates').checked,
                 videoEncoder: document.getElementById('videoEncoder').value,
 
                 // Fisheye and cropping
                 applyDistortion: document.getElementById('applyDistortion').checked,
                 fisheyeProjection: document.getElementById('fisheyeProjection').value,
                 fisheyeFov: document.getElementById('fisheyeFov').value,
+                fisheyeFrameFit: document.getElementById('fisheyeFrameFit').value,
                 cropFactor: document.getElementById('cropFactor').value,
                 fisheyeCropFactor: document.getElementById('fisheyeCropFactor').value,
                 holeFillQuality: document.getElementById('holeFillQuality').value,
@@ -2997,12 +3737,18 @@
         }
         
         function loadSettings() {
-            const SETTINGS_VERSION = 3; // Increment to force reset of old settings
+            const SETTINGS_VERSION = 5; // Increment to force reset of old settings
             const savedSettings = localStorage.getItem('stereoProjectorSettings');
             if (!savedSettings) return;
 
             try {
                 const settings = JSON.parse(savedSettings);
+
+                // Version 4 only differs in the default batch size: keep the other settings
+                if (settings.version === 4) {
+                    if (settings.batchSize === '100') settings.batchSize = '120';
+                    settings.version = SETTINGS_VERSION;
+                }
 
                 // Check version and reset if outdated
                 if (!settings.version || settings.version < SETTINGS_VERSION) {
@@ -3034,6 +3780,8 @@
 
                 // Update optional step styling after loading settings
                 updateOptionalStepStyling();
+                update3DPresetHighlight();
+                updateAspectWarning();
 
             } catch (error) {
                 console.error('Error loading settings:', error);
@@ -3042,8 +3790,6 @@
         
         function resetToDefaults() {
             const defaults = {
-                startTime: '',
-                endTime: '',
                 vrFormat: 'side_by_side',
                 vrResolution: 'auto',
                 baseline: '0.065',
@@ -3054,11 +3800,12 @@
                 device: 'auto',
                 modelSize: 'vitb',
                 depthModelType: 'metric',
-                processingMode: 'serial',
+                processingMode: 'batched',
+                batchSize: '120',
                 preserveAudio: true,
-                keepIntermediates: true,
                 videoEncoder: 'auto',
                 applyDistortion: true,
+                fisheyeFrameFit: '0.5',
                 fisheyeProjection: 'stereographic',
                 fisheyeFov: '180',
                 cropFactor: '1.0',
@@ -3085,6 +3832,8 @@
 
             // Update optional step styling
             updateOptionalStepStyling();
+            update3DPresetHighlight();
+            updateAspectWarning();
 
             // Clear saved settings
             localStorage.removeItem('stereoProjectorSettings');
@@ -3095,10 +3844,10 @@
         // Auto-save settings when they change
         function setupAutoSave() {
             const settingsElements = [
-                'startTime', 'endTime', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
+                'processingMode', 'batchSize', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
                 'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'depthResolution', 'videoEncoder',
-                'preserveAudio', 'keepIntermediates', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
-                'fisheyeCropFactor', 'holeFillQuality', 'applyUpscaling', 'upscaleModel', 'experimentalFrameInterpolation'
+                'preserveAudio', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
+                'fisheyeFrameFit', 'fisheyeCropFactor', 'holeFillQuality', 'applyUpscaling', 'upscaleModel', 'experimentalFrameInterpolation'
             ];
             
             settingsElements.forEach(id => {
@@ -3110,31 +3859,44 @@
             });
         }
         
-        // 3D Strength preset functions
+        // 3D strength presets: named pairs of baseline and focal length
+        const STRENGTH_PRESETS = {
+            subtle: {baseline: 0.035, focalLength: 700, label: 'Subtle & Clean'},
+            balanced: {baseline: 0.065, focalLength: 1000, label: 'Balanced'},
+            strong: {baseline: 0.10, focalLength: 1200, label: 'Strong & Dirty'}
+        };
+
         function set3DPreset(preset) {
-            const baselineEl = document.getElementById('baseline');
-            const focalLengthEl = document.getElementById('focalLength');
-            const holeFillEl = document.getElementById('holeFillQuality');
-            
-            switch(preset) {
-                case 'subtle':
-                    baselineEl.value = '0.035';
-                    focalLengthEl.value = '700';
-                    holeFillEl.value = 'fast';
-                    break;
-                case 'balanced':
-                    baselineEl.value = '0.065';
-                    focalLengthEl.value = '1000';
-                    holeFillEl.value = 'fast';
-                    break;
-                case 'strong':
-                    baselineEl.value = '0.10';
-                    focalLengthEl.value = '1200';
-                    holeFillEl.value = 'fast';
-                    break;
-            }
+            const values = STRENGTH_PRESETS[preset];
+            if (!values) return;
+            document.getElementById('baseline').value = values.baseline;
+            document.getElementById('focalLength').value = values.focalLength;
+            document.getElementById('holeFillQuality').value = 'fast';
+            update3DPresetHighlight();
             saveSettings(); // Save the new values
         }
+
+        // Highlight the preset the current baseline and focal length correspond to (if any)
+        function update3DPresetHighlight() {
+            const baseline = parseFloat(document.getElementById('baseline').value);
+            const focalLength = parseFloat(document.getElementById('focalLength').value);
+            let selected = null;
+            Object.entries(STRENGTH_PRESETS).forEach(([name, values]) => {
+                if (Math.abs(values.baseline - baseline) < 1e-6 && values.focalLength === focalLength) {
+                    selected = name;
+                }
+            });
+            document.querySelectorAll('#strengthPresets button').forEach(button => {
+                button.classList.toggle('active', button.dataset.preset === selected);
+            });
+            document.getElementById('strengthPresetState').textContent = selected
+                ? `Selected: ${STRENGTH_PRESETS[selected].label}.`
+                : 'Custom values (no preset selected).';
+        }
+
+        ['baseline', 'focalLength'].forEach(id => {
+            document.getElementById(id).addEventListener('input', update3DPresetHighlight);
+        });
 
         // Reset settings button
         document.getElementById('resetSettingsBtn').addEventListener('click', function() {
@@ -3152,69 +3914,6 @@
                 customDiv.style.display = 'none';
             }
         });
-
-        // Check for resumable jobs
-        function checkForResumableJobs() {
-            fetch('/detect_resumable')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.jobs && data.jobs.length > 0) {
-                        const mostRecent = data.jobs[0];
-                        showResumableJobNotification(mostRecent, data.jobs.length);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error checking for resumable jobs:', error);
-                });
-        }
-
-        function showResumableJobNotification(job, totalJobs) {
-            const message = totalJobs > 1
-                ? `Found ${totalJobs} incomplete processing jobs. Most recent: "${job.name}" (${job.highest_stage})`
-                : `Found incomplete processing: "${job.name}" (${job.highest_stage})`;
-
-            // Create toast notification
-            const toastHtml = `
-                <div class="toast align-items-center text-white bg-info border-0" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">
-                    <div class="d-flex">
-                        <div class="toast-body">
-                            <i class="fas fa-info-circle"></i> ${message}
-                            <div class="mt-2">
-                                <button class="btn btn-sm btn-light me-2" onclick="resumeJob('${job.path}')">Resume</button>
-                                <button class="btn btn-sm btn-outline-light" data-bs-dismiss="toast">Dismiss</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            const toastContainer = document.createElement('div');
-            toastContainer.innerHTML = toastHtml;
-            document.body.appendChild(toastContainer);
-
-            const toastElement = toastContainer.querySelector('.toast');
-            const toast = new bootstrap.Toast(toastElement, { autohide: false });
-            toast.show();
-        }
-
-        function resumeJob(jobPath) {
-            // Pre-populate resume field and scroll to it
-            document.getElementById('resumeDirectory').value = jobPath;
-
-            // Dismiss any visible toasts
-            document.querySelectorAll('.toast').forEach(t => {
-                const toast = bootstrap.Toast.getInstance(t);
-                if (toast) toast.hide();
-            });
-
-            // Scroll to resume section
-            document.getElementById('resumeDirectory').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-            // Highlight the field briefly
-            const resumeField = document.getElementById('resumeDirectory');
-            resumeField.classList.add('bg-warning');
-            setTimeout(() => resumeField.classList.remove('bg-warning'), 2000);
-        }
 
         // Toggle temporal window settings visibility based on depth model version
         document.getElementById('depthModelVersion').addEventListener('change', function() {
@@ -3247,8 +3946,13 @@
             initSocket();
             updateSystemInfo();
             loadSettings();
+            // Show/hide the fisheye options for the loaded (or default) state
+            document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
+            update3DPresetHighlight();
+            updateAspectWarning();
             setupAutoSave();
-            checkForResumableJobs();  // Check for incomplete jobs
+            refreshJobs();  // also shows a job that is still running (page reload)
+            setInterval(refreshJobs, 5000);
 
             // Update system info every 5 seconds
             setInterval(updateSystemInfo, 5000);

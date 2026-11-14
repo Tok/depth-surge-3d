@@ -11,6 +11,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from .parallel import map_frames
 from ...utils import (
     fit_to_canvas,
     create_vr_frame,
@@ -43,6 +44,7 @@ class VRFrameAssembler:
         settings: dict[str, Any],
         progress_tracker=None,
         total_frames: int = 0,
+        frame_names: list[str] | None = None,
     ) -> bool:
         """
         Assemble stereo frames into final VR format.
@@ -52,6 +54,7 @@ class VRFrameAssembler:
             settings: Processing settings with vr_format parameter
             progress_tracker: Optional progress tracker
             total_frames: Total number of frames (for progress tracking)
+            frame_names: Frame names (file stems) to assemble; all frames if None
 
         Returns:
             True if successful, False otherwise
@@ -69,19 +72,28 @@ class VRFrameAssembler:
             left_dir, right_dir = source_dirs
 
             # Get frame files
-            left_files = sorted(left_dir.glob("*.png"))
-            right_files = sorted(right_dir.glob("*.png"))
+            if frame_names is not None:
+                left_files = [left_dir / f"{name}.png" for name in frame_names]
+                right_files = [right_dir / f"{name}.png" for name in frame_names]
+            else:
+                left_files = sorted(left_dir.glob("*.png"))
+                right_files = sorted(right_dir.glob("*.png"))
 
             if len(left_files) != len(right_files):
                 print(
                     f"Warning: Mismatched frame count: {len(left_files)} left, {len(right_files)} right"
                 )
 
-            # Process each frame pair
-            for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
-                self._assemble_single_vr_frame(
-                    left_file, right_file, directories, settings, progress_tracker, i
-                )
+            # Process the frame pairs (in parallel threads)
+            results = map_frames(
+                lambda item: self._assemble_single_vr_frame(
+                    item[1][0], item[1][1], directories, settings, progress_tracker, item[0]
+                ),
+                list(enumerate(zip(left_files, right_files))),
+            )
+            for i, success in enumerate(results):
+                if not success:
+                    return False
 
                 # Update progress more frequently (every frame for slow operations)
                 if i % 1 == 0 or i == len(left_files) - 1:
@@ -96,6 +108,8 @@ class VRFrameAssembler:
 
             return True
 
+        except InterruptedError:
+            raise
         except Exception as e:
             print(f"Error assembling VR frames: {e}")
 

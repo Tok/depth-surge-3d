@@ -1,6 +1,6 @@
 # Performance Benchmarks and Optimization Guide
 
-**Version**: 0.10.0
+**Version**: 0.11.0
 **Last Updated**: 2026-01-18
 
 ---
@@ -462,7 +462,6 @@ watch -n 1 nvidia-smi
 **Causes**:
 - **First batch warm-up**: First chunk is always slower (model initialization)
 - **Resolution variation**: If source has dynamic resolution, processing time varies
-- **Cache access**: Depth cache lookups add variability
 - **Background processes**: Other apps stealing GPU time
 
 **Solution**: This is normal. Look at average time over 30+ frames.

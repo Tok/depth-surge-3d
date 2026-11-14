@@ -17,6 +17,8 @@
 
 ### Resolution Options
 
+- **`--fisheye-fit`**: How much of a wide or tall video the square fisheye view shows, 0-1 (default: 0.5). 0 fills the view and cuts off the sides (44% of a 16:9 frame's width); 1 shows the whole frame with black above and below; 0.5 shows 78% of the width
+- **`--no-distortion`**: Flat 3D without fisheye, keeping the whole frame at the video's aspect ratio
 - **`--vr-resolution`**: Per-eye resolution: a preset, `custom:WIDTHxHEIGHT`, or `auto` (default). Auto picks a square preset when fisheye is enabled (VR180 eyes are square) and a preset matching the source aspect for flat 3D (`--no-distortion`). If the content's aspect differs from the chosen resolution, it's fitted with black bars, never stretched.
   - **Square**: square-480, square-720, square-1k, square-2k, square-3k, square-4k, square-5k
   - **16:9**: 16x9-480p, 16x9-720p, 16x9-1080p, 16x9-1440p, 16x9-4k, 16x9-5k, 16x9-8k
@@ -57,8 +59,21 @@
 ### Output Options
 
 - **`--no-audio`**: Do not preserve audio from original video (audio preserved by default)
-- **`--no-intermediates`**: Don't save intermediate depth maps and stereo frames
-- **`--resume`**: Resume processing from an existing output directory
+- **`--keep-intermediates`**: Keep every step's images in the output directory (needed for `--reuse` with changed settings). Off by default: the extracted frames are deleted as the job goes and nothing else is kept, so disk use stays near the size of the extracted frames
+- **`--resume DIRECTORY`**: Continue an interrupted job where it stopped (original settings and model)
+- **`--assemble-partial DIRECTORY`**: Create a video from the VR frames an unfinished job has completed so far
+- **`--reuse DIRECTORY`**: Run in an existing output directory with the settings of this command line; frames, depth maps and later steps are reused as far as the settings allow
+- **`--video-encoder`**: `auto` (NVENC H.265 if available, else H.264), `nvenc`, `libx264`, `libx265`
+
+### Quality Options
+
+- **`--depth-resolution`**: Depth model input resolution: `auto` (matches the source), `518`, `720`, `1080`, `1440`, `2160`
+- **`--super-sample`**: Resolution the stereo views are rendered at: `auto`, `none`, `2x`, `1080p`, `4k`
+
+### Processing Mode
+
+- **`--mode`**: `batched` (default) runs steps 2-7 batch by batch, so finished VR frames appear early; `sequential` finishes each step for the whole video first
+- **`--batch-size`**: Frames per batch, 10-2000 (default: 120, a whole number of seconds at 24, 30 and 60 fps). Progress is saved after every batch in both modes
 
 ## Stereo Parameters Deep Dive
 

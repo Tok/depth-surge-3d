@@ -1,5 +1,10 @@
 """Unit tests for io_operations.py pure helper functions."""
 
+import json
+
+import cv2
+import numpy as np
+import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from src.depth_surge_3d.io.operations import (
@@ -235,8 +240,9 @@ class TestCreateOutputDirectories:
         # Pipeline directories are always created (later steps read from them)...
         for name in ("frames", "left_frames", "right_frames", "left_cropped", "vr_frames"):
             assert name in result
-        # ...informational ones only when keeping intermediates
-        assert "depth_maps" not in result
+        # ...including depth maps (stereo generation reads them from disk)
+        assert "depth_maps" in result
+        # ...legacy/informational ones only when keeping intermediates
         assert "supersampled" not in result
 
         # Should still create necessary output directories (vr_frames, cropped frames)
@@ -1148,3 +1154,92 @@ class TestRemoveIntermediateDirectories:
                 "original_audio.flac",
             ]
         )
+
+
+class TestDepthMapFiles:
+    """Depth maps are stored as 16-bit PNGs."""
+
+    def test_round_trip_keeps_16_bit_precision(self, tmp_path):
+        from src.depth_surge_3d.io.operations import load_depth_map, save_depth_map
+
+        depth = np.linspace(0.0, 1.0, 64 * 48, dtype=np.float32).reshape(48, 64)
+        path = tmp_path / "depth.png"
+
+        assert save_depth_map(path, depth) is True
+        loaded = load_depth_map(path)
+
+        assert cv2.imread(str(path), cv2.IMREAD_UNCHANGED).dtype == np.uint16
+        assert loaded.dtype == np.float32
+        assert np.abs(loaded - depth).max() < 1 / 65535
+
+    def test_values_are_clipped(self, tmp_path):
+        from src.depth_surge_3d.io.operations import load_depth_map, save_depth_map
+
+        path = tmp_path / "depth.png"
+        save_depth_map(path, np.array([[-1.0, 0.5, 2.0]]))
+        assert load_depth_map(path).tolist() == [[0.0, pytest.approx(0.5, abs=1e-4), 1.0]]
+
+    def test_reads_8_bit_and_colour_files_from_older_versions(self, tmp_path):
+        from src.depth_surge_3d.io.operations import load_depth_map
+
+        gray = tmp_path / "gray.png"
+        colour = tmp_path / "colour.png"
+        cv2.imwrite(str(gray), np.full((4, 4), 255, np.uint8))
+        cv2.imwrite(str(colour), np.full((4, 4, 3), 51, np.uint8))
+
+        assert load_depth_map(gray).max() == 1.0
+        assert load_depth_map(colour) == pytest.approx(np.full((4, 4), 0.2))
+
+    def test_missing_file(self, tmp_path):
+        from src.depth_surge_3d.io.operations import load_depth_map
+
+        assert load_depth_map(tmp_path / "missing.png") is None
+
+
+class TestPipelineProgress:
+    """Resume information read from the pipeline state file."""
+
+    def test_read_pipeline_progress(self, tmp_path):
+        from src.depth_surge_3d.io.operations import read_pipeline_progress
+
+        assert read_pipeline_progress(tmp_path) is None
+        (tmp_path / "pipeline_state.json").write_text(
+            json.dumps({"total_frames": 240, "done": {"depth": 150, "assemble": 120}})
+        )
+        assert read_pipeline_progress(tmp_path) == {
+            "total_frames": 240,
+            "done": {"depth": 150, "assemble": 120},
+            "segments": [],
+        }
+        (tmp_path / "pipeline_state.json").write_text("not json")
+        assert read_pipeline_progress(tmp_path) is None
+
+    def test_analyze_progress_prefers_pipeline_state(self, tmp_path):
+        from src.depth_surge_3d.io.operations import analyze_processing_progress
+
+        vr_dir = tmp_path / "99_vr_frames"
+        vr_dir.mkdir()
+        for i in range(5):  # one more file than the state counts as finished
+            (vr_dir / f"frame_{i:06d}.png").touch()
+        (tmp_path / "pipeline_state.json").write_text(
+            json.dumps({"total_frames": 10, "done": {"assemble": 4}})
+        )
+
+        progress = analyze_processing_progress(tmp_path, {})
+
+        assert progress["frames_processed"] == 4
+        assert progress["total_frames"] == 10
+        assert progress["can_resume_from_intermediates"] is True
+
+    def test_find_settings_file_returns_newest(self, tmp_path):
+        import os
+        from src.depth_surge_3d.io.operations import find_settings_file
+
+        old = tmp_path / "a_1-settings.json"
+        new = tmp_path / "a_2-settings.json"
+        old.write_text("{}")
+        new.write_text("{}")
+        os.utime(old, (1000, 1000))
+        os.utime(new, (2000, 2000))
+
+        assert find_settings_file(tmp_path) == new

@@ -4,7 +4,12 @@ Re-exports all processing modules for backward compatibility.
 """
 
 # Orchestration modules
-from .orchestration import ProcessingOrchestrator, VideoProcessor
+from .orchestration import (
+    ProcessingOrchestrator,
+    VideoProcessor,
+    assemble_partial_video,
+    count_finished_vr_frames,
+)
 
 # Frame processing modules
 from .frames import (
@@ -22,6 +27,8 @@ __all__ = [
     # Orchestration
     "ProcessingOrchestrator",
     "VideoProcessor",
+    "assemble_partial_video",
+    "count_finished_vr_frames",
     # Frame processing
     "DepthMapProcessor",
     "StereoPairGenerator",

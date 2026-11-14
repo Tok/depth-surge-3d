@@ -58,7 +58,8 @@ Missing models are also downloaded automatically on first use.
 | `da3-giant`, `da3-giant-large` | Depth Anything V3 1.1 | Highest DA3 quality, most VRAM | CC BY-NC 4.0 |
 
 Groups: `recommended`, `vda`, `vda-metric`, `da3`. DA3 models are stored in the Hugging Face
-cache (`~/.cache/huggingface`), the Video-Depth-Anything files under `models/`.
+cache (`~/.cache/huggingface`), the Video-Depth-Anything files under `models/`. Real-ESRGAN
+upscaling weights are downloaded to `models/Real-ESRGAN/` the first time upscaling is used.
 
 ## Manual Installation
 

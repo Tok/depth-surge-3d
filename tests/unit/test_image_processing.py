@@ -1015,3 +1015,54 @@ class TestFitToCanvas:
         out = apply_fisheye_square_crop(img, 320, 180, crop_factor=1.0)
         assert out.shape == (180, 320, 3)
         assert (out[:, :60] == 0).all() and (out[:, 70:250] == 255).all()
+
+
+class TestFisheyeFrameFit:
+    """Zooming the fisheye view out shows more of a frame that isn't square."""
+
+    def _source_x_at_view_edge(self, frame_fit, width=1920, height=1080):
+        from src.depth_surge_3d.utils.imaging.image_processing import calculate_fisheye_coordinates
+
+        x_map, _ = calculate_fisheye_coordinates(
+            width, height, 180, "stereographic", 0.7, frame_fit
+        )
+        # right edge of the square view, on the horizontal centre line
+        edge = int(width / 2 + 0.7 * height / 2)
+        return x_map[height // 2, edge] - width / 2
+
+    def test_fill_reaches_only_as_far_as_the_frame_is_high(self):
+        assert self._source_x_at_view_edge(0.0) == pytest.approx(540, abs=3)
+
+    def test_whole_frame_reaches_the_side_edge(self):
+        assert self._source_x_at_view_edge(1.0) == pytest.approx(960, abs=5)
+
+    def test_half_way(self):
+        assert self._source_x_at_view_edge(0.5) == pytest.approx(750, abs=5)
+
+    def test_zoom_factor(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import fisheye_zoom_out
+
+        assert fisheye_zoom_out(1920, 1080, 0.0) == 1.0
+        assert fisheye_zoom_out(1920, 1080, 1.0) == pytest.approx(16 / 9)
+        assert fisheye_zoom_out(1080, 1920, 1.0) == pytest.approx(16 / 9)
+        assert fisheye_zoom_out(1080, 1080, 1.0) == 1.0
+        assert fisheye_zoom_out(1920, 1080, 7.0) == pytest.approx(16 / 9)
+        assert fisheye_zoom_out(0, 0, 1.0) == 1.0
+
+    def test_whole_frame_leaves_black_above_and_below(self):
+        from src.depth_surge_3d.utils.imaging.image_processing import (
+            apply_fisheye_distortion,
+            apply_fisheye_square_crop,
+        )
+
+        frame = np.full((180, 320, 3), 200, np.uint8)
+        filled = apply_fisheye_square_crop(
+            apply_fisheye_distortion(frame, 180, "stereographic", 0.7, 0.0), 96, 96, 0.7
+        )
+        whole = apply_fisheye_square_crop(
+            apply_fisheye_distortion(frame, 180, "stereographic", 0.7, 1.0), 96, 96, 0.7
+        )
+
+        assert filled[2, 48].min() > 150 and filled[48, 2].min() > 150  # view is filled
+        assert whole[2, 48].max() == 0 and whole[93, 48].max() == 0  # black bars
+        assert whole[48, 2].min() > 150 and whole[48, 48].min() > 150  # full width shown

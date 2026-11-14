@@ -15,6 +15,8 @@ import argparse
 import sys
 import signal
 import base64
+import json
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -47,9 +49,10 @@ from src.depth_surge_3d.core.constants import (  # noqa: E402
     ASPECT_RATIO_SBS_THRESHOLD,
     ASPECT_RATIO_OU_THRESHOLD,
     SESSION_ID_DISPLAY_LENGTH,
-    PROGRESS_UPDATE_INTERVAL,
+    PROGRESS_EMIT_INTERVAL,
     PROGRESS_DECIMAL_PLACES,
-    PROGRESS_STEP_WEIGHTS,
+    PROCESSING_MODES,
+    BATCH_SIZE_RANGE,
     PREVIEW_UPDATE_INTERVAL,
     PREVIEW_DOWNSCALE_WIDTH,
     FFMPEG_OVERWRITE_FLAG,
@@ -75,10 +78,30 @@ from flask_socketio import SocketIO  # noqa: E402
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from depth_surge_3d.rendering import create_stereo_projector  # noqa: E402
-from depth_surge_3d.processing import VideoProcessor  # noqa: E402
+from depth_surge_3d.processing import (  # noqa: E402
+    VideoProcessor,
+    assemble_partial_video,
+    count_finished_vr_frames,
+)
+from depth_surge_3d.io.operations import (  # noqa: E402
+    find_settings_file,
+    get_available_space,
+    read_pipeline_progress,
+)
+from depth_surge_3d.utils.domain.disk_estimate import estimate_disk_usage  # noqa: E402
+from depth_surge_3d.utils.path_utils import calculate_frame_range  # noqa: E402
+from depth_surge_3d.utils.domain.progress import (  # noqa: E402,F401
+    StepProgressState,
+    TqdmProgressTracker,
+    effective_step_weights as _effective_step_weights,  # re-exported for tests
+    format_time_duration,
+)
 
 # Global flags and state
 VERBOSE = False
+# Keep every step's images of all jobs (server started with --keep-intermediates).
+# Off by default: jobs only keep what they still need, plus the video.
+KEEP_INTERMEDIATES = False
 SHUTDOWN_FLAG = False
 ACTIVE_PROCESSES = set()
 
@@ -308,6 +331,77 @@ current_processing = {
 }
 
 
+# Jobs waiting for the running one to finish, in start order.
+# Each: session_id, video_path, settings, output_dir
+job_queue: list[dict[str, Any]] = []
+queue_lock = threading.RLock()
+
+
+def _video_in_loop(settings: dict[str, Any]) -> bool:
+    """The video is encoded per batch unless motion interpolation needs it in one pass."""
+    return not settings.get("experimental_frame_interpolation")
+
+
+def _launch_job(job: dict[str, Any]) -> None:
+    """Start a job in the background (caller holds queue_lock; no job may be running)."""
+    reset_progress_state(job["session_id"])
+    current_processing["active"] = True
+    current_processing["output_dir"] = str(job["output_dir"])
+    # Known before the first progress update, so the UI can show the batch loop right away
+    mode = job["settings"].get("processing_mode")
+    current_processing["processing_mode"] = (
+        mode if mode in PROCESSING_MODES else DEFAULT_SETTINGS["processing_mode"]
+    )
+    current_processing["video_in_loop"] = _video_in_loop(job["settings"])
+    current_processing["thread"] = socketio.start_background_task(
+        process_video_async,
+        job["session_id"],
+        job["video_path"],
+        job["settings"],
+        job["output_dir"],
+    )
+
+
+def submit_job(video_path: Path, settings: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+    """
+    Start a job, or queue it if another one is running.
+
+    Returns:
+        Response data: success, session_id, output_dir, queued and (if queued) position;
+        or success False with an error if that directory is already running or queued
+    """
+    job = {
+        "session_id": str(uuid.uuid4()),
+        "video_path": video_path,
+        "settings": settings,
+        "output_dir": output_dir,
+    }
+    response = {"success": True, "session_id": job["session_id"], "output_dir": str(output_dir)}
+    with queue_lock:
+        busy_dirs = [str(queued["output_dir"]) for queued in job_queue]
+        if current_processing["active"]:
+            busy_dirs.append(str(current_processing.get("output_dir")))
+        if str(output_dir) in busy_dirs:
+            return {"success": False, "error": "This job is already running or queued"}
+
+        if current_processing["active"]:
+            job_queue.append(job)
+            return {**response, "queued": True, "position": len(job_queue)}
+        _launch_job(job)
+    return {**response, "queued": False}
+
+
+def _finish_job() -> None:
+    """Mark the running job as finished and start the next queued one."""
+    with queue_lock:
+        current_processing["active"] = False
+        current_processing["session_id"] = None
+        current_processing["stop_requested"] = False
+        current_processing["thread"] = None
+        if job_queue and not SHUTDOWN_FLAG:
+            _launch_job(job_queue.pop(0))
+
+
 _INITIAL_PROGRESS = {
     "progress": 0,
     "stage": "Initializing...",
@@ -318,6 +412,8 @@ _INITIAL_PROGRESS = {
     "step_index": 0,
     "step_progress": 0,
     "step_total": 0,
+    "last_progress": None,
+    "output_dir": None,
 }
 
 
@@ -424,18 +520,46 @@ def get_system_info() -> dict[str, Any]:
     return info
 
 
-def _effective_step_weights(
-    steps: list[str], skipped_steps: set[str] | frozenset[str]
-) -> list[float]:
+def resolve_output_dimensions(settings: dict[str, Any], video_info: dict[str, Any]) -> None:
     """
-    PURE: Progress weight per step, with disabled optional steps weighted 0.
+    Add the sizes derived from the source video and VR resolution to the settings.
 
-    The remaining weights are rescaled to sum to 1, so overall progress doesn't jump (e.g. by
-    18% when AI upscaling is off) when a skipped step is passed.
+    Resolves an "auto" VR resolution to a preset and sets per-eye, VR output and source
+    dimensions (the values the pipeline, and the disk space estimate, work with).
     """
-    weights = [0.0 if name in skipped_steps else w for name, w in zip(steps, PROGRESS_STEP_WEIGHTS)]
-    total = sum(weights)
-    return [w / total for w in weights] if total > 0 else list(PROGRESS_STEP_WEIGHTS)
+    from depth_surge_3d.utils.domain.resolution import (
+        get_resolution_dimensions,
+        calculate_vr_output_dimensions,
+        auto_detect_resolution,
+    )
+
+    vr_resolution = settings.get("vr_resolution", "auto")
+    if vr_resolution == "auto":
+        vr_resolution = auto_detect_resolution(
+            video_info["width"],
+            video_info["height"],
+            settings.get("vr_format", "side_by_side"),
+            fisheye=bool(settings.get("apply_distortion", True)),
+        )
+
+    # Keep the resolved preset (output filename, saved settings) instead of "auto"
+    settings["vr_resolution"] = vr_resolution
+
+    per_eye_width, per_eye_height = get_resolution_dimensions(vr_resolution)
+    vr_output_width, vr_output_height = calculate_vr_output_dimensions(
+        per_eye_width, per_eye_height, settings.get("vr_format", "side_by_side")
+    )
+    settings.update(
+        {
+            "per_eye_width": per_eye_width,
+            "per_eye_height": per_eye_height,
+            "vr_output_width": vr_output_width,
+            "vr_output_height": vr_output_height,
+            "source_width": video_info["width"],
+            "source_height": video_info["height"],
+            "source_fps": video_info["fps"],
+        }
+    )
 
 
 class ProgressCallback:
@@ -449,6 +573,7 @@ class ProgressCallback:
         enable_live_preview: bool = True,
         preview_update_interval: float = PREVIEW_UPDATE_INTERVAL,
         skipped_steps: set[str] | frozenset[str] = frozenset(),
+        video_in_loop: bool = True,
     ) -> None:
         self.session_id = session_id
         self.total_frames = total_frames
@@ -456,36 +581,31 @@ class ProgressCallback:
         self.current_frame = 0
         self.last_update_time = 0
         self.current_phase = "extraction"  # extraction, processing, video
-        self.step_start_times = {}  # Track start time for each step
-        self.current_step_name = None
-        self.start_time = time.time()  # For ETA calculation
-        self.step_frame_times = []  # Track recent frame times for current step
-        self.step_start_progress = 0  # Track progress when step started
 
         # Preview tracking
         self.enable_live_preview = enable_live_preview
-        self.last_preview_time = 0
+        # Throttled per kind of preview: otherwise the frequent VR previews crowd out the rest
+        self.last_preview_times: dict[str, float] = {}
         self.preview_interval = preview_update_interval
         self.preview_downscale_width = PREVIEW_DOWNSCALE_WIDTH
 
-        # Step tracking (used for all modes)
-        # Note: These must match the step names sent from video_processor.py
-        self.steps = [
-            "Frame Extraction",  # Step 1: FFmpeg extracts frames
-            "Depth Map Generation",  # Step 2: AI generates depth maps
-            "Stereo Pair Creation",  # Step 3: Create L/R stereo pairs (includes frame loading)
-            "Fisheye Distortion",  # Step 4: Apply distortion (optional)
-            "Crop Frames",  # Step 5: Crop frames for VR
-            "AI Upscaling",  # Step 6: AI upscaling (optional)
-            "VR Assembly",  # Step 7: Assemble final VR frames
-            "Video Creation",  # Step 8: FFmpeg creates video
-        ]
-        # Weighted progress based on actual timing measurements
-        # [2%, 35%, 20%, 8%, 2%, 18%, 8%, 7%] = 100%
-        self.step_weights = _effective_step_weights(self.steps, skipped_steps)
-        self.current_step_index = 0
-        self.step_progress = 0
-        self.step_total = 0
+        # Per-step progress (shared with the CLI's progress bars). Step names must match
+        # the `step_name` values the pipeline stages report (PIPELINE_STEP_NAMES).
+        self.video_in_loop = video_in_loop
+        # A frame is finished once it is encoded (or assembled, if the video is encoded at the end)
+        self._last_frame_step = "Video Creation" if video_in_loop else "VR Assembly"
+        self.state = StepProgressState(skipped_steps, video_in_loop)
+        self.steps = self.state.steps
+        self.step_weights = self.state.weights
+        # The server's console shows the same progress bars as the CLI
+        self.console = TqdmProgressTracker(
+            skipped_steps, batched=processing_mode != "sequential", video_in_loop=video_in_loop
+        )
+
+    def set_batch_info(self, index: int, count: int, start: int, size: int) -> None:
+        """Batched mode: the batch the inner loop (steps 2-7) is working on."""
+        self.state.set_batch(index, count, start, size)
+        self.console.set_batch_info(index, count, start, size)
 
     def send_preview_frame(
         self,
@@ -498,7 +618,7 @@ class ProgressCallback:
 
         Args:
             frame_path: Path to the frame image file
-            frame_type: Type of frame ("depth_map", "stereo_left", "stereo_right", "vr_frame")
+            frame_type: Type of frame ("depth_map" or "vr_frame")
             frame_number: Frame number being processed
         """
         # Check if preview is enabled
@@ -508,7 +628,7 @@ class ProgressCallback:
         current_time = time.time()
 
         # Throttle preview updates
-        if current_time - self.last_preview_time < self.preview_interval:
+        if current_time - self.last_preview_times.get(frame_type, 0) < self.preview_interval:
             return
 
         try:
@@ -563,7 +683,7 @@ class ProgressCallback:
 
             socketio.emit("frame_preview", preview_data, room=self.session_id)
 
-            self.last_preview_time = current_time
+            self.last_preview_times[frame_type] = current_time
 
         except Exception as e:
             # Log error but don't interrupt processing
@@ -583,7 +703,7 @@ class ProgressCallback:
 
         Args:
             frame_array: Frame as numpy array (BGR format)
-            frame_type: Type of frame ("depth_map", "stereo_left", "upscaled_left", etc)
+            frame_type: Type of frame ("depth_map" or "vr_frame")
             frame_number: Frame number being processed
         """
         # Check if preview is enabled
@@ -593,7 +713,7 @@ class ProgressCallback:
         current_time = time.time()
 
         # Throttle preview updates
-        if current_time - self.last_preview_time < self.preview_interval:
+        if current_time - self.last_preview_times.get(frame_type, 0) < self.preview_interval:
             return
 
         try:
@@ -642,7 +762,7 @@ class ProgressCallback:
 
             socketio.emit("frame_preview", preview_data, room=self.session_id)
 
-            self.last_preview_time = current_time
+            self.last_preview_times[frame_type] = current_time
 
         except Exception as e:
             # Log error but don't interrupt processing
@@ -651,94 +771,7 @@ class ProgressCallback:
                 f"{type(e).__name__}: {e}"
             )
 
-    def _calculate_eta(self, current_progress: float) -> str | None:
-        """
-        Calculate estimated time remaining using adaptive per-step timing.
-
-        This uses actual measured time-per-frame for the current step and
-        weights for remaining steps, providing much more accurate ETAs
-        especially for slow steps like ESRGAN upscaling.
-
-        Args:
-            current_progress: Current progress percentage (0-100)
-
-        Returns:
-            Formatted ETA string (e.g., "5m 23s") or None if not enough data
-        """
-        if current_progress <= 0:
-            return None
-
-        current_time = time.time()
-        elapsed = current_time - self.start_time
-
-        # Need at least 3 seconds of data for reasonable estimate
-        if elapsed < 3:
-            return None
-
-        # Strategy: Estimate remaining time for current step + remaining steps
-        remaining_time = 0
-
-        # 1. Estimate remaining time for current step
-        if self.step_total > 0 and self.step_progress > 0:
-            # Use actual measured rate for current step
-            step_start_time = self.step_start_times.get(self.current_step_name, self.start_time)
-            step_elapsed = current_time - step_start_time
-
-            # Need at least 2 seconds into current step for accurate measurement
-            if step_elapsed >= 2:
-                frames_completed = self.step_progress
-                frames_remaining = self.step_total - self.step_progress
-
-                # Calculate time per frame for this step
-                time_per_frame = step_elapsed / max(frames_completed, 1)
-
-                # Estimate remaining time for this step
-                step_remaining_time = time_per_frame * frames_remaining
-                remaining_time += step_remaining_time
-
-        # 2. Estimate time for remaining steps using weight-based projection
-        # Use the overall rate as a fallback for future steps
-        if self.current_step_index < len(self.steps) - 1:
-            # Estimate time based on overall average rate (fallback for steps we haven't measured)
-            if current_progress > 5:  # Need some progress to estimate
-                avg_time_per_percent = elapsed / current_progress
-                remaining_percent = 100 - current_progress
-                fallback_estimate = avg_time_per_percent * remaining_percent
-
-                # Weight between step-based estimate and fallback
-                # Use step-based more heavily when we have good data
-                if remaining_time > 0:
-                    # We have a step-based estimate, use it primarily
-                    remaining_time = remaining_time * 0.8 + fallback_estimate * 0.2
-                else:
-                    # Fall back to overall rate
-                    remaining_time = fallback_estimate
-
-        # Fallback: use simple overall progress rate if we don't have step data
-        if remaining_time <= 0 and current_progress > 0:
-            progress_ratio = current_progress / 100.0
-            estimated_total_time = elapsed / progress_ratio
-            remaining_time = estimated_total_time - elapsed
-
-        if remaining_time < 0:
-            return None
-
-        return self._format_time(remaining_time)
-
-    def _format_time(self, seconds: float) -> str:
-        """Format seconds as human-readable time (e.g., '5m 23s' or '2h 15m')."""
-        if seconds < 60:
-            return f"{int(seconds)}s"
-        elif seconds < 3600:  # Less than 1 hour
-            minutes = int(seconds // 60)
-            secs = int(seconds % 60)
-            return f"{minutes}m {secs}s"
-        else:  # 1 hour or more
-            hours = int(seconds // 3600)
-            minutes = int((seconds % 3600) // 60)
-            return f"{hours}h {minutes}m"
-
-    def update_progress(  # noqa: C901
+    def update_progress(
         self,
         stage: str,
         frame_num: int | None = None,
@@ -747,98 +780,64 @@ class ProgressCallback:
         step_progress: int | None = None,
         step_total: int | None = None,
     ) -> None:
-        import time
+        """
+        Record a step's progress (frames of the whole video) and send it to the browser.
 
+        Raises:
+            InterruptedError: If the user requested a stop
+        """
         # Check if stop has been requested
         if current_processing.get("stop_requested", False):
             raise InterruptedError("Processing stopped by user request")
 
-        # Throttle updates to avoid threading issues
+        # Always record (so no step's final count is lost); only sending is throttled
+        self.state.record(step_name, step_progress, step_total, phase)
+        self.console.update_progress(
+            stage,
+            phase=phase,
+            step_name=step_name,
+            step_progress=step_progress,
+            step_total=step_total,
+        )
+        if phase and phase != "resume":
+            self.current_phase = phase
+        if frame_num is not None:
+            self.current_frame = frame_num
+
         current_time = time.time()
-        if current_time - self.last_update_time < PROGRESS_UPDATE_INTERVAL:
+        step_finished = step_total is not None and step_progress == step_total
+        if not step_finished and current_time - self.last_update_time < PROGRESS_EMIT_INTERVAL:
             return
         self.last_update_time = current_time
 
-        # Update phase if provided
-        if phase:
-            self.current_phase = phase
-
-        # Track step changes and timing
-        if step_name and step_name != self.current_step_name:
-            # New step started
-            self.current_step_name = step_name
-            self.step_start_times[step_name] = current_time
-            self.step_frame_times = []  # Reset frame times for new step
-            self.step_start_progress = 0  # Reset progress for new step
-
-            # Update step index
-            if step_name in self.steps:
-                self.current_step_index = self.steps.index(step_name)
-
-        # Update step progress
-        if step_progress is not None:
-            self.step_progress = step_progress
-        if step_total is not None:
-            self.step_total = step_total
-
-        if frame_num is not None:
-            self.current_frame = frame_num
-            current_processing["current_frame"] = frame_num
-
-        current_processing["stage"] = stage
-
-        # Calculate overall progress using weighted steps
-        step_progress_ratio = (
-            (self.step_progress / max(self.step_total, 1)) if self.step_total > 0 else 0
-        )
-
-        # Sum weights of all completed steps
-        cumulative_weight = sum(self.step_weights[: self.current_step_index])
-
-        # Add weighted progress of current step
-        if self.current_step_index < len(self.step_weights):
-            cumulative_weight += step_progress_ratio * self.step_weights[self.current_step_index]
-
-        progress = round(cumulative_weight * 100, PROGRESS_DECIMAL_PLACES)
-
-        current_processing["progress"] = round(progress, PROGRESS_DECIMAL_PLACES)
-        current_processing["phase"] = self.current_phase
-        current_processing["processing_mode"] = self.processing_mode
-        current_processing["step_name"] = step_name or self.current_step_name
-        current_processing["step_progress"] = self.step_progress
-        current_processing["step_total"] = self.step_total
-        current_processing["step_index"] = self.current_step_index
-
-        # Calculate ETA
-        eta_str = self._calculate_eta(progress)
-
-        # Emit progress update (always include step data for UI)
+        state = self.state
+        index = state.current_step_index
+        eta = state.eta_seconds()
         progress_data = {
-            "progress": current_processing["progress"],
+            "progress": round(state.overall(), PROGRESS_DECIMAL_PLACES),
             "stage": stage,
             "current_frame": self.current_frame,
             "total_frames": self.total_frames,
+            # frames that are through every per-frame step (for the overall label)
+            "finished_frames": min(
+                state.done[state.steps.index(self._last_frame_step)], self.total_frames
+            ),
             "phase": self.current_phase,
             "processing_mode": self.processing_mode,
-            "step_name": self.current_step_name or "",
-            "step_progress": self.step_progress,
-            "step_total": self.step_total,
-            "step_index": self.current_step_index,
-            "total_steps": len(self.steps),
-            "eta": eta_str,  # Add ETA
+            "video_in_loop": self.video_in_loop,
+            "step_name": state.steps[index],
+            "step_progress": state.done[index],
+            "step_total": state.totals[index],
+            "step_index": index,
+            "total_steps": len(state.steps),
+            "steps": state.display_steps(),
+            "batch": dict(state.batch, progress=state.batch_ratio()) if state.batch else None,
+            "eta": format_time_duration(eta) if eta is not None else None,
         }
-
-        # Console output - show both overall and step progress
-        step_percent = (
-            (self.step_progress / max(self.step_total, 1)) * 100 if self.step_total > 0 else 0
+        current_processing.update(
+            {k: v for k, v in progress_data.items() if k not in ("steps", "batch", "eta")}
         )
-        eta_suffix = f" | ETA: {eta_str}" if eta_str else ""
-        progress_msg = (
-            f"Overall: {progress:05.1f}% | "
-            f"Step: {step_percent:03.0f}% ({self.step_progress:04d}/{self.step_total:04d}) | "
-            f"{stage}{eta_suffix}"
-        )
-        print(progress_msg)
+        current_processing["last_progress"] = progress_data
 
         try:
             # Emit progress (socketio.start_background_task handles context automatically)
@@ -847,31 +846,15 @@ class ProgressCallback:
             socketio.sleep(SOCKETIO_SLEEP_YIELD)
         except Exception as e:
             print(console_warning(f"Error emitting progress: {e}"))
-            import traceback
-
-            traceback.print_exc()
-
-    def get_step_duration(self):
-        """Get duration of current step in seconds."""
-        import time
-
-        if self.current_step_name and self.current_step_name in self.step_start_times:
-            return time.time() - self.step_start_times[self.current_step_name]
-        return 0
 
     def finish(self, message: str = "Processing complete"):
-        """Finish progress tracking (compatibility with ProgressTracker interface)."""
+        """Finish progress tracking (the job itself announces completion to the browser)."""
+        self.console.finish()
         print(f"{message}")
-        try:
-            socketio.emit(
-                "processing_complete",
-                {"success": True, "message": message},
-                room=self.session_id,
-            )
-            # Allow time for message to be sent
-            socketio.sleep(SOCKETIO_SLEEP_YIELD)
-        except Exception as e:
-            print(console_warning(f"Error emitting completion: {e}"))
+
+    def close(self) -> None:
+        """Release the console (progress bars) when the job ends, however it ended."""
+        self.console.close()
 
 
 def process_video_async(  # noqa: C901
@@ -880,10 +863,20 @@ def process_video_async(  # noqa: C901
     """Process video in background thread"""
     import torch  # Import here to avoid CUDA initialization issues in main thread
 
+    projector = None
+    callback = None
     try:
         current_processing["active"] = True
         current_processing["session_id"] = session_id
         current_processing["stop_requested"] = False
+        current_processing["output_dir"] = str(output_dir)
+
+        # Settings the request left out get their defaults (the pipeline expects them all)
+        for key, value in DEFAULT_SETTINGS.items():
+            if key not in ("output_dir", "target_fps"):
+                settings.setdefault(key, value)
+        # Keeping intermediate files is a server option, not a per-job setting
+        settings["keep_intermediates"] = KEEP_INTERMEDIATES
 
         # Check CUDA availability in this thread
         cuda_available = torch.cuda.is_available()
@@ -959,14 +952,20 @@ def process_video_async(  # noqa: C901
         original_fps = video_info["fps"]
 
         # Calculate actual frame range that will be extracted (matching VideoProcessor logic)
-        from depth_surge_3d.utils.path_utils import calculate_frame_range
-
         start_frame, end_frame = calculate_frame_range(
             video_info["frame_count"], original_fps, start_time, end_time
         )
         expected_frames = end_frame - start_frame
 
-        processing_mode = settings.get("processing_mode", "serial")
+        processing_mode = settings.get("processing_mode")
+        if processing_mode not in PROCESSING_MODES:
+            processing_mode = DEFAULT_SETTINGS["processing_mode"]
+        settings["processing_mode"] = processing_mode
+        try:
+            batch_size = int(settings.get("batch_size") or DEFAULT_SETTINGS["batch_size"])
+        except (TypeError, ValueError):
+            batch_size = DEFAULT_SETTINGS["batch_size"]
+        settings["batch_size"] = max(BATCH_SIZE_RANGE[0], min(BATCH_SIZE_RANGE[1], batch_size))
         enable_live_preview = settings.get("enable_live_preview", True)
         preview_update_interval = settings.get("preview_update_interval", PREVIEW_UPDATE_INTERVAL)
         skipped_steps = set()
@@ -981,57 +980,15 @@ def process_video_async(  # noqa: C901
             enable_live_preview,
             preview_update_interval,
             skipped_steps=skipped_steps,
+            video_in_loop=_video_in_loop(settings),
         )
 
         # Give client time to join the session room before starting processing
         socketio.sleep(INITIAL_PROCESSING_DELAY)
 
-        # Use the appropriate processor based on processing mode
-        if processing_mode == "batch":
-            from depth_surge_3d.processing.batch_processor import BatchProcessor
+        processor = VideoProcessor(projector.depth_estimator)
 
-            processor = BatchProcessor(projector.depth_estimator)
-        else:
-            processor = VideoProcessor(projector.depth_estimator)
-
-        # Calculate resolution settings that VideoProcessor expects
-        from depth_surge_3d.utils.domain.resolution import (
-            get_resolution_dimensions,
-            calculate_vr_output_dimensions,
-            auto_detect_resolution,
-        )
-
-        # Resolve VR resolution if auto
-        vr_resolution = settings.get("vr_resolution", "auto")
-        if vr_resolution == "auto":
-            vr_resolution = auto_detect_resolution(
-                video_info["width"],
-                video_info["height"],
-                settings.get("vr_format", "side_by_side"),
-                fisheye=bool(settings.get("apply_distortion", True)),
-            )
-
-        # Keep the resolved preset (output filename, saved settings) instead of "auto"
-        settings["vr_resolution"] = vr_resolution
-
-        # Get resolution dimensions
-        per_eye_width, per_eye_height = get_resolution_dimensions(vr_resolution)
-        vr_output_width, vr_output_height = calculate_vr_output_dimensions(
-            per_eye_width, per_eye_height, settings.get("vr_format", "side_by_side")
-        )
-
-        # Add calculated dimensions to settings
-        settings.update(
-            {
-                "per_eye_width": per_eye_width,
-                "per_eye_height": per_eye_height,
-                "vr_output_width": vr_output_width,
-                "vr_output_height": vr_output_height,
-                "source_width": video_info["width"],
-                "source_height": video_info["height"],
-                "source_fps": video_info["fps"],
-            }
-        )
+        resolve_output_dimensions(settings, video_info)
 
         success = processor.process(
             video_path=video_path,
@@ -1063,9 +1020,16 @@ def process_video_async(  # noqa: C901
     except InterruptedError as e:
         # Handle user-requested stop
         try:
+            finished = count_finished_vr_frames(Path(output_dir))
             socketio.emit(
                 "processing_stopped",
-                {"success": True, "message": str(e)},
+                {
+                    "success": True,
+                    "message": str(e),
+                    "output_dir": str(output_dir),
+                    "finished_frames": finished,
+                    "fps": settings.get("source_fps"),
+                },
                 room=session_id,
             )
             # Allow time for message to be sent before thread terminates
@@ -1075,7 +1039,11 @@ def process_video_async(  # noqa: C901
 
     except Exception as e:
         try:
-            socketio.emit("processing_error", {"success": False, "error": str(e)}, room=session_id)
+            socketio.emit(
+                "processing_error",
+                {"success": False, "error": str(e), "output_dir": str(output_dir)},
+                room=session_id,
+            )
             # Allow time for message to be sent before thread terminates
             socketio.sleep(SOCKETIO_SLEEP_YIELD)
         except Exception as emit_error:
@@ -1083,16 +1051,21 @@ def process_video_async(  # noqa: C901
         print(f"Processing error: {e}")  # Always print errors
 
     finally:
-        current_processing["active"] = False
-        current_processing["session_id"] = None
-        current_processing["stop_requested"] = False
-        current_processing["thread"] = None
+        if callback is not None:
+            callback.close()
+        # Free the depth model's VRAM (it used to stay allocated until the next job)
+        if projector is not None:
+            try:
+                projector.unload_model()
+            except Exception as unload_error:
+                vprint(f"Error unloading model: {unload_error}")
+        _finish_job()
 
 
 @app.route("/")
 def index():
     """Main page"""
-    return render_template("index.html")
+    return render_template("index.html", keep_intermediates=KEEP_INTERMEDIATES)
 
 
 @app.route("/upload", methods=["POST"])
@@ -1199,10 +1172,7 @@ def upload_video() -> tuple[dict[str, Any], int] | tuple[Any, int]:
 
 @app.route("/process", methods=["POST"])
 def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
-    """Start video processing"""
-    if current_processing["active"]:
-        return jsonify({"error": "Processing already in progress"}), 400
-
+    """Start video processing (queued if another job is running)"""
     data = request.json
     output_dir_str = data.get("output_dir")
     settings = data.get("settings", {})
@@ -1243,17 +1213,8 @@ def start_processing() -> tuple[dict[str, Any], int] | tuple[Any, int]:
             404,
         )
 
-    # Generate session ID
-    session_id = str(uuid.uuid4())
-    reset_progress_state(session_id)
-
-    # Start processing in background using socketio's method for proper context handling
-    thread = socketio.start_background_task(
-        process_video_async, session_id, video_path, settings, output_dir
-    )
-    current_processing["thread"] = thread
-
-    return jsonify({"success": True, "session_id": session_id, "output_dir": str(output_dir)})
+    result = submit_job(video_path, settings, output_dir)
+    return jsonify(result), (200 if result["success"] else 409)
 
 
 @app.route("/stop", methods=["POST"])
@@ -1276,10 +1237,7 @@ def stop_processing() -> dict[str, Any]:
 
 @app.route("/resume", methods=["POST"])
 def resume_processing():
-    """Resume processing from a previous interrupted batch"""
-    if current_processing["active"]:
-        return jsonify({"error": "Processing already in progress"}), 400
-
+    """Resume an interrupted batch (queued if another job is running)"""
     data = request.json
     output_dir = data.get("output_dir")
 
@@ -1302,17 +1260,8 @@ def resume_processing():
     # Try to detect settings from existing files/directories
     settings = detect_resume_settings(output_path)
 
-    # Generate session ID
-    session_id = str(uuid.uuid4())
-    reset_progress_state(session_id)
-
-    # Start processing in background using socketio's method for proper context handling
-    thread = socketio.start_background_task(
-        process_video_async, session_id, source_video, settings, output_path
-    )
-    current_processing["thread"] = thread
-
-    return jsonify({"success": True, "session_id": session_id, "output_dir": str(output_path)})
+    result = submit_job(source_video, settings, output_path.resolve())
+    return jsonify(result), (200 if result["success"] else 409)
 
 
 # Values derived from the source video / VR resolution; recomputed on every run
@@ -1393,19 +1342,29 @@ def detect_resumable_jobs():
             if not batch_dir.is_dir():
                 continue
 
+            # The job that is running right now isn't "incomplete"
+            if current_processing["active"] and str(batch_dir.resolve()) == str(
+                Path(current_processing.get("output_dir") or "").resolve()
+            ):
+                continue
+
             # Check for source video file
             source_video = find_source_video(batch_dir)
 
             if not source_video:
                 continue
 
-            # Check if processing is incomplete (has frames but no final video)
+            # Check if processing is incomplete (has frames but no final video;
+            # videos assembled from an unfinished job don't count)
             has_frames = (batch_dir / INTERMEDIATE_DIRS["frames"]).exists()
-            has_final_video = any(batch_dir.glob("*_3D_*.mp4"))
+            has_final_video = any(
+                "_partial_" not in video.name for video in batch_dir.glob("*_3D_*.mp4")
+            )
 
             if has_frames and not has_final_video:
                 # This is a resumable job
                 analysis = analyze_batch_directory(batch_dir)
+                pipeline = read_pipeline_progress(batch_dir)
                 resumable_jobs.append(
                     {
                         "path": str(batch_dir),
@@ -1414,6 +1373,8 @@ def detect_resumable_jobs():
                         "frame_count": analysis.get("frame_count", 0),
                         "vr_format": analysis.get("vr_format", "unknown"),
                         "resolution": analysis.get("resolution", "unknown"),
+                        "finished_frames": count_finished_vr_frames(batch_dir),
+                        "total_frames": pipeline["total_frames"] if pipeline else 0,
                     }
                 )
 
@@ -1672,6 +1633,144 @@ def stitch_video():
         return jsonify({"success": False, "error": str(e)})
 
 
+def _batch_status(batch_dir: Path) -> str:
+    """Processing status saved with a batch ("unknown" without a readable settings file)."""
+    settings_file = find_settings_file(batch_dir)
+    try:
+        with open(settings_file, "r", encoding="utf-8") as f:  # type: ignore[arg-type]
+            return str(json.load(f)["metadata"]["processing_status"])
+    except (OSError, TypeError, ValueError, KeyError):
+        return "unknown"
+
+
+def _job_summary(batch_dir: Path) -> dict[str, Any]:
+    """Name, location and progress of a batch directory for the jobs list."""
+    pipeline = read_pipeline_progress(batch_dir)
+    return {
+        "path": str(batch_dir),
+        "name": batch_dir.name,
+        "finished_frames": count_finished_vr_frames(batch_dir) if pipeline else None,
+        "total_frames": pipeline["total_frames"] if pipeline else None,
+    }
+
+
+@app.route("/jobs")
+def list_jobs():
+    """The running job, the queue, and unfinished jobs in the output folder"""
+    with queue_lock:
+        running_dir = current_processing.get("output_dir") if current_processing["active"] else None
+        running = None
+        if running_dir:
+            running = _job_summary(Path(running_dir))
+            running["session_id"] = current_processing["session_id"]
+            running["processing_mode"] = current_processing.get("processing_mode")
+            running["video_in_loop"] = current_processing.get("video_in_loop", True)
+            running["progress"] = current_processing.get("progress", 0)
+        queued = [
+            {**_job_summary(Path(job["output_dir"])), "session_id": job["session_id"]}
+            for job in job_queue
+        ]
+
+    busy = {job["path"] for job in queued} | ({running["path"]} if running else set())
+    incomplete = []
+    output_folder = Path(app.config["OUTPUT_FOLDER"])
+    batch_dirs = (
+        [d for d in output_folder.iterdir() if d.is_dir()] if output_folder.exists() else []
+    )
+    for batch_dir in sorted(batch_dirs, key=lambda d: d.stat().st_mtime, reverse=True):
+        if str(batch_dir.resolve()) in busy or not find_source_video(batch_dir):
+            continue
+        has_frames = (batch_dir / INTERMEDIATE_DIRS["frames"]).exists()
+        finished = any("_partial_" not in v.name for v in batch_dir.glob("*_3D_*.mp4"))
+        if has_frames and not finished:
+            status = _batch_status(batch_dir)
+            summary = _job_summary(batch_dir.resolve())
+            summary["status"] = status if status in ("paused", "failed") else "interrupted"
+            incomplete.append(summary)
+
+    return jsonify({"running": running, "queued": queued, "incomplete": incomplete})
+
+
+@app.route("/queue/remove", methods=["POST"])
+def remove_queued_job():
+    """Remove a job from the queue (it stays resumable if it had been started before)"""
+    session_id = (request.json or {}).get("session_id")
+    with queue_lock:
+        remaining = [job for job in job_queue if job["session_id"] != session_id]
+        removed = len(remaining) != len(job_queue)
+        job_queue[:] = remaining
+    return jsonify({"success": removed})
+
+
+@app.route("/estimate", methods=["POST"])
+def estimate_disk_space():
+    """Rough disk space a job with these settings needs, and what is free"""
+    data = request.json or {}
+    output_dir = Path(data.get("output_dir") or "")
+    video_path = find_source_video(output_dir) if output_dir.is_dir() else None
+    video_info = get_video_info(video_path) if video_path else None
+    if not video_info:
+        return jsonify({"success": False, "error": "Video not found"})
+
+    settings = dict(data.get("settings") or {})
+    for key, value in DEFAULT_SETTINGS.items():
+        if key not in ("output_dir", "target_fps"):
+            settings.setdefault(key, value)
+    settings["keep_intermediates"] = KEEP_INTERMEDIATES
+    try:
+        resolve_output_dimensions(settings, video_info)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+    start_frame, end_frame = calculate_frame_range(
+        video_info["frame_count"],
+        video_info["fps"],
+        settings.get("start_time"),
+        settings.get("end_time"),
+    )
+    estimate = estimate_disk_usage(
+        end_frame - start_frame, video_info["width"], video_info["height"], settings
+    )
+    return jsonify(
+        {
+            "success": True,
+            "frames": end_frame - start_frame,
+            "estimated_bytes": estimate["total"],
+            "final_video_bytes": estimate["final_video"],
+            "breakdown": estimate["breakdown"],
+            "free_bytes": get_available_space(output_dir),
+        }
+    )
+
+
+@app.route("/assemble_partial", methods=["POST"])
+def assemble_partial():
+    """Create a video from the VR frames an unfinished job has completed so far"""
+    data = request.json or {}
+    batch_dir = data.get("output_dir")
+    if not batch_dir or not Path(batch_dir).is_dir():
+        return jsonify({"success": False, "error": "Output directory does not exist"})
+
+    try:
+        output_path = assemble_partial_video(Path(batch_dir))
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+    if output_path is None:
+        return jsonify(
+            {
+                "success": False,
+                "error": "No finished VR frames to assemble yet (or encoding failed)",
+            }
+        )
+    return jsonify(
+        {
+            "success": True,
+            "output_path": str(output_path),
+            "output_dir": str(Path(batch_dir).resolve()),
+            "frames": count_finished_vr_frames(Path(batch_dir)),
+        }
+    )
+
+
 @socketio.on("connect")
 def handle_connect():
     vprint(f"Client connected: {request.sid}")
@@ -1700,7 +1799,7 @@ def handle_join_session(data):
         if session_id != current_processing.get("session_id"):
             return
         try:
-            initial_data = {
+            initial_data = current_processing.get("last_progress") or {
                 "progress": current_processing.get("progress", 0),
                 "stage": current_processing.get("stage", "Initializing..."),
                 "current_frame": current_processing.get("current_frame", 0),
@@ -1709,6 +1808,8 @@ def handle_join_session(data):
                 "step_index": current_processing.get("step_index", 0),
                 "step_progress": current_processing.get("step_progress", 0),
                 "step_total": current_processing.get("step_total", 0),
+                "processing_mode": current_processing.get("processing_mode"),
+                "video_in_loop": current_processing.get("video_in_loop", True),
             }
             socketio.emit("progress_update", initial_data, room=session_id)
         except Exception as e:
@@ -1735,10 +1836,18 @@ if __name__ == "__main__":
         default=DEFAULT_SERVER_HOST,
         help=f"Host to bind to (default: {DEFAULT_SERVER_HOST})",
     )
+    parser.add_argument(
+        "--keep-intermediates",
+        action="store_true",
+        help="Keep every step's images (depth maps, stereo pairs, ...) of all jobs in their "
+        "output directories. For inspection or redoing single steps; needs many times the "
+        "disk space",
+    )
     args = parser.parse_args()
 
-    # Set global verbose flag
+    # Set global flags
     VERBOSE = args.verbose
+    KEEP_INTERMEDIATES = args.keep_intermediates
 
     ensure_directories()
 

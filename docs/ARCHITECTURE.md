@@ -20,59 +20,64 @@ The result is 3D video that maintains the original content's motion and timing w
 
 ## Processing Pipeline
 
-The conversion follows a 7-step pipeline with resume capability:
+The conversion has nine steps. Steps 2-8 work through the video in batches (120 frames by
+default) and save their progress after every batch, so an interrupted run continues where it
+stopped.
 
-### Step 1: Video Preprocessing
-- **Frame Extraction**: FFmpeg extracts frames from the source video
-- **Time Range Handling**: Processes only the specified time range if `-s`/`-e` flags are used
-- **Optional Enhancement**: Resolution upscaling and frame interpolation
-- **Audio Extraction**: Immediately extracts audio to lossless FLAC format for reuse
+- **Batched mode** (default) runs steps 2-8 for one batch, then for the next: finished video
+  segments appear early and an interruption loses at most one batch.
+- **Sequential mode** finishes the depth maps for the whole video first.
 
-**Resume**: Skips if frames already exist in the output directory
+### Step 1: Frame Extraction
+- FFmpeg extracts the frames of the selected time range (hardware decoding if available)
+- The web UI extracts the audio to lossless FLAC at upload
 
-### Step 2: AI Depth Analysis
-- **Model**: Video-Depth-Anything neural network with temporal consistency
-- **Chunked Processing**: Processes frames in 32-frame sliding windows with overlap
-- **Output**: Grayscale depth maps showing estimated distance of every pixel
-- **Memory Management**: Automatic batching to prevent CUDA out-of-memory errors
+### Step 2: Depth Maps
+- **Models**: Video-Depth-Anything (temporally consistent) or Depth Anything V3 (per frame)
+- **Streaming**: frames are estimated in chunks. Chunks of the temporal model overlap; the
+  overlapping frames are aligned in scale/shift and crossfaded. Per-frame output is aligned to a
+  running reference
+- **Normalization**: a running range that widens at once and narrows slowly, so depth maps can
+  be written before the whole video has been seen
+- **Output**: 16-bit PNG depth maps, written as soon as a chunk is final
+- **Memory**: a chunk that no longer fits the GPU is retried at lower resolution (temporal
+  model) or in halves (per-frame model)
 
-**Resume**: Skips if depth maps already exist (when `--keep-intermediates` is enabled)
+### Steps 3-5 and 7: Stereo Pairs, Fisheye, Crop, VR Assembly (fused)
+These run in one worker process per frame, passing the images in memory:
+- **Stereo pairs**: depth is converted to disparity; pixels are splatted to each eye's view with
+  a z-buffer (nearer wins), and revealed areas are filled by mirroring the background-side
+  neighbour's texture
+- **Fisheye distortion** (optional): stereographic, equidistant, equisolid or orthographic
+  projection into a square view per eye. *Frame fit* sets how much of a wide frame the view
+  shows: filled (sides cut off) to whole frame (black above and below)
+- **Crop** to the per-eye view, then **VR assembly** side by side or over-under
 
-### Step 3: Disparity Conversion
-- **Depth to Disparity**: Converts depth values to horizontal pixel shifts
-- **Stereo Parameters**: Uses baseline and focal length to calculate shift amounts
-- **Normalization**: Ensures disparity values are appropriate for the target resolution
+The separate step processors do the same work with a PNG between every step. They are used to
+redo single steps after a settings change (when intermediates were kept) and around upscaling.
 
-### Step 4: Stereo Image Generation
-- **Symmetric Generation**: Creates both left and right eye images with proper disparity
-- **Occlusion-aware warping**: Pixels are splatted to the eye's view with a z-buffer (nearer
-  wins), so foreground edges occlude correctly instead of smearing over the background
-- **Hole Filling**: Revealed (disoccluded) areas are an explicit mask; they're filled by mirroring
-  the background-side neighbour's texture, deterministic and therefore stable over time
-- **Quality Modes**: Fast (mirror fill) or Advanced/High (mirror fill + softened seams)
+### Step 6: AI Upscaling (optional)
+- Real-ESRGAN on the cropped eyes, between the fused pass and VR assembly
 
-**Resume**: Skips if stereo pairs already exist (when `--keep-intermediates` is enabled)
+### Step 8: Video Encoding
+- Each batch's VR frames are encoded into a video segment (NVENC H.265 at constant quality, or
+  x264/x265) at the source frame rate
+- With frame interpolation the video is encoded in one pass after all batches instead
 
-### Step 5: VR Lens Simulation (Optional)
-- **Fisheye Distortion**: Applies lens distortion based on projection model
-- **Projection Models**: Stereographic, equidistant, equisolid, orthographic
-- **Field of View**: Configurable FOV from 75° to 180°
-- **Headset Compatibility**: Matches VR headset optical characteristics
+### Step 9: Final Video
+- The segments are joined without re-encoding and the matching part of the audio is added
 
-**Resume**: Skips if distorted frames already exist (when distortion is enabled)
+### Resume
+`pipeline_state.json` records, per step, how many frames are finished and a fingerprint of the
+settings that determine its output. A run in an existing directory continues from there; changed
+settings restart only the steps they affect. The depth stream keeps the data needed to continue
+its alignment and normalization exactly. A resumed run produces the same video as an
+uninterrupted one.
 
-### Step 6: Format Assembly
-- **VR Format Creation**: Combines stereo pairs into side-by-side or over-under format
-- **Resolution Scaling**: Scales to target VR resolution with proper aspect ratio
-- **Center Cropping**: Optional cropping to remove edge artifacts
-
-**Resume**: Skips if VR frames already exist
-
-### Step 7: Audio Integration
-- **Audio Synchronization**: Combines VR frames with pre-extracted audio
-- **Time Alignment**: Maintains perfect lip-sync with original video
-- **Codec Selection**: H.264 video with AAC audio for wide compatibility
-- **Quality Settings**: High-bitrate encoding for VR-quality output
+### Intermediate files
+Off by default: stereo, distorted and cropped images are never written, and extracted frames,
+depth maps and VR frames are deleted batch by batch once the steps that read them are done.
+With `--keep-intermediates` every step's images stay in the batch directory.
 
 ## Video Enhancement Features
 
@@ -120,27 +125,29 @@ The conversion follows a 7-step pipeline with resume capability:
 ## Storage Architecture
 
 ### Generation-Specific Directories
-Each processing session creates a self-contained timestamped directory:
+Each conversion has its own directory. Only directories the run writes to are created:
 
 ```
 output/
-└── timestamp_videoname_timestamp/
-    ├── original_video.mp4      # Source video
-    ├── original_audio.flac     # Pre-extracted audio
-    ├── frames/                 # Extracted frames
-    ├── depth_maps/            # AI depth maps (optional)
-    ├── left_frames/           # Left eye images (optional)
-    ├── right_frames/          # Right eye images (optional)
-    ├── vr_frames/             # Final VR frames
-    ├── settings.json          # Processing parameters
-    └── output.mp4             # Final 3D video
+└── videoname_timestamp/
+    ├── original_video.mp4           # Source video (web UI uploads)
+    ├── original_audio.flac          # Pre-extracted audio (web UI)
+    ├── 00_original_frames/          # Extracted frames
+    ├── 02_depth_maps/               # 16-bit depth maps
+    ├── 04_left_frames/, 04_right_frames/        # with kept intermediates
+    ├── 05_left_distorted/, 05_right_distorted/  # with kept intermediates and fisheye
+    ├── 06_left_cropped/, 06_right_cropped/      # with kept intermediates or upscaling
+    ├── 07_left_upscaled/, 07_right_upscaled/    # with upscaling
+    ├── 98_video_segments/           # one encoded segment per batch
+    ├── 99_vr_frames/                # assembled VR frames
+    ├── pipeline_state.json          # resume state
+    ├── depth_stream_state.npz       # depth alignment state for resuming
+    ├── videoname_<timestamp>-settings.json
+    └── videoname_3D_<format>_<resolution>.mp4   # Final 3D video
 ```
 
-**Benefits**:
-- **Self-contained**: All files for one conversion in one directory
-- **Resume-friendly**: Original video always available for resume
-- **No duplication**: Eliminates redundant uploads/ directory
-- **Easy cleanup**: Delete entire directory when done
+Without kept intermediates the numbered directories are emptied batch by batch and removed after
+a successful run, leaving the video and its settings file.
 
 ### Settings File
 Each processing session saves complete metadata:
@@ -161,13 +168,13 @@ Each processing session saves complete metadata:
 ### Memory Usage
 - **GPU VRAM**: ~2-4GB for depth estimation
 - **System RAM**: ~2-8GB depending on resolution
-- **Disk Space**: ~10-50GB for intermediate files (high-res, long clips)
+- **Disk Space**: about 2 MB per extracted 1080p frame; about 18 MB per frame with kept intermediates (1080p source, 1536 px eyes). An estimate is shown before a job starts
 
 ### Chunked Processing
-- **Default batch size**: 5 depth maps at a time
-- **Automatic adjustment**: Reduces batch size on OOM errors
-- **Memory cleanup**: Explicit CUDA cache clearing between batches
-- **Progress tracking**: Per-frame progress updates
+- **Depth chunks**: sized from free RAM (temporal model) or VRAM (per-frame model)
+- **Automatic adjustment**: a chunk that runs out of GPU memory is retried smaller
+- **Memory cleanup**: CUDA cache cleared between chunks; GPU memory stays flat across batches
+- **Progress tracking**: per step, per batch and overall, in the web UI and the console
 
 ## Code Structure
 
@@ -178,7 +185,7 @@ Each processing session saves complete metadata:
 **`app.py`**: Flask web server with SocketIO for real-time updates
 
 **`src/depth_surge_3d/processing/video_processor.py`**: Core processing pipeline
-- VideoProcessor class with 7-step processing
+- VideoProcessor class driving the 9-step pipeline
 - Resume capability with step-level skipping
 - Progress tracking and callbacks
 

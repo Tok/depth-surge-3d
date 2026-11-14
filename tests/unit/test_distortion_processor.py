@@ -84,7 +84,7 @@ class TestApplyDistortion:
 
         with patch(
             "src.depth_surge_3d.processing.frames.distortion_processor.apply_fisheye_distortion",
-            side_effect=lambda img, fov, proj, fit: img,  # Pass through
+            side_effect=lambda img, fov, proj, fit, frame_fit: img,  # Pass through
         ):
             result = processor.apply_distortion(
                 temp_frames["left_files"],
@@ -116,7 +116,7 @@ class TestApplyDistortion:
 
         with patch(
             "src.depth_surge_3d.processing.frames.distortion_processor.apply_fisheye_distortion",
-            side_effect=lambda img, fov, proj, fit: img,
+            side_effect=lambda img, fov, proj, fit, frame_fit: img,
         ):
             result = processor.apply_distortion(
                 temp_frames["left_files"],
@@ -146,8 +146,8 @@ class TestApplyDistortion:
             fake_left, fake_right, directories, settings, mock_progress_tracker
         )
 
-        # Should still return True (just skips bad frames with warning)
-        assert result is True
+        # A missing frame fails the step (a silently skipped frame would leave a gap)
+        assert result is False
 
     def test_apply_distortion_exception_handling(self, temp_frames, mock_progress_tracker):
         """Test exception handling during distortion."""
@@ -638,7 +638,7 @@ class TestFisheyeFit:
 
         with patch(
             "src.depth_surge_3d.processing.frames.distortion_processor.apply_fisheye_distortion",
-            side_effect=lambda img, fov, proj, fit: img,
+            side_effect=lambda img, fov, proj, fit, frame_fit: img,
         ) as mock_distort:
             processor.apply_distortion([frame], [frame], {}, settings, Mock())
 

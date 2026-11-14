@@ -17,7 +17,7 @@ This warning is normal and doesn't affect functionality. The system will use PyT
 ### Out of memory errors
 - **Reduce resolution**: Use `--resolution 720p` or lower
 - **Use CPU mode**: Add `--device cpu` (slower but uses system RAM instead of VRAM)
-- **Don't save intermediates**: Add `--no-intermediates` to reduce disk I/O
+- **Don't keep intermediates**: Leave `--keep-intermediates` off (the default) to reduce disk I/O
 - **Process shorter clips**: Use `-s` and `-e` to process smaller time ranges
 
 ### CUDA initialization errors
@@ -99,7 +99,7 @@ Can be significant for long/high-resolution videos:
 
 ### Disk I/O
 - **Use SSD**: Much faster for reading/writing intermediate frames
-- **Skip intermediates**: Add `--no-intermediates` to avoid saving depth maps and stereo pairs
+- **Skip intermediates**: Leave `--keep-intermediates` off (the default) so depth maps and stereo pairs aren't kept
 - **Clean up old outputs**: Remove old processing directories to free disk space
 
 ### Memory Management

@@ -71,8 +71,8 @@ python depth_surge_3d.py input_video.mp4 -b 0.15 -fl 1200
 # Use CPU only (if no GPU available)
 python depth_surge_3d.py input_video.mp4 --device cpu
 
-# Don't save intermediate files
-python depth_surge_3d.py input_video.mp4 --no-intermediates
+# Keep every step's images (depth maps, stereo pairs, ...)
+python depth_surge_3d.py input_video.mp4 --keep-intermediates
 
 # Disable audio preservation
 python depth_surge_3d.py input_video.mp4 --no-audio
@@ -81,7 +81,7 @@ python depth_surge_3d.py input_video.mp4 --no-audio
 python depth_surge_3d.py input_video.mp4 --fps 120 --resolution 4k
 
 # Combined example: high-quality 4K 60fps processing
-python depth_surge_3d.py input_video.mp4 -s 01:30 -e 02:00 -f over_under --resolution 4k --fps 60 --no-intermediates
+python depth_surge_3d.py input_video.mp4 -s 01:30 -e 02:00 -f over_under --resolution 4k --fps 60
 ```
 
 ## Output Structure
@@ -101,28 +101,79 @@ output/
     └── videoname_3D_side_by_side_0118-0133.mp4  # Final VR video
 ```
 
-## Resume Interrupted Processing
+## Processing Modes
 
-If processing is interrupted (power failure, system crash, manual stop), you can resume from where it left off:
+Both modes work through the video in batches (`--batch-size`, default 120 frames: 5 s at 24 fps, 4 s at 30 fps, 2 s at 60 fps) and save
+their progress after every batch.
+
+- **Batched** (default, `--mode batched`): depth maps, stereo pairs, distortion, cropping,
+  upscaling and VR assembly run for one batch of frames, then for the next. Finished VR frames
+  appear early, and an interrupted job loses at most the batch it was working on.
+- **Sequential** (`--mode sequential`): depth maps are finished for the whole video first, then
+  the frames are processed, then the video is joined.
+
+Stereo generation, distortion, cropping and VR assembly of a frame happen in one pass, and the
+video is encoded in one segment per batch (`98_video_segments/`), joined at the end.
+
+### Intermediate files
+
+- **Not kept** (default): the extracted frames are deleted as the job goes; of everything
+  else only about one batch exists at any time, plus the video segments. Disk use peaks near
+  the size of the extracted frames (about 2 MB per 1080p frame). The job can still be resumed.
+- **Kept** (`--keep-intermediates`): every step's images stay in the batch directory. Needed to
+  redo single steps with changed settings, and useful for inspection. Needs many times the space
+  (about 18 MB per frame for 1080p to 1536 px eyes). It is a start-up option, for the CLI and
+  for the web server (`./run_ui.sh --keep-intermediates` applies it to all jobs); the web UI has
+  no per-job switch.
+
+An estimate of the needed disk space is shown before the job starts.
+
+### Reusing a batch directory with new settings
 
 ```bash
-# Resume processing from any output directory
-python depth_surge_3d.py --resume ./output/my_video_1234567890/
-
-# The web UI automatically populates the resume field after upload
+python depth_surge_3d.py input_video.mp4 --reuse ./output/my_video_20261114_120000/ -b 0.08
 ```
 
-**Resume Process:**
-1. **Validates directory**: Checks for valid settings file and intermediate files
-2. **Analyzes progress**: Determines which processing steps were already completed
-3. **Loads original settings**: Uses exact same parameters as the original run
-4. **Continues processing**: Skips completed steps and continues from where it stopped
+Only the steps the changed settings affect run again (a new baseline keeps the depth maps, a
+new encoder only re-encodes). This needs the intermediate files (`--keep-intermediates` on the
+first run).
 
-**Resume Capability:**
-- ✅ **Step-level resume**: Skips entire completed steps (frame extraction, depth maps, stereo pairs, etc.)
-- ✅ **Smart detection**: Automatically finds existing intermediate files
-- ✅ **Progress analysis**: Shows exactly how much work was completed
-- ❌ **Not needed**: Already completed processing
+### Job queue (web UI)
+
+Jobs started while another one is running are queued and run one after another. The Jobs list
+shows the running job, the queue and unfinished jobs.
+
+Depth maps are written to `02_depth_maps/` (16-bit PNG) as soon as each chunk is final, in
+both modes.
+
+## Resume Interrupted Processing
+
+If processing is interrupted (power failure, crash, Ctrl+C, the Stop button), continue it:
+
+```bash
+python depth_surge_3d.py --resume ./output/my_video_20261114_120000/
+```
+
+In the web UI, press **Resume** next to the job in the Jobs list.
+
+- The job continues with its original settings and model, after the last finished batch.
+  The result is identical to an uninterrupted run.
+- Frames are not extracted again; finished depth maps and VR frames are kept.
+- Starting a job again in the same directory with changed settings only repeats the steps
+  those settings affect (e.g. a new fisheye FOV keeps depth maps and stereo pairs). This
+  needs the intermediate files; without them the job starts over.
+
+### Video from an unfinished job
+
+To get a video of the part that is finished, without resuming:
+
+```bash
+python depth_surge_3d.py --assemble-partial ./output/my_video_20261114_120000/
+```
+
+or press **Assemble** next to the job in the web UI. The video contains the finished VR
+frames and the matching part of the audio (`*_partial_<N>frames.mp4`); the job can still be
+resumed afterwards.
 
 ## VR Viewing
 
