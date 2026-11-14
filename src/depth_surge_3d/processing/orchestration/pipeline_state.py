@@ -64,6 +64,12 @@ def active_step_keys(settings: dict[str, Any]) -> list[str]:
     return keys
 
 
+# Raised when depth alignment/normalization changes in a way that makes depth maps of an
+# unfinished run unusable: such a run then redoes its depth maps instead of continuing.
+# 2: alignment keeps contrast (0.11.0 faded to flat depth on longer videos)
+DEPTH_ALIGNMENT_REVISION = 2
+
+
 def step_fingerprints(settings: dict[str, Any], source_id: str, model_id: str) -> dict[str, str]:
     """
     PURE: Fingerprint of everything that determines each active step's output.
@@ -87,6 +93,7 @@ def step_fingerprints(settings: dict[str, Any], source_id: str, model_id: str) -
             values["source"] = source_id
         elif key == "depth":
             values["model"] = model_id
+            values["alignment"] = DEPTH_ALIGNMENT_REVISION
         payload = json.dumps([previous, values], sort_keys=True, default=str)
         previous = hashlib.blake2b(payload.encode(), digest_size=8).hexdigest()
         fingerprints[key] = previous
