@@ -30,6 +30,58 @@ from depth_surge_3d.io.operations import (  # noqa: E402
     can_resume_processing,
     load_processing_settings,
 )
+from depth_surge_3d.core.constants import PROCESSING_MODES, BATCH_SIZE_RANGE  # noqa: E402
+from depth_surge_3d.processing import assemble_partial_video  # noqa: E402
+from depth_surge_3d.utils.domain.progress import TqdmProgressTracker  # noqa: E402
+
+# Saved settings that are recomputed on every run (not passed back in when resuming)
+_DERIVED_SETTINGS = {
+    "output_dir",
+    "device",
+    "video_path",
+    "per_eye_width",
+    "per_eye_height",
+    "vr_output_width",
+    "vr_output_height",
+    "source_width",
+    "source_height",
+    "source_fps",
+    "depth_model_version",
+    "depth_model_path",
+    "use_metric_depth",
+}
+
+
+def batch_size_type(value: str) -> int:
+    """Argparse type for --batch-size."""
+    low, high = BATCH_SIZE_RANGE
+    try:
+        size = int(value)
+    except ValueError:
+        size = -1
+    if not low <= size <= high:
+        raise argparse.ArgumentTypeError(f"batch size must be a number from {low} to {high}")
+    return size
+
+
+def create_progress_tracker(settings: dict) -> TqdmProgressTracker:
+    """Console progress bars matching the steps these settings run."""
+    skipped = set()
+    if not settings.get("apply_distortion", True):
+        skipped.add("Fisheye Distortion")
+    if settings.get("upscale_model", "none") == "none":
+        skipped.add("AI Upscaling")
+    return TqdmProgressTracker(
+        skipped_steps=skipped,
+        batched=settings.get("processing_mode", "batched") != "sequential",
+    )
+
+
+def print_interrupted_help(output_dir) -> None:
+    """Tell the user how to continue after an interrupted run."""
+    print("\nProcessing interrupted. Finished frames are kept.")
+    print(f"  Continue:        depth_surge_3d.py --resume {output_dir}")
+    print(f"  Video of the finished part: depth_surge_3d.py --assemble-partial {output_dir}")
 
 
 def vr_resolution_type(value: str) -> str:
@@ -64,6 +116,9 @@ Examples:
   %(prog)s video.mp4 --vr-resolution 16x9-4k          # High quality 4K
   %(prog)s video.mp4 --vr-resolution custom:2560x1080 # Custom resolution
   %(prog)s --resume ./output/my_video_output/          # Resume previous job
+  %(prog)s --assemble-partial ./output/my_video_output/ # Video from an unfinished job
+  %(prog)s video.mp4 --reuse ./output/my_video_output/ -b 0.08  # New settings, same depth maps
+  %(prog)s video.mp4 --mode sequential                 # One step at a time
   %(prog)s --list-resolutions                          # Show available resolutions
 
 Note: Always uses Video-Depth-Anything for temporal consistency across frames.
@@ -83,6 +138,35 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
     # Resume functionality
     parser.add_argument(
         "--resume", metavar="DIRECTORY", help="Resume processing from an existing output directory"
+    )
+
+    parser.add_argument(
+        "--reuse",
+        metavar="DIRECTORY",
+        help="Run in an existing output directory with the settings of this command line. "
+        "Its frames, depth maps and later steps are reused as far as the settings allow "
+        "(e.g. a new baseline keeps the depth maps)",
+    )
+    parser.add_argument(
+        "--assemble-partial",
+        metavar="DIRECTORY",
+        help="Create a video from the VR frames an interrupted job has finished so far",
+    )
+
+    # Processing mode
+    parser.add_argument(
+        "--mode",
+        choices=PROCESSING_MODES,
+        default=DEFAULT_SETTINGS["processing_mode"],
+        help="batched: run all steps batch by batch, so finished VR frames appear early; "
+        "sequential: finish each step for the whole video first (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=batch_size_type,
+        default=DEFAULT_SETTINGS["batch_size"],
+        metavar="FRAMES",
+        help="Frames per batch (default: %(default)s)",
     )
 
     # VR settings
@@ -184,6 +268,28 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         help="Use metric depth model (outputs real depth values in meters)",
     )
 
+    parser.add_argument(
+        "--depth-resolution",
+        choices=["auto", "518", "720", "1080", "1440", "2160"],
+        default="auto",
+        help="Depth model input resolution in pixels; auto matches the source, never above it "
+        "(default: %(default)s)",
+    )
+    parser.add_argument(
+        "--super-sample",
+        choices=["auto", "none", "2x", "1080p", "4k"],
+        default=DEFAULT_SETTINGS["super_sample"],
+        help="Resolution the stereo views are rendered at: auto (up to 2x, matched to the VR "
+        "output), none (source resolution), 2x, 1080p or 4k (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--video-encoder",
+        choices=["auto", "nvenc", "libx264", "libx265"],
+        default="auto",
+        help="Video encoder: auto (NVENC H.265 if available, else H.264), nvenc, libx264, "
+        "libx265 (default: %(default)s)",
+    )
+
     # Output options
     parser.add_argument("--no-audio", action="store_true", help="Do not preserve audio in output")
     parser.add_argument(
@@ -209,17 +315,19 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         "--list-resolutions", action="store_true", help="List all available VR resolution options"
     )
     parser.add_argument("--model-info", action="store_true", help="Show model information and exit")
-    parser.add_argument(
-        "--cache-info", action="store_true", help="Show depth map cache statistics and exit"
-    )
-    parser.add_argument("--cache-clear", action="store_true", help="Clear depth map cache and exit")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
 
     return parser
 
 
-def validate_arguments(args) -> bool:
+def validate_arguments(args) -> bool:  # noqa: C901
     """Validate command line arguments."""
+
+    if args.assemble_partial:
+        if not Path(args.assemble_partial).is_dir():
+            print(f"Error: Directory does not exist: {args.assemble_partial}")
+            return False
+        return True
 
     # Handle resume mode
     if args.resume:
@@ -227,6 +335,10 @@ def validate_arguments(args) -> bool:
             print(f"Error: Resume directory does not exist: {args.resume}")
             return False
         return True  # Skip other validations for resume mode
+
+    if args.reuse and not Path(args.reuse).is_dir():
+        print(f"Error: Directory to reuse does not exist: {args.reuse}")
+        return False
 
     # Regular mode validations
     if not args.input_video:
@@ -316,32 +428,20 @@ def main():  # noqa: C901
         list_available_resolutions()
         return 0
 
-    if args.cache_info:
-        from depth_surge_3d.utils.domain.depth_cache import get_cache_size, get_cache_dir
-
-        cache_entries, cache_size_bytes = get_cache_size()
-        cache_size_mb = cache_size_bytes / (1024 * 1024)
-        cache_dir = get_cache_dir()
-        print("Depth Map Cache Information")
-        print("=" * 40)
-        print(f"Cache directory: {cache_dir}")
-        print(f"Cached videos:   {cache_entries}")
-        print(f"Total size:      {cache_size_mb:.1f} MB")
-        if cache_entries > 0:
-            print(f"\nAverage:         {cache_size_mb / cache_entries:.1f} MB per video")
-        print("\nCache speeds up re-processing with different stereo/VR settings.")
-        print("To clear cache: depth_surge_3d.py --cache-clear")
-        return 0
-
-    if args.cache_clear:
-        from depth_surge_3d.utils.domain.depth_cache import clear_cache
-
-        count = clear_cache()
-        print(f"Cleared {count} cached video(s) from depth map cache")
+    if args.assemble_partial:
+        if not validate_arguments(args):
+            return 1
+        output = assemble_partial_video(Path(args.assemble_partial))
+        if output is None:
+            print("Could not create a partial video. Check error messages above.")
+            return 1
+        print(f"Partial video saved to: {output}")
         return 0
 
     # Handle resume mode
     if args.resume:
+        if not validate_arguments(args):
+            return 1
         print(f"Checking resume capability for: {args.resume}")
         resume_info = can_resume_processing(Path(args.resume))
 
@@ -371,35 +471,34 @@ def main():  # noqa: C901
         video_path = settings_data["metadata"]["source_video"]
         processing_settings = settings_data["processing_settings"]
 
-        # Create projector with original model settings
-        projector = create_stereo_projector(device=processing_settings.get("device", "auto"))
+        # Create projector with the model the job was started with
+        projector = create_stereo_projector(
+            processing_settings.get("depth_model_path"),
+            processing_settings.get("device", "auto"),
+            bool(processing_settings.get("use_metric_depth", False)),
+            processing_settings.get("depth_model_version") or "v2",
+        )
 
         print("Resuming processing...")
         print(f"Input: {video_path}")
         print(f"Output: {args.resume}")
 
         # Resume processing using original settings
-        success = projector.process_video(
-            video_path=video_path,
-            output_dir=args.resume,
-            **{
-                k: v
-                for k, v in processing_settings.items()
-                if k
-                not in [
-                    "output_dir",
-                    "device",
-                    "per_eye_width",
-                    "video_path",
-                    "per_eye_height",
-                    "vr_output_width",
-                    "vr_output_height",
-                    "source_width",
-                    "source_height",
-                    "source_fps",
-                ]
-            },
-        )
+        tracker = create_progress_tracker(processing_settings)
+        try:
+            success = projector.process_video(
+                video_path=video_path,
+                output_dir=args.resume,
+                progress_tracker=tracker,
+                **{k: v for k, v in processing_settings.items() if k not in _DERIVED_SETTINGS},
+            )
+        except (KeyboardInterrupt, InterruptedError):
+            tracker.close()
+            print_interrupted_help(args.resume)
+            return 1
+        finally:
+            tracker.close()
+            projector.unload_model()
 
         if success:
             print("Resume processing completed successfully!")
@@ -435,10 +534,14 @@ def main():  # noqa: C901
         )
         print("Starting Depth Surge 3D processing...")
         print(f"Input: {args.input_video}")
-        print(f"Output: {args.output_dir} (batch subdirectory will be created)")
+        if args.reuse:
+            print(f"Output: {args.reuse} (reusing what the settings allow)")
+        else:
+            print(f"Output: {args.output_dir} (batch subdirectory will be created)")
         print(f"Model: {model_name}")
         print(f"Format: {args.format}")
         print(f"Resolution: {args.vr_resolution}")
+        print(f"Mode: {args.mode} (batches of {args.batch_size} frames)")
 
         # Show warning for experimental features
         if args.experimental_frame_interpolation:
@@ -448,18 +551,21 @@ def main():  # noqa: C901
             print()
 
         # Create batch-specific output directory
-        if args.resume:
-            # Use existing directory for resume
-            batch_output_dir = args.resume
-        else:
-            # Create new batch directory
-            from datetime import datetime
-            from pathlib import Path
+        from datetime import datetime
 
-            video_name = Path(args.input_video).stem
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            batch_output_dir = Path(args.output_dir) / f"{video_name}_{timestamp}"
+        video_name = Path(args.input_video).stem
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        batch_output_dir = Path(args.output_dir) / f"{video_name}_{timestamp}"
+        if args.reuse:
+            batch_output_dir = Path(args.reuse)
 
+        tracker = create_progress_tracker(
+            {
+                "apply_distortion": not args.no_distortion,
+                "upscale_model": args.upscale_model,
+                "processing_mode": args.mode,
+            }
+        )
         success = projector.process_video(
             video_path=args.input_video,
             output_dir=str(batch_output_dir),
@@ -479,7 +585,16 @@ def main():  # noqa: C901
             keep_intermediates=not args.no_intermediates,
             target_fps=args.target_fps,
             experimental_frame_interpolation=args.experimental_frame_interpolation,
+            upscale_model=args.upscale_model,
+            depth_resolution=args.depth_resolution,
+            super_sample=args.super_sample,
+            video_encoder=args.video_encoder,
+            processing_mode=args.mode,
+            batch_size=args.batch_size,
+            device=args.device,
+            progress_tracker=tracker,
         )
+        tracker.close()
 
         if success:
             print("Processing completed successfully!")
@@ -489,10 +604,17 @@ def main():  # noqa: C901
             print("Processing failed. Check error messages above.")
             return 1
 
-    except KeyboardInterrupt:
-        print("\nProcessing interrupted by user")
+    except (KeyboardInterrupt, InterruptedError):
+        if "tracker" in locals():
+            tracker.close()
+        if "batch_output_dir" in locals():
+            print_interrupted_help(batch_output_dir)
+        else:
+            print("\nProcessing interrupted by user")
         return 1
     except Exception as e:
+        if "tracker" in locals():
+            tracker.close()
         print(f"Unexpected error: {e}")
         if args.verbose:
             import traceback
