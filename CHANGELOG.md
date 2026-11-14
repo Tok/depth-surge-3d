@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change, and around AI upscaling.
 - **Segmented encoding**: the video is encoded in one segment per batch and the segments are
   joined (without re-encoding) at the end. Partial videos are joined from the finished segments.
+- **Flat 3D is the default; fisheye is optional** (`--fisheye` / "Fisheye Output"; `--no-distortion`
+  is still accepted). Fisheye (VR180) output keeps a square view per eye, which cuts the left and
+  right edges of wide videos (about 44% of a 16:9 frame's width). The default now keeps the whole
+  frame at the video's aspect ratio. With fisheye on, the web UI and the console warn how much is
+  cut and the UI offers to switch; a square target for a wide video without fisheye gets a notice
+  about black bars.
 - **Intermediate files are no longer kept by default** (`--keep-intermediates` / the checkbox
   turns them on; `--no-intermediates` is still accepted). Off now means bounded disk use: stereo/distorted/cropped images are
   never written, and original frames, depth maps and VR frames are deleted batch by batch once

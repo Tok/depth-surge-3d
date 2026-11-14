@@ -344,8 +344,7 @@ Use V2 if:
 ### 4. Skip Optional Stages
 
 ```bash
-# Disable fisheye distortion (5% time savings)
---no-distortion
+# Fisheye distortion is off by default; --fisheye adds about 5% processing time
 
 # Skip upscaling (10% time savings if enabled)
 # Don't use --upscale flag unless needed

@@ -11,6 +11,7 @@ from .resolution import (
     classify_aspect_ratio,
     auto_detect_resolution,
     get_format_recommendation,
+    fisheye_cut_fraction,
     validate_resolution_settings,
     get_available_resolutions,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "classify_aspect_ratio",
     "auto_detect_resolution",
     "get_format_recommendation",
+    "fisheye_cut_fraction",
     "validate_resolution_settings",
     "get_available_resolutions",
     # Progress

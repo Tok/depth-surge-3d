@@ -25,6 +25,7 @@ from ...io.operations import (
 )
 from ...utils.path_utils import calculate_frame_range, format_file_size, generate_output_filename
 from ...utils.domain.disk_estimate import estimate_disk_usage
+from ...utils.domain.resolution import fisheye_cut_fraction
 from ...utils.domain.progress import BatchOffsetProgress, NullProgressTracker
 from .pipeline_state import PipelineState, step_fingerprints
 from ...utils import (
@@ -218,6 +219,7 @@ class ProcessingOrchestrator:
         self._total_steps = self._get_total_steps(settings)
         depth_state_path = output_path / DEPTH_STATE_FILE
         self._report_disk_estimate(output_path, video_properties, settings)
+        self._warn_about_cut_off_sides(video_properties, settings)
 
         # What can be kept from an earlier run in this directory?
         state = PipelineState.load(output_path)
@@ -290,6 +292,30 @@ class ProcessingOrchestrator:
                 print(saved_to(f"Removed {removed} intermediate directories"))
         self._finalize_processing(success, output_path, video_path, settings, num_frames)
         return success
+
+    @staticmethod
+    def _warn_about_cut_off_sides(
+        video_properties: dict[str, Any], settings: dict[str, Any]
+    ) -> None:
+        """
+        Warn when fisheye output will cut a noticeable part off the sides of the video.
+
+        Side effects:
+            - Console output
+        """
+        if not settings.get("apply_distortion", True):
+            return
+        cut = fisheye_cut_fraction(
+            int(video_properties.get("width") or 0), int(video_properties.get("height") or 0)
+        )
+        if cut >= 0.1:
+            print(
+                warning(
+                    f"Warning: fisheye output keeps a square view per eye; about {cut:.0%} of the "
+                    "video's width (left and right edges) is cut off. Without fisheye the whole "
+                    "frame is kept."
+                )
+            )
 
     @staticmethod
     def _report_disk_estimate(

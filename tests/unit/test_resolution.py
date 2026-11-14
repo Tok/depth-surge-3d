@@ -101,3 +101,20 @@ class TestAutoResolutionFisheye:
         from src.depth_surge_3d.utils.domain.resolution import auto_detect_resolution
 
         assert auto_detect_resolution(1920, 1080, "side_by_side", fisheye=False) == "16x9-1080p"
+
+
+class TestFisheyeCutFraction:
+    """Fisheye output keeps a centre part as wide as the frame is high."""
+
+    def test_wide_video_loses_its_sides(self):
+        from src.depth_surge_3d.utils.domain.resolution import fisheye_cut_fraction
+
+        assert fisheye_cut_fraction(1920, 1080) == pytest.approx(0.4375)
+        assert fisheye_cut_fraction(3840, 1600) == pytest.approx(1 - 1600 / 3840)
+
+    def test_square_tall_and_invalid_sizes_lose_nothing(self):
+        from src.depth_surge_3d.utils.domain.resolution import fisheye_cut_fraction
+
+        assert fisheye_cut_fraction(1080, 1080) == 0.0
+        assert fisheye_cut_fraction(1080, 1920) == 0.0
+        assert fisheye_cut_fraction(0, 1080) == 0.0

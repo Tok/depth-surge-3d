@@ -166,6 +166,25 @@ def auto_detect_resolution(
             return "square-1k"
 
 
+def fisheye_cut_fraction(source_width: int, source_height: int) -> float:
+    """
+    PURE: Fraction of the frame width that fisheye output cuts off.
+
+    Fisheye output keeps the circle that touches the top and bottom of the frame, so of a
+    wide frame only a centre part as wide as the frame is high remains.
+
+    Args:
+        source_width: Source video width
+        source_height: Source video height
+
+    Returns:
+        Fraction of the width lost (0.0 for square and tall videos)
+    """
+    if source_width <= 0 or source_height <= 0:
+        return 0.0
+    return max(0.0, 1.0 - source_height / source_width)
+
+
 def get_format_recommendation(aspect_ratio: float) -> str:
     """
     Recommend VR format based on aspect ratio.

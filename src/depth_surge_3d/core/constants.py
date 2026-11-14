@@ -68,7 +68,9 @@ DEFAULT_SETTINGS = {
     # Off: disk use stays near the extracted frames plus one batch. On: every step's
     # images are kept (about 18 MB per frame for 1080p to 1536 px eyes).
     "keep_intermediates": False,
-    "apply_distortion": True,
+    # Fisheye (VR180) output keeps a central square per eye, which cuts the sides of wide
+    # videos. Off: flat 3D with the whole frame at the source aspect ratio.
+    "apply_distortion": False,
     "output_dir": "./output",
     "experimental_frame_interpolation": False,  # Experimental feature with quality warnings
     "temporal_window_size": DEPTH_MODEL_CHUNK_SIZE,  # V2 only: frames per temporal window

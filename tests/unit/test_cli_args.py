@@ -256,3 +256,31 @@ class TestIntermediatesFlag:
     def test_old_flag_is_still_accepted(self, cli, tmp_path, monkeypatch, capsys):
         kwargs = self._settings(cli, tmp_path, monkeypatch, "--no-intermediates")
         assert kwargs["keep_intermediates"] is False
+
+
+class TestFisheyeFlag:
+    """Flat 3D that keeps the whole frame is the default; fisheye is opt-in."""
+
+    def _settings(self, cli, tmp_path, monkeypatch, *flags):
+        from unittest.mock import Mock
+
+        video = tmp_path / "video.mp4"
+        video.touch()
+        projector = Mock()
+        projector.process_video.return_value = True
+        monkeypatch.setattr(cli, "create_stereo_projector", Mock(return_value=projector))
+        monkeypatch.setattr(sys, "argv", ["prog", str(video), "-o", str(tmp_path), *flags])
+        assert cli.main() == 0
+        kwargs = projector.process_video.call_args[1]
+        return kwargs["apply_distortion"], kwargs["progress_tracker"].state.skipped
+
+    def test_flat_by_default(self, cli, tmp_path, monkeypatch, capsys):
+        distortion, skipped = self._settings(cli, tmp_path, monkeypatch)
+        assert distortion is False and "Fisheye Distortion" in skipped
+
+    def test_fisheye_flag(self, cli, tmp_path, monkeypatch, capsys):
+        distortion, skipped = self._settings(cli, tmp_path, monkeypatch, "--fisheye")
+        assert distortion is True and "Fisheye Distortion" not in skipped
+
+    def test_old_flag_is_still_accepted(self, cli, tmp_path, monkeypatch, capsys):
+        assert self._settings(cli, tmp_path, monkeypatch, "--no-distortion")[0] is False

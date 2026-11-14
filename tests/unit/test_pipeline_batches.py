@@ -584,3 +584,20 @@ class TestDiskEstimate:
     def test_unknown_video_properties_are_skipped(self, tmp_path, capsys):
         ProcessingOrchestrator._report_disk_estimate(tmp_path, {}, _settings())
         assert capsys.readouterr().out == ""
+
+
+class TestCutOffWarning:
+    def _warn(self, capsys, width, height, **changes):
+        ProcessingOrchestrator._warn_about_cut_off_sides(
+            {"width": width, "height": height}, _settings(**changes)
+        )
+        return capsys.readouterr().out
+
+    def test_fisheye_on_a_wide_video(self, capsys):
+        out = self._warn(capsys, 1920, 1080, apply_distortion=True)
+        assert "about 44% of the video's width" in out
+
+    def test_no_warning_without_fisheye_or_for_square_videos(self, capsys):
+        assert self._warn(capsys, 1920, 1080, apply_distortion=False) == ""
+        assert self._warn(capsys, 1080, 1080, apply_distortion=True) == ""
+        assert self._warn(capsys, 0, 0, apply_distortion=True) == ""

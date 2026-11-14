@@ -221,9 +221,15 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         help=f'Fisheye field of view in degrees (default: {DEFAULT_SETTINGS["fisheye_fov"]})',
     )
     parser.add_argument(
+        "--fisheye",
+        action="store_true",
+        help="Fisheye (VR180) output: a square view per eye for hemispherical projection. "
+        "Cuts the left and right edges of wide videos (about 44%% of a 16:9 frame's width)",
+    )
+    parser.add_argument(
         "--no-distortion",
         action="store_true",
-        help="Disable fisheye distortion (keeps rectilinear projection)",
+        help="Flat 3D without fisheye distortion (this is the default; kept for old command lines)",
     )
 
     # Quality and processing options
@@ -569,7 +575,7 @@ def main():  # noqa: C901
 
         tracker = create_progress_tracker(
             {
-                "apply_distortion": not args.no_distortion,
+                "apply_distortion": args.fisheye and not args.no_distortion,
                 "upscale_model": args.upscale_model,
                 "processing_mode": args.mode,
             }
@@ -583,7 +589,7 @@ def main():  # noqa: C901
             focal_length=args.focal_length,
             start_time=args.start,
             end_time=args.end,
-            apply_distortion=not args.no_distortion,
+            apply_distortion=args.fisheye and not args.no_distortion,
             fisheye_projection=args.fisheye_projection,
             fisheye_fov=args.fisheye_fov,
             crop_factor=args.crop_factor,
