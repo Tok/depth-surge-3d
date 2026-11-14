@@ -415,3 +415,22 @@ def test_resolve_output_dimensions():
     auto = {"vr_resolution": "auto"}
     app_module.resolve_output_dimensions(auto, {"width": 1280, "height": 720, "fps": 25.0})
     assert auto["vr_resolution"] != "auto"
+
+
+def test_server_console_shows_the_same_progress_as_the_browser(monkeypatch, capsys):
+    """The server's terminal gets the CLI's progress bars instead of plain status lines."""
+    callback, _ = _callback(monkeypatch)
+    console = callback.console
+
+    callback.set_batch_info(0, 2, 0, 50)
+    callback.update_progress("x", step_name="Crop Frames", step_progress=25, step_total=100)
+
+    assert console.batched is True
+    assert console.state.batch == callback.state.batch
+    assert console.state.done == callback.state.done
+    callback.finish()
+    callback.close()
+    assert console._closed
+    assert "Overall:" not in capsys.readouterr().out
+    assert app_module.ProgressCallback("s", 10, "sequential").console.batched is False
+    app_module.current_processing["last_progress"] = None

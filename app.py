@@ -92,6 +92,7 @@ from depth_surge_3d.utils.domain.disk_estimate import estimate_disk_usage  # noq
 from depth_surge_3d.utils.path_utils import calculate_frame_range  # noqa: E402
 from depth_surge_3d.utils.domain.progress import (  # noqa: E402,F401
     StepProgressState,
+    TqdmProgressTracker,
     effective_step_weights as _effective_step_weights,  # re-exported for tests
     format_time_duration,
 )
@@ -564,7 +565,6 @@ class ProgressCallback:
         self.processing_mode = processing_mode
         self.current_frame = 0
         self.last_update_time = 0
-        self.last_console_time = 0
         self.current_phase = "extraction"  # extraction, processing, video
 
         # Preview tracking
@@ -578,10 +578,13 @@ class ProgressCallback:
         self.state = StepProgressState(skipped_steps)
         self.steps = self.state.steps
         self.step_weights = self.state.weights
+        # The server's console shows the same progress bars as the CLI
+        self.console = TqdmProgressTracker(skipped_steps, batched=processing_mode != "sequential")
 
     def set_batch_info(self, index: int, count: int, start: int, size: int) -> None:
         """Batched mode: the batch the inner loop (steps 2-7) is working on."""
         self.state.set_batch(index, count, start, size)
+        self.console.set_batch_info(index, count, start, size)
 
     def send_preview_frame(
         self,
@@ -768,6 +771,13 @@ class ProgressCallback:
 
         # Always record (so no step's final count is lost); only sending is throttled
         self.state.record(step_name, step_progress, step_total, phase)
+        self.console.update_progress(
+            stage,
+            phase=phase,
+            step_name=step_name,
+            step_progress=step_progress,
+            step_total=step_total,
+        )
         if phase and phase != "resume":
             self.current_phase = phase
         if frame_num is not None:
@@ -803,17 +813,6 @@ class ProgressCallback:
         )
         current_processing["last_progress"] = progress_data
 
-        # Console: one status line every few seconds
-        if step_finished or current_time - self.last_console_time >= 5:
-            self.last_console_time = current_time
-            batch = state.batch
-            batch_text = f" | Batch {batch['index'] + 1}/{batch['count']}" if batch else ""
-            eta_text = f" | ETA: {progress_data['eta']}" if progress_data["eta"] else ""
-            print(
-                f"Overall: {progress_data['progress']:05.1f}%{batch_text} | "
-                f"{state.steps[index]} {state.done[index]}/{state.totals[index]}{eta_text}"
-            )
-
         try:
             # Emit progress (socketio.start_background_task handles context automatically)
             socketio.emit("progress_update", progress_data, room=self.session_id)
@@ -824,7 +823,12 @@ class ProgressCallback:
 
     def finish(self, message: str = "Processing complete"):
         """Finish progress tracking (the job itself announces completion to the browser)."""
+        self.console.finish()
         print(f"{message}")
+
+    def close(self) -> None:
+        """Release the console (progress bars) when the job ends, however it ended."""
+        self.console.close()
 
 
 def process_video_async(  # noqa: C901
@@ -834,11 +838,17 @@ def process_video_async(  # noqa: C901
     import torch  # Import here to avoid CUDA initialization issues in main thread
 
     projector = None
+    callback = None
     try:
         current_processing["active"] = True
         current_processing["session_id"] = session_id
         current_processing["stop_requested"] = False
         current_processing["output_dir"] = str(output_dir)
+
+        # Settings the request left out get their defaults (the pipeline expects them all)
+        for key, value in DEFAULT_SETTINGS.items():
+            if key not in ("output_dir", "target_fps"):
+                settings.setdefault(key, value)
 
         # Check CUDA availability in this thread
         cuda_available = torch.cuda.is_available()
@@ -1012,6 +1022,8 @@ def process_video_async(  # noqa: C901
         print(f"Processing error: {e}")  # Always print errors
 
     finally:
+        if callback is not None:
+            callback.close()
         # Free the depth model's VRAM (it used to stay allocated until the next job)
         if projector is not None:
             try:
