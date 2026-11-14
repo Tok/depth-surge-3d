@@ -1781,12 +1781,22 @@
                                         <div class="progress-bar bg-info" id="step8Bar" style="width: 0%;"></div>
                                     </div>
                                 </div>
+
+                                <div class="mb-2" id="step9Row">
+                                    <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
+                                        <span><i class="fas fa-film"></i> 9. Assemble Final Video</span>
+                                        <span class="step-count" id="step9Progress">0%</span>
+                                    </div>
+                                    <div class="progress sub-progress">
+                                        <div class="progress-bar bg-info" id="step9Bar" style="width: 0%;"></div>
+                                    </div>
+                                </div>
                             </div>
 
                             <small class="job-status mb-3" id="segmentNote" style="display: none;">
                                 <i class="fas fa-info-circle"></i> Each batch is encoded into a video segment as soon as its frames are done
-                                (<code>98_video_segments</code> in the output directory). The segments are joined into the final video,
-                                with audio, after the last batch; stopping earlier leaves them for a partial video.
+                                (<code>98_video_segments</code> in the output directory). Step 9 joins the segments into the final video
+                                and adds the audio; stopping earlier leaves them for a partial video or for resuming.
                             </small>
 
                             <!-- Batch Directory Info -->
@@ -3071,7 +3081,7 @@
             const overallPhase = document.getElementById('overallProgressPhase');
             if (overallPhase) overallPhase.textContent = 'Initializing...';
 
-            for (let i = 1; i <= 8; i++) {
+            for (let i = 1; i <= 9; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
                 if (bar) {
@@ -3148,8 +3158,12 @@
             loop.classList.toggle('batched', batched);
             const inLoop = batched && videoInLoop !== false;
             const row = document.getElementById('step8Row');
-            const target = inLoop ? loop.querySelector('.batch-steps') : loop.parentNode;
-            if (row.parentNode !== target) target.appendChild(row);
+            // inside the loop, or back in its place after it (before step 9)
+            if (inLoop && row.parentNode !== loop.querySelector('.batch-steps')) {
+                loop.querySelector('.batch-steps').appendChild(row);
+            } else if (!inLoop && row.parentNode !== loop.parentNode) {
+                loop.parentNode.insertBefore(row, document.getElementById('step9Row'));
+            }
             document.getElementById('step8Label').textContent = inLoop ? 'Encode Video Segment' : 'Create Final Video';
             document.getElementById('segmentNote').style.display = inLoop ? 'block' : 'none';
         }
@@ -3179,8 +3193,14 @@
                     container.classList.toggle('step-disabled', !!step.skipped);
                     container.classList.toggle('step-enabled', !step.skipped);
                 }
+                // Step 9 joins video segments; without segments there is nothing to join
+                if (index === 8) {
+                    document.getElementById('step9Row').style.display = step.skipped ? 'none' : 'block';
+                }
                 if (step.skipped) {
                     text.textContent = 'off';
+                } else if (index === 8) {
+                    text.textContent = percent >= 100 ? '100%' : (step.total > 0 ? 'joining...' : '0%');
                 } else if (step.total > 0) {
                     text.textContent = `${step.progress}/${step.total} · ${percent.toFixed(0)}%`;
                 } else {
@@ -3217,7 +3237,7 @@
             }
 
             // Mark all steps as complete
-            for (let i = 1; i <= 8; i++) {
+            for (let i = 1; i <= 9; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
                 const text = document.getElementById(`step${i}Progress`);
                 if (bar && text) {
