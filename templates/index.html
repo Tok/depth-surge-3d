@@ -1413,13 +1413,13 @@
                             </small>
                         </div>
                         <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="keepIntermediates" checked>
+                            <input class="form-check-input" type="checkbox" id="keepIntermediates">
                             <label class="form-check-label" for="keepIntermediates">
                                 Keep Intermediate Files
                             </label>
                             <small class="text-muted d-block ms-4">
-                                On: every step's images stay in the output directory (needed to redo single steps with changed settings).<br>
-                                Off: only about one batch of frames exists at a time, plus the video; the job can still be resumed.
+                                Off (default): the extracted frames are deleted as the job goes and nothing else is kept; the job can still be resumed.<br>
+                                On: every step's images stay in the output directory (needed to redo single steps with changed settings). Needs many times the disk space.
                             </small>
                         </div>
                         <div class="step-indicator">
@@ -2599,7 +2599,18 @@
                         return;
                     }
                     const tooSmall = data.free_bytes > 0 && data.estimated_bytes > data.free_bytes;
-                    let text = `about ${formatBytes(data.estimated_bytes)} needed, ${formatBytes(data.free_bytes)} free`;
+                    // Largest parts first, so it is clear where the space goes
+                    const labels = {
+                        original_frames: 'extracted frames', depth_maps: 'depth maps', stereo_frames: 'stereo pairs',
+                        distorted_frames: 'distorted', cropped_frames: 'cropped', upscaled_frames: 'upscaled',
+                        vr_frames: 'VR frames', video: 'video'
+                    };
+                    const parts = Object.entries(data.breakdown || {})
+                        .filter(([, bytes]) => bytes >= data.estimated_bytes * 0.03)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([name, bytes]) => `${labels[name] || name} ${formatBytes(bytes)}`);
+                    let text = `about ${formatBytes(data.estimated_bytes)} at peak for ${data.frames.toLocaleString()} frames`
+                        + ` (${parts.join(', ')}); ${formatBytes(data.free_bytes)} free`;
                     if (tooSmall) {
                         text += settings.keep_intermediates
                             ? ' — may not fit; turning off "Keep Intermediate Files" needs far less'
@@ -3383,7 +3394,7 @@
                 processingMode: 'batched',
                 batchSize: '120',
                 preserveAudio: true,
-                keepIntermediates: true,
+                keepIntermediates: false,
                 videoEncoder: 'auto',
                 applyDistortion: true,
                 fisheyeProjection: 'stereographic',

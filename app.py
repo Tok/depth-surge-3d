@@ -1701,6 +1701,7 @@ def estimate_disk_space():
             "frames": end_frame - start_frame,
             "estimated_bytes": estimate["total"],
             "final_video_bytes": estimate["final_video"],
+            "breakdown": estimate["breakdown"],
             "free_bytes": get_available_space(output_dir),
         }
     )
