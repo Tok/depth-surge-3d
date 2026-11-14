@@ -37,7 +37,6 @@ from ...utils import (
     warning,
 )
 
-
 # `step_name` each step reports to the progress tracker
 _STEP_NAMES = {
     "depth": "Depth Map Generation",
