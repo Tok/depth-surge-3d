@@ -286,6 +286,13 @@
             margin: 8px 0;
         }
 
+        /* Status in the progress card's header: the current activity */
+        .progress-status {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-lime);
+        }
+
         /* Overall bar: the label lies over the whole track (not inside the filled part), dark
            on both the light track and the lime bar, so it is readable at any progress */
         .overall-progress {
@@ -1672,8 +1679,10 @@
             <div class="col-12">
                 <div class="progress-container">
                     <div class="card">
-                        <div class="card-header">
-                            <h5><i class="fas fa-spinner fa-spin"></i> Processing Progress</h5>
+                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                            <h5 class="mb-0"><i class="fas fa-spinner fa-spin"></i> Processing Progress</h5>
+                            <!-- what is being worked on right now (the bars below show how far it is) -->
+                            <span class="progress-status" id="currentActivity"></span>
                         </div>
                         <div class="card-body">
                             <!-- Overall Progress -->
@@ -3088,6 +3097,8 @@
             if (overallText) overallText.textContent = '0%';
             const overallPhase = document.getElementById('overallProgressPhase');
             if (overallPhase) overallPhase.textContent = 'Initializing...';
+            const activity = document.getElementById('currentActivity');
+            if (activity) activity.textContent = 'Starting...';
 
             for (let i = 1; i <= 9; i++) {
                 const bar = document.getElementById(`step${i}Bar`);
@@ -3159,6 +3170,12 @@
                 } else {
                     overallPhase.textContent = `${data.progress.toFixed(1)}%${etaSuffix}`;
                 }
+            }
+            // What is being worked on right now goes below the bar, not into it
+            const activity = document.getElementById('currentActivity');
+            if (activity) {
+                const batchPrefix = data.batch ? `Batch ${data.batch.index + 1}/${data.batch.count}: ` : '';
+                activity.textContent = data.stage ? `${batchPrefix}${data.stage}` : '';
             }
 
             // Update step-specific progress bars

@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is visible and the share of the view that is black.
 - The live preview shows the depth map and the VR output (the left-eye tile is gone: the stereo
   pair is an in-between result that usually isn't written to disk any more).
+- The progress card's header shows what is being worked on; the overall bar's label always
+  shows whole-video figures (frames finished and ETA).
 - Stopping a job in the web UI offers to create a video from the frames finished so far.
 - CLI: `--depth-resolution`, `--super-sample`, `--video-encoder`, and `--reuse DIR` to run in an
   existing output directory with new settings, reusing its frames and depth maps.
