@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-14
+
+### Fixed
+- **Depth maps faded to flat gray on longer videos**: with Depth-Anything V3 the depth maps lost
+  contrast frame by frame and were a single gray value after a few hundred frames (no 3D effect,
+  no error; present since 0.10.0). Video-Depth-Anything lost contrast the same way from chunk to chunk, much more
+  slowly. The alignment between frames and chunks now keeps the contrast.
+- Runs started with 0.11.0 redo their depth maps when resumed, since the ones made so far may
+  be flat.
+
+### Added
+- **Stereo figures below the depth map preview** (web UI): the pixel shift between the near and
+  far parts of the previewed frame and the share of the depth range it uses, with a warning
+  when the depth is flat.
+
 ## [0.11.0] - 2026-11-14
 
 ### Added
@@ -286,7 +301,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For changelog entries prior to v0.9.2, see [docs/archive/CHANGELOG.md](docs/archive/CHANGELOG.md)
 
-[Unreleased]: https://github.com/Tok/depth-surge-3d/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Tok/depth-surge-3d/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/Tok/depth-surge-3d/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/Tok/depth-surge-3d/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Tok/depth-surge-3d/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/Tok/depth-surge-3d/compare/v0.9.1...v0.9.2
