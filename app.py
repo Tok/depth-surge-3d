@@ -339,6 +339,11 @@ def _launch_job(job: dict[str, Any]) -> None:
     reset_progress_state(job["session_id"])
     current_processing["active"] = True
     current_processing["output_dir"] = str(job["output_dir"])
+    # Known before the first progress update, so the UI can show the batch loop right away
+    mode = job["settings"].get("processing_mode")
+    current_processing["processing_mode"] = (
+        mode if mode in PROCESSING_MODES else DEFAULT_SETTINGS["processing_mode"]
+    )
     current_processing["thread"] = socketio.start_background_task(
         process_video_async,
         job["session_id"],
@@ -1634,6 +1639,7 @@ def list_jobs():
         if running_dir:
             running = _job_summary(Path(running_dir))
             running["session_id"] = current_processing["session_id"]
+            running["processing_mode"] = current_processing.get("processing_mode")
             running["progress"] = current_processing.get("progress", 0)
         queued = [
             {**_job_summary(Path(job["output_dir"])), "session_id": job["session_id"]}
@@ -1776,6 +1782,7 @@ def handle_join_session(data):
                 "step_index": current_processing.get("step_index", 0),
                 "step_progress": current_processing.get("step_progress", 0),
                 "step_total": current_processing.get("step_total", 0),
+                "processing_mode": current_processing.get("processing_mode"),
             }
             socketio.emit("progress_update", initial_data, room=session_id)
         except Exception as e:

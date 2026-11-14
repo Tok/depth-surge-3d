@@ -2438,7 +2438,7 @@
                 } else if (data.queued) {
                     notify(`Added to the queue (position ${data.position}).`);
                 } else {
-                    attachToJob(data.session_id, data.output_dir, true);
+                    attachToJob(data.session_id, data.output_dir, true, body.settings ? body.settings.processing_mode : null);
                 }
                 refreshJobs();
                 return data;
@@ -2451,10 +2451,10 @@
         }
 
         // Show the progress of a job
-        function attachToJob(sessionId, outputDir, scrollToProgress) {
+        function attachToJob(sessionId, outputDir, scrollToProgress, processingMode) {
             currentSessionId = sessionId;
             socket.emit('join_session', {session_id: sessionId});
-            resetProgressDisplay();
+            resetProgressDisplay(processingMode);
             hidePreviousOutput();
             showProgressPanel(scrollToProgress);
             if (outputDir) showCurrentBatchDirectory(outputDir);
@@ -2660,7 +2660,7 @@
                 .then(data => {
                     renderJobs(data);
                     if (data.running && !currentSessionId) {
-                        attachToJob(data.running.session_id, data.running.path, false);
+                        attachToJob(data.running.session_id, data.running.path, false, data.running.processing_mode);
                     }
                 })
                 .catch(error => console.error('Error loading jobs:', error));
@@ -3052,7 +3052,7 @@
         }
         
         // Reset progress display to its initial state (called whenever a new job starts)
-        function resetProgressDisplay() {
+        function resetProgressDisplay(processingMode) {
             const overallBar = document.getElementById('overallProgressBar');
             if (overallBar) {
                 overallBar.style.width = '0%';
@@ -3075,8 +3075,12 @@
                 }
                 if (text) text.textContent = '0%';
             }
-            document.getElementById('batchLoop').classList.remove('batched');
+            // Batched jobs show the batch loop from the start, not only once the first batch runs.
+            // An unknown mode (resumed job) is corrected by the first progress update.
+            showBatchLoop(processingMode ? processingMode === 'batched' : true);
             document.getElementById('batchBar').style.width = '0%';
+            document.getElementById('batchLabel').textContent = '--';
+            document.getElementById('batchFrames').textContent = 'starts after frame extraction';
 
             ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
@@ -3131,10 +3135,17 @@
             updateStepProgress(data);
         }
 
+        function showBatchLoop(batched) {
+            document.getElementById('batchLoop').classList.toggle('batched', batched);
+        }
+
         // Update the step bars and, in batched mode, the batch counter.
         // data.steps has one entry per step; for steps of the inner loop (in_batch) the
         // counts are frames of the current batch, otherwise frames of the whole video.
         function updateStepProgress(data) {
+            if (data.processing_mode || data.batch) {
+                showBatchLoop(data.processing_mode === 'batched' || !!data.batch);
+            }
             if (!Array.isArray(data.steps)) return;
 
             data.steps.forEach((step, index) => {
@@ -3162,8 +3173,6 @@
                 }
             });
 
-            const loop = document.getElementById('batchLoop');
-            loop.classList.toggle('batched', !!data.batch);
             if (data.batch) {
                 const batch = data.batch;
                 document.getElementById('batchLabel').textContent = `${batch.index + 1}/${batch.count}`;

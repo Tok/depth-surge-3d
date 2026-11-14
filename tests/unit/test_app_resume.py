@@ -434,3 +434,22 @@ def test_server_console_shows_the_same_progress_as_the_browser(monkeypatch, caps
     assert "Overall:" not in capsys.readouterr().out
     assert app_module.ProgressCallback("s", 10, "sequential").console.batched is False
     app_module.current_processing["last_progress"] = None
+
+
+def test_processing_mode_is_known_before_the_first_progress_update(tmp_path, job_starts):
+    """The UI shows the batch loop from the start of a batched job."""
+    app_module.submit_job(tmp_path / "a.mp4", {"processing_mode": "sequential"}, tmp_path / "a")
+    assert app_module.current_processing["processing_mode"] == "sequential"
+    jobs = app_module.app.test_client().get("/jobs").get_json()
+    assert jobs["running"]["processing_mode"] == "sequential"
+
+    app_module._finish_job()
+    app_module.submit_job(tmp_path / "b.mp4", {}, tmp_path / "b")
+    assert app_module.current_processing["processing_mode"] == "batched"
+    client = app_module.socketio.test_client(app_module.app)
+    try:
+        client.emit("join_session", {"session_id": app_module.current_processing["session_id"]})
+        update = [m for m in client.get_received() if m["name"] == "progress_update"][0]
+        assert update["args"][0]["processing_mode"] == "batched"
+    finally:
+        client.disconnect()
