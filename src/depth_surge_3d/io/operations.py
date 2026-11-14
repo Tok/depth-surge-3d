@@ -228,7 +228,9 @@ PIPELINE_DIRS = [
 ]
 
 
-def create_output_directories(base_path: Path, keep_intermediates: bool = True) -> dict[str, Path]:
+def create_output_directories(
+    base_path: Path, keep_intermediates: bool = True, needed: set[str] | None = None
+) -> dict[str, Path]:
     """
     Create output directory structure on filesystem.
 
@@ -236,6 +238,9 @@ def create_output_directories(base_path: Path, keep_intermediates: bool = True) 
         base_path: Base output directory path
         keep_intermediates: Also create the purely informational directories (depth map
             images, legacy folders). The pipeline directories are always created.
+        needed: If given, only these directories are created on disk; the returned
+            dictionary still names all of them, so steps that turn out to need another
+            one can create it. None creates every directory (old behaviour).
 
     Returns:
         Dictionary mapping directory names to paths
@@ -249,7 +254,8 @@ def create_output_directories(base_path: Path, keep_intermediates: bool = True) 
     names = INTERMEDIATE_DIRS if keep_intermediates else PIPELINE_DIRS
     for dir_name in names:
         full_path = base_path / INTERMEDIATE_DIRS[dir_name]
-        full_path.mkdir(exist_ok=True)
+        if needed is None or dir_name in needed:
+            full_path.mkdir(exist_ok=True)
         directories[dir_name] = full_path
 
     return directories

@@ -126,7 +126,10 @@ class TestSetupProcessing:
         assert output_path == Path("/output/dir")
         assert directories == {"base": Path("/output/dir")}
         assert settings_file == Path("/output/dir/settings.json")
-        mock_create_dirs.assert_called_once_with(Path("/output/dir"), True)
+        args, kwargs = mock_create_dirs.call_args
+        assert args == (Path("/output/dir"), False)
+        # only directories this run writes to are created
+        assert {"frames", "depth_maps", "vr_frames", "left_frames"} <= kwargs["needed"]
 
 
 class TestFinalizeProcessing:
