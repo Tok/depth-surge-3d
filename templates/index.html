@@ -1175,15 +1175,25 @@
                         </div>
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="applyDistortion">
+                                <input class="form-check-input" type="checkbox" id="applyDistortion" checked>
                                 <label class="form-check-label" for="applyDistortion">
-                                    Fisheye Output (VR180, square view per eye)
+                                    Enable Fisheye Processing
                                 </label>
                             </div>
                             <small class="form-text text-muted">
-                                Off (default): flat 3D that keeps the whole frame at the video's aspect ratio; VR players show it as a 3D screen.<br>
-                                On: fisheye distortion for hemispherical VR projection. Each eye is a square, so the sides of wide videos are cut off.
+                                Fisheye distortion for hemispherical VR projection (VR180), with a square view per eye.
+                                Off: flat 3D at the video's aspect ratio.
                             </small>
+                        </div>
+                        <div class="mb-3" id="frameFitOptions">
+                            <label class="form-label">Frame Fit <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="The fisheye view is square, most videos are not. Fill View crops the sides of a wide video; Whole Frame zooms out until everything is visible, leaving black above and below."></i></label>
+                            <input type="range" class="form-range" id="fisheyeFrameFit" min="0" max="1" step="0.05" value="0.5">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">Fill view (crops the sides)</small>
+                                <small><strong id="fisheyeFrameFitValue">0.50</strong></small>
+                                <small class="text-muted">Whole frame (black bars)</small>
+                            </div>
+                            <small class="form-text text-muted d-block mt-1" id="frameFitInfo">Upload a video to see what this means for it.</small>
                             <div class="alert alert-warning aspect-warning mt-2 mb-0" style="display: none;"></div>
                         </div>
                         <div class="mb-3" id="distortionOptions">
@@ -2323,6 +2333,7 @@
                 apply_distortion: document.getElementById('applyDistortion').checked,
                 fisheye_projection: document.getElementById('fisheyeProjection').value,
                 fisheye_fov: parseFloat(document.getElementById('fisheyeFov').value),
+                fisheye_frame_fit: parseFloat(document.getElementById('fisheyeFrameFit').value),
                 crop_factor: document.getElementById('cropFactor') ? parseFloat(document.getElementById('cropFactor').value) : 0.7,
                 fisheye_crop_factor: parseFloat(document.getElementById('fisheyeCropFactor').value),
                 hole_fill_quality: document.getElementById('holeFillQuality').value,
@@ -2578,8 +2589,12 @@
                 .catch(error => console.error('Error loading jobs:', error));
         }
 
-        // Warn when the settings cut off or letterbox a wide video, with a one-click fix
+        // What the fisheye view shows of a video that isn't square. The view is square, so
+        // it either cuts the long sides (Frame Fit towards "fill") or leaves black bars
+        // (towards "whole frame"). Normal settings get a neutral line; only the extremes warn.
         const WIDE_ASPECT = 1.2;
+        const CUT_WARNING = 0.35;    // share of the long side that is cut off
+        const BARS_WARNING = 0.40;   // share of the view that is black
 
         function selectedEyeAspect() {
             const resolution = document.getElementById('vrResolution').value;
@@ -2592,10 +2607,14 @@
             return null;  // auto and the wide presets follow the video
         }
 
-        function useWholeFrame() {
-            const distortion = document.getElementById('applyDistortion');
-            distortion.checked = false;
-            distortion.dispatchEvent(new Event('change', {bubbles: true}));
+        function setFrameFit(value) {
+            const slider = document.getElementById('fisheyeFrameFit');
+            slider.value = value;
+            slider.dispatchEvent(new Event('input', {bubbles: true}));
+            saveSettings();
+        }
+
+        function useVideoAspect() {
             const resolution = document.getElementById('vrResolution');
             resolution.value = 'auto';
             resolution.dispatchEvent(new Event('change', {bubbles: true}));
@@ -2604,37 +2623,67 @@
         }
 
         function updateAspectWarning() {
-            const boxes = document.querySelectorAll('.aspect-warning');
+            const fit = parseFloat(document.getElementById('fisheyeFrameFit').value);
+            document.getElementById('fisheyeFrameFitValue').textContent = fit.toFixed(2);
+            const fisheye = document.getElementById('applyDistortion').checked;
+            document.getElementById('frameFitOptions').style.display = fisheye ? 'block' : 'none';
+
             const info = currentVideoInfo;
-            let message = null;
+            const fitInfo = document.getElementById('frameFitInfo');
+            let warning = null;
+            let actionLabel = null;
             let action = null;
-            if (info && info.height > 0 && info.width / info.height > WIDE_ASPECT) {
+            fitInfo.textContent = 'Upload a video to see what this means for it.';
+
+            if (info && info.width > 0 && info.height > 0) {
+                const wide = info.width >= info.height;
+                const longSide = Math.max(info.width, info.height);
+                const shortSide = Math.min(info.width, info.height);
                 const ratio = `${info.width}×${info.height}`;
-                if (document.getElementById('applyDistortion').checked) {
-                    const cut = Math.round((1 - info.height / info.width) * 100);
-                    message = `Fisheye output keeps a square view per eye: about ${cut}% of this ${ratio} video's width (the left and right edges) will be cut off.`;
-                    action = 'Keep the whole frame (flat 3D at the video\'s aspect ratio)';
-                } else {
+                if (fisheye) {
+                    // Same calculation as the pipeline: zoom from 1 (fill) to long/short (whole frame)
+                    const cut = (1 - fit) * (1 - shortSide / longSide);
+                    const zoom = 1 + fit * (longSide / shortSide - 1);
+                    const bars = 1 - 1 / zoom;
+                    const longName = wide ? 'width' : 'height';
+                    const cutEdges = wide ? 'left and right edges' : 'top and bottom';
+                    const barsWhere = wide ? 'above and below' : 'left and right';
+                    fitInfo.textContent = longSide === shortSide
+                        ? 'This video is square: the whole frame fills the view.'
+                        : `For this ${ratio} video: ${Math.round((1 - cut) * 100)}% of its ${longName} is visible, `
+                          + `and about ${Math.round(bars * 100)}% of the view is black (${barsWhere}).`;
+                    if (cut >= CUT_WARNING) {
+                        warning = `Fisheye view: about ${Math.round(cut * 100)}% of this ${ratio} video's ${longName} (the ${cutEdges}) is cut off.`;
+                        actionLabel = 'Show more of the frame (Frame Fit 0.5)';
+                        action = () => setFrameFit(0.5);
+                    } else if (bars >= BARS_WARNING) {
+                        warning = `Fisheye view: the whole frame is shown, but about ${Math.round(bars * 100)}% of the view is black (${barsWhere}) and the picture appears smaller.`;
+                        actionLabel = 'Fill more of the view (Frame Fit 0.5)';
+                        action = () => setFrameFit(0.5);
+                    }
+                } else if (info.width / info.height > WIDE_ASPECT) {
                     const eyeAspect = selectedEyeAspect();
                     if (eyeAspect !== null && eyeAspect < WIDE_ASPECT) {
-                        message = `The selected per-eye resolution is not wide: this ${ratio} video will get black bars above and below (nothing is cut off).`;
-                        action = 'Use the video\'s aspect ratio';
+                        warning = `The selected per-eye resolution is not wide: this ${ratio} video will get black bars above and below (nothing is cut off).`;
+                        actionLabel = 'Use the video\'s aspect ratio';
+                        action = useVideoAspect;
                     }
                 }
             }
-            boxes.forEach(box => {
+
+            document.querySelectorAll('.aspect-warning').forEach(box => {
                 box.replaceChildren();
-                box.style.display = message ? 'block' : 'none';
-                if (!message) return;
+                box.style.display = warning ? 'block' : 'none';
+                if (!warning) return;
                 const icon = document.createElement('i');
                 icon.className = 'fas fa-exclamation-triangle';
                 box.appendChild(icon);
-                box.appendChild(document.createTextNode(' ' + message + ' '));
+                box.appendChild(document.createTextNode(' ' + warning + ' '));
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'btn btn-sm btn-outline-secondary ms-1';
-                button.textContent = action;
-                button.addEventListener('click', useWholeFrame);
+                button.textContent = actionLabel;
+                button.addEventListener('click', action);
                 box.appendChild(button);
             });
         }
@@ -2642,6 +2691,7 @@
         ['applyDistortion', 'vrResolution', 'customWidth', 'customHeight'].forEach(id => {
             document.getElementById(id).addEventListener('change', updateAspectWarning);
         });
+        document.getElementById('fisheyeFrameFit').addEventListener('input', updateAspectWarning);
 
         // Disk space the current settings need (rough), next to what is free
         let diskEstimateTimer = null;
@@ -3389,6 +3439,7 @@
                 applyDistortion: document.getElementById('applyDistortion').checked,
                 fisheyeProjection: document.getElementById('fisheyeProjection').value,
                 fisheyeFov: document.getElementById('fisheyeFov').value,
+                fisheyeFrameFit: document.getElementById('fisheyeFrameFit').value,
                 cropFactor: document.getElementById('cropFactor').value,
                 fisheyeCropFactor: document.getElementById('fisheyeCropFactor').value,
                 holeFillQuality: document.getElementById('holeFillQuality').value,
@@ -3447,6 +3498,7 @@
                 // Update optional step styling after loading settings
                 updateOptionalStepStyling();
                 update3DPresetHighlight();
+                updateAspectWarning();
 
             } catch (error) {
                 console.error('Error loading settings:', error);
@@ -3470,7 +3522,8 @@
                 preserveAudio: true,
                 keepIntermediates: false,
                 videoEncoder: 'auto',
-                applyDistortion: false,
+                applyDistortion: true,
+                fisheyeFrameFit: '0.5',
                 fisheyeProjection: 'stereographic',
                 fisheyeFov: '180',
                 cropFactor: '1.0',
@@ -3498,6 +3551,7 @@
             // Update optional step styling
             updateOptionalStepStyling();
             update3DPresetHighlight();
+            updateAspectWarning();
 
             // Clear saved settings
             localStorage.removeItem('stereoProjectorSettings');
@@ -3511,7 +3565,7 @@
                 'processingMode', 'batchSize', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
                 'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'depthResolution', 'videoEncoder',
                 'preserveAudio', 'keepIntermediates', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
-                'fisheyeCropFactor', 'holeFillQuality', 'applyUpscaling', 'upscaleModel', 'experimentalFrameInterpolation'
+                'fisheyeFrameFit', 'fisheyeCropFactor', 'holeFillQuality', 'applyUpscaling', 'upscaleModel', 'experimentalFrameInterpolation'
             ];
             
             settingsElements.forEach(id => {
@@ -3613,6 +3667,7 @@
             // Show/hide the fisheye options for the loaded (or default) state
             document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
             update3DPresetHighlight();
+            updateAspectWarning();
             setupAutoSave();
             refreshJobs();  // also shows a job that is still running (page reload)
             setInterval(refreshJobs, 5000);
