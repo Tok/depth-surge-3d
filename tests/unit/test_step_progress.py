@@ -74,7 +74,7 @@ class TestStepProgressState:
             250,
             250,
         )
-        assert not rows["Frame Extraction"]["in_batch"] and not rows["Video Creation"]["in_batch"]
+        assert not rows["Frame Extraction"]["in_batch"] and rows["Video Creation"]["in_batch"]
         # depth is ahead of the batch, stereo in the middle, crop hasn't started this batch
         assert (
             rows["Depth Map Generation"]["progress"],
@@ -95,12 +95,25 @@ class TestStepProgressState:
         assert state.batch_ratio() == 0.0
         state.set_batch(0, 2, 0, 100)
         assert state.batch_ratio() == 0.0
-        for name in PIPELINE_STEP_NAMES[1:7]:
+        for name in state.loop_steps:
             state.record(name, 50, 200)
         assert state.batch_ratio() == pytest.approx(0.5)
-        for name in PIPELINE_STEP_NAMES[1:7]:
+        for name in state.loop_steps:
             state.record(name, 100, 200)
         assert state.batch_ratio() == pytest.approx(1.0)
+
+    def test_video_step_is_part_of_the_loop_when_encoded_per_batch(self):
+        per_batch = StepProgressState()
+        per_batch.set_batch(1, 3, 100, 100)
+        per_batch.record("Video Creation", 150, 300)
+        row = per_batch.display_steps()[7]
+        assert (row["in_batch"], row["progress"], row["total"]) == (True, 50, 100)
+
+        one_pass = StepProgressState(video_in_loop=False)
+        one_pass.set_batch(1, 3, 100, 100)
+        one_pass.record("Video Creation", 150, 300)
+        row = one_pass.display_steps()[7]
+        assert (row["in_batch"], row["progress"], row["total"]) == (False, 150, 300)
 
     def test_eta_ignores_progress_restored_from_an_earlier_run(self):
         with patch(f"{MODULE}.time.time", return_value=1000.0):
@@ -202,14 +215,14 @@ class TestTqdmProgressTracker:
             "├ 3 Stereo pairs",
             "├ 4 Distortion",
             "├ 5 Crop frames",
-            "└ 7 Assemble VR",
-            "8 Create video",
+            "├ 7 Assemble VR",
+            "└ 8 Encode segment",
         ]
         # inner bars count frames of the batch and start further right than the outer ones
         assert lines[3].endswith("| 10/10") and lines[4].endswith("| 5/10")
         assert lines[2].endswith("| frames 1-10")
         assert lines[3].index("|") > lines[1].index("|")
-        assert lines[8].endswith("| -")  # nothing known about the last step yet
+        assert lines[8].endswith("| 0/10")  # the video segment of this batch, not started
         # UI colours: finished lime, running blue, batch counter green
         assert "38;2;57;255;20m" in coloured[3] and "38;2;0;217;255m" in coloured[4]
         assert "38;2;0;255;65m" in coloured[2]
@@ -234,6 +247,10 @@ class TestTqdmProgressTracker:
         lines = _plain(tracker.render_lines(100))
 
         assert len(lines) == 9 and not any(line.startswith("Batch") for line in lines)
+        assert lines[8].startswith("8 Create video")
+
+        one_pass = TqdmProgressTracker(batched=True, use_bars=False, video_in_loop=False)
+        assert _plain(one_pass.render_lines(100))[-1].startswith("8 Create video")
         assert lines[2].startswith("2 Depth maps") and lines[2].endswith("| 10/20")
 
     def test_block_is_redrawn_in_place_and_messages_go_above_it(self):

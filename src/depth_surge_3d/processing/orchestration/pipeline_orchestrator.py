@@ -67,6 +67,8 @@ class _FrameStep:
     run: Callable[[int, int, Any], bool]
     # directories whose files for those frames only this step reads
     consumes: tuple[str, ...]
+    # directories this step writes to (created when the step runs on its own)
+    writes: tuple[str, ...] = ()
 
 
 class ProcessingOrchestrator:
@@ -249,6 +251,11 @@ class ProcessingOrchestrator:
         if self._uses_segments(settings):
             # The video was encoded batch by batch; join the segments and add the audio
             segments_dir = directories["video_segments"]
+            progress_tracker.update_progress(
+                "Joining video segments and adding audio",
+                phase="video_creation",
+                step_name="Video Creation",
+            )
             success = self.video_encoder.concat_segments(
                 [segments_dir / _segment_name(start, end) for start, end in state.segments],
                 directories["base"],
@@ -512,12 +519,16 @@ class ProcessingOrchestrator:
         stereo_dirs = ("left_frames", "right_frames")
         distorted_dirs = ("left_distorted", "right_distorted")
         cropped_dirs = ("left_cropped", "right_cropped")
-        steps = [_FrameStep("stereo", stereo, ("depth_maps",))]
+        steps = [_FrameStep("stereo", stereo, ("depth_maps",), stereo_dirs)]
         if distort:
-            steps.append(_FrameStep("distortion", distortion, stereo_dirs))
-        steps.append(_FrameStep("crop", crop, distorted_dirs if distort else stereo_dirs))
+            steps.append(_FrameStep("distortion", distortion, stereo_dirs, distorted_dirs))
+        steps.append(
+            _FrameStep("crop", crop, distorted_dirs if distort else stereo_dirs, cropped_dirs)
+        )
         if upscale:
-            steps.append(_FrameStep("upscale", upscaling, cropped_dirs))
+            steps.append(
+                _FrameStep("upscale", upscaling, cropped_dirs, ("left_upscaled", "right_upscaled"))
+            )
         steps.append(
             _FrameStep(
                 "assemble",
@@ -551,6 +562,24 @@ class ProcessingOrchestrator:
         _FrameRun(
             self, frame_files, directories, settings, state, depth_state_path, progress_tracker
         ).run()
+
+    def _needed_directories(self, settings: dict[str, Any]) -> set[str]:
+        """
+        Directories a run with these settings writes to (others would stay empty).
+
+        The fused frame pipeline writes stereo, distorted and cropped images only when
+        intermediates are kept; cropped and upscaled eyes are needed for AI upscaling.
+        """
+        needed = {"frames", "depth_maps", "vr_frames"}
+        if self._uses_segments(settings):
+            needed.add("video_segments")
+        if settings.get("keep_intermediates", True):
+            needed |= {"left_frames", "right_frames", "left_cropped", "right_cropped"}
+            if settings.get("apply_distortion", True):
+                needed |= {"left_distorted", "right_distorted"}
+        if settings.get("upscale_model", "none") != "none":
+            needed |= {"left_cropped", "right_cropped", "left_upscaled", "right_upscaled"}
+        return needed
 
     def _uses_segments(self, settings: dict[str, Any]) -> bool:
         """
@@ -637,7 +666,10 @@ class ProcessingOrchestrator:
             - Console output
         """
         output_path = Path(output_dir)
-        directories = create_output_directories(output_path, settings["keep_intermediates"])
+        # All pipeline directories get a name, but only the ones this run writes to are created
+        directories = create_output_directories(
+            output_path, False, needed=self._needed_directories(settings)
+        )
         # A resumed run keeps the batch's settings file instead of adding another one
         existing = find_settings_file(output_path)
         if existing is not None:
@@ -878,6 +910,7 @@ class _FrameRun:
         self.num_frames = len(frame_files)
         self.batch_size = orchestrator._batch_size(settings)
         self.prune = not settings.get("keep_intermediates", True)
+        self._segmented = orchestrator._uses_segments(settings)
         self.upscale = settings.get("upscale_model", "none") != "none"
         self.steps = orchestrator._frame_steps(frame_files, directories, settings)
         # Steps the fused pipeline covers (assembly only if no upscaling comes before it)
@@ -919,13 +952,19 @@ class _FrameRun:
                 self.tracker.set_batch_info(batch, batch_count, start, end - start)
             self.depth_until(end)
             self.advance_frames(end)
+            done = "encoded into a video segment" if self._segmented else "finished"
             print(
                 step_complete(
                     f"Batch {batch + 1}/{batch_count}: VR frames {start + 1}-{end} "
-                    f"of {num_frames} finished"
+                    f"of {num_frames} {done}"
                 )
             )
-        self.orchestrator._print_saved_to(self.directories.get("vr_frames"), "VR frames")
+        if self._segmented:
+            self.orchestrator._print_saved_to(
+                self.directories.get("video_segments"), "Video segments"
+            )
+        else:
+            self.orchestrator._print_saved_to(self.directories.get("vr_frames"), "VR frames")
 
     def _frames_finished(self) -> int:
         """Frames that are through every step (including their video segment, if used)."""
@@ -986,6 +1025,10 @@ class _FrameRun:
         """One separate step for the frames up to ``target``."""
         state = self.state
         start = state.frames_done(step.key)
+        if start < target:
+            for key in step.writes:
+                if key in self.directories:
+                    self.directories[key].mkdir(exist_ok=True)
         while start < target:
             end = min(start + self.batch_size, target)
             tracker = BatchOffsetProgress(self.tracker, start, self.num_frames)

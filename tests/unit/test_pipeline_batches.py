@@ -297,7 +297,11 @@ class TestFusedPipeline:
             ("segment", 8, 10),
             ("concat", segments, NUM_FRAMES),
         ]
-        video = [u for u in tracker.updates if u.get("step_name") == "Video Creation"]
+        video = [
+            u
+            for u in tracker.updates
+            if u.get("step_name") == "Video Creation" and "step_progress" in u
+        ]
         assert [u["step_progress"] for u in video] == [4, 4, 8, 8, 10, 10, 10]
         assert all(u["step_total"] == NUM_FRAMES for u in video)
         state = json.loads((tmp_path / "out" / "pipeline_state.json").read_text())
@@ -312,12 +316,13 @@ class TestFusedPipeline:
 
         out = tmp_path / "out"
         counts = {d.name: len(list(d.glob("*"))) for d in out.iterdir() if d.is_dir()}
-        assert (
-            counts["04_left_frames"]
-            == counts["05_left_distorted"]
-            == counts["06_left_cropped"]
-            == 0
-        )
+        # directories nothing is written to aren't even created
+        assert set(counts) == {
+            "00_original_frames",
+            "02_depth_maps",
+            "98_video_segments",
+            "99_vr_frames",
+        }
         assert counts["02_depth_maps"] == 0
         assert counts["99_vr_frames"] == 2  # only the batch whose segment is missing
         assert counts["98_video_segments"] == 2
@@ -609,3 +614,37 @@ class TestFisheyeViewNote:
         assert self._note(capsys, 1080, 1080) == ""
         assert self._note(capsys, 0, 0) == ""
         assert self._note(capsys, 1920, 1080, apply_distortion=False) == ""
+
+
+class TestNeededDirectories:
+    """Only directories a run writes to are created."""
+
+    def _needed(self, **changes):
+        orchestrator = ProcessingOrchestrator(*[_FusedPipeline()] * 6)
+        return orchestrator._needed_directories(_settings(**changes))
+
+    def test_without_intermediates(self):
+        assert self._needed(keep_intermediates=False) == {
+            "frames",
+            "depth_maps",
+            "vr_frames",
+            "video_segments",
+        }
+
+    def test_kept_intermediates_follow_the_enabled_steps(self):
+        kept = self._needed()
+        assert {"left_frames", "left_distorted", "left_cropped"} <= kept
+        assert "left_upscaled" not in kept
+        assert "left_distorted" not in self._needed(apply_distortion=False)
+
+    def test_upscaling_needs_its_input_and_output(self):
+        needed = self._needed(keep_intermediates=False, upscale_model="x2")
+        assert {"left_cropped", "right_cropped", "left_upscaled", "right_upscaled"} <= needed
+        assert "left_frames" not in needed
+
+    def test_one_pass_encoding_has_no_segments(self):
+        assert "video_segments" not in self._needed(experimental_frame_interpolation=True)
+
+    def test_separate_steps_create_their_directories_on_demand(self, tmp_path, capsys):
+        """Redoing single steps without the fused pipeline still has somewhere to write."""
+        assert _run(tmp_path, _Pipeline(), keep_intermediates=False) is True

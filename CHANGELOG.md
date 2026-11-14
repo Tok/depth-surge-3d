@@ -44,8 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   between every step. Output is identical. Intermediate images are written only if they are kept.
   The separate steps (now multi-threaded) are still used to redo single steps after a settings
   change, and around AI upscaling.
-- **Segmented encoding**: the video is encoded in one segment per batch and the segments are
-  joined (without re-encoding) at the end. Partial videos are joined from the finished segments.
+- **Segmented encoding**: the video is encoded in one segment per batch (`98_video_segments/` in
+  the output directory) and the segments are joined (without re-encoding) at the end. Partial
+  videos are joined from the finished segments. The progress display shows video encoding as
+  part of the batch loop.
+- Only the directories a run writes to are created (no empty folders for steps that are off or
+  for intermediates that aren't kept).
 - **Fisheye frame fit** (`--fisheye-fit`, "Frame Fit" slider, default 0.5): the square fisheye
   view used to be filled by the frame's height, cutting about 44% of a 16:9 video's width. The
   view can now be zoomed out: 0 fills the view (old behaviour), 1 shows the whole frame with

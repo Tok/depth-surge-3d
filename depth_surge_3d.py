@@ -74,6 +74,7 @@ def create_progress_tracker(settings: dict) -> TqdmProgressTracker:
     return TqdmProgressTracker(
         skipped_steps=skipped,
         batched=settings.get("processing_mode", "batched") != "sequential",
+        video_in_loop=not settings.get("experimental_frame_interpolation"),
     )
 
 
@@ -586,6 +587,7 @@ def main():  # noqa: C901
                 "apply_distortion": not args.no_distortion,
                 "upscale_model": args.upscale_model,
                 "processing_mode": args.mode,
+                "experimental_frame_interpolation": args.experimental_frame_interpolation,
             }
         )
         success = projector.process_video(

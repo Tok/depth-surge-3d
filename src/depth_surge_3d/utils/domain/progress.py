@@ -510,8 +510,23 @@ class StepProgressState:
     to the current batch, next to a batch counter.
     """
 
-    def __init__(self, skipped_steps: set[str] | frozenset[str] = frozenset()):
+    def __init__(
+        self,
+        skipped_steps: set[str] | frozenset[str] = frozenset(),
+        video_in_loop: bool = True,
+    ):
+        """
+        Args:
+            skipped_steps: Names of disabled optional steps (no progress weight)
+            video_in_loop: The video is encoded per batch (a segment each), so the
+                "Video Creation" step belongs to the inner loop. False when it is encoded
+                in one pass after all batches.
+        """
         self.steps = list(PIPELINE_STEP_NAMES)
+        # Steps that run once per batch in batched mode
+        self.loop_steps = list(PIPELINE_LOOP_STEP_NAMES)
+        if video_in_loop:
+            self.loop_steps.append("Video Creation")
         self.skipped = frozenset(skipped_steps)
         self.weights = effective_step_weights(self.steps, self.skipped)
         self.done = [0] * len(self.steps)
@@ -563,7 +578,7 @@ class StepProgressState:
         """PURE: Finished fraction (0-1) of the current batch across the inner loop's steps."""
         if not self.batch:
             return 0.0
-        loop = [i for i, name in enumerate(self.steps) if name in PIPELINE_LOOP_STEP_NAMES]
+        loop = [i for i, name in enumerate(self.steps) if name in self.loop_steps]
         weight = sum(self.weights[i] for i in loop)
         if weight <= 0:
             return 0.0
@@ -587,7 +602,7 @@ class StepProgressState:
         """
         rows = []
         for i, name in enumerate(self.steps):
-            in_batch = self.batch is not None and name in PIPELINE_LOOP_STEP_NAMES
+            in_batch = self.batch is not None and name in self.loop_steps
             progress, total = self._batch_local(i) if in_batch else (self.done[i], self.totals[i])
             rows.append(
                 {
@@ -713,17 +728,19 @@ class TqdmProgressTracker:
         skipped_steps: set[str] | frozenset[str] = frozenset(),
         batched: bool = True,
         use_bars: bool | None = None,
+        video_in_loop: bool = True,
     ):
         """
         Args:
             skipped_steps: Names of disabled optional steps (no bar, no progress weight)
             batched: Show the batch counter and batch-relative inner bars
             use_bars: Force bars on/off (default: on if stderr is a terminal and tqdm exists)
+            video_in_loop: The video is encoded per batch, so its bar is part of the loop
         """
         import sys
         import threading
 
-        self.state = StepProgressState(skipped_steps)
+        self.state = StepProgressState(skipped_steps, video_in_loop)
         self.batched = batched
         if use_bars is None:
             use_bars = HAS_TQDM and sys.stderr.isatty()
@@ -807,12 +824,14 @@ class TqdmProgressTracker:
         ]
         rows = {row["name"]: row for row in state.display_steps()}
         active = [name for name in state.steps if name not in state.skipped]
-        loop = [name for name in active if self.batched and name in PIPELINE_LOOP_STEP_NAMES]
+        loop = [name for name in active if self.batched and name in state.loop_steps]
         batch_shown = False
         for name in active:
             row = rows[name]
             index = state.steps.index(name)
             label = f"{index + 1} {_CONSOLE_STEP_LABELS[index]}"
+            if name == "Video Creation" and name in loop:
+                label = f"{index + 1} Encode segment"  # joined into the video at the end
             # Like the UI: blue while a step runs, lime once it is finished
             finished = row["total"] > 0 and row["progress"] >= row["total"]
             colour = _COLOUR_LIME if finished else _COLOUR_BLUE
