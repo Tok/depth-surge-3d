@@ -6,6 +6,7 @@ Handles depth map generation with caching, VRAM management, and chunking strateg
 
 from __future__ import annotations
 
+import gc
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -241,12 +242,54 @@ class DepthMapProcessor:
         if target_fps is None or str(target_fps) == "None" or target_fps == "original":
             target_fps = 30
 
-        return self.depth_estimator.estimate_depth_batch(
-            np.array(chunk_frames),
-            target_fps=target_fps,
-            input_size=input_size,
-            fp32=False,
-            normalize=False,
+        return self._estimate_with_memory_retry(np.array(chunk_frames), target_fps, input_size)
+
+    def _estimate_with_memory_retry(
+        self, frames: np.ndarray, target_fps: Any, input_size: int
+    ) -> np.ndarray:
+        """
+        Estimate depth; if the GPU runs out of memory, retry the frames in two halves.
+
+        Free VRAM can shrink while a job runs (another program starts using the GPU), so
+        a chunk size chosen at the start may stop fitting. Splitting only applies to
+        per-frame models, whose frames are aligned one by one anyway; temporally
+        consistent models retry at a lower resolution themselves.
+
+        Args:
+            frames: Frames of the chunk [N, H, W, 3]
+            target_fps: Frame rate passed to the estimator
+            input_size: Depth model input resolution
+
+        Returns:
+            Raw inverse depth maps [N, H, W]
+
+        Side effects:
+            - GPU inference, frees GPU memory before a retry
+        """
+        try:
+            return self.depth_estimator.estimate_depth_batch(
+                frames,
+                target_fps=target_fps,
+                input_size=input_size,
+                fp32=False,
+                normalize=False,
+            )
+        except RuntimeError as e:
+            temporal = getattr(self.depth_estimator, "temporally_consistent", False) is True
+            if "out of memory" not in str(e).lower() or temporal or len(frames) < 2:
+                raise
+
+        # Retry outside the except block: while the exception is being handled its traceback
+        # keeps the failed attempt's GPU tensors alive
+        gc.collect()
+        self._clear_gpu_memory()
+        half = len(frames) // 2
+        print(f"  Out of GPU memory with {len(frames)} frames; retrying in chunks of {half}...")
+        return np.concatenate(
+            [
+                self._estimate_with_memory_retry(frames[:half], target_fps, input_size),
+                self._estimate_with_memory_retry(frames[half:], target_fps, input_size),
+            ]
         )
 
     @staticmethod

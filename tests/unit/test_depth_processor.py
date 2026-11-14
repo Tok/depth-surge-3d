@@ -300,6 +300,61 @@ class TestEstimateChunk:
         assert estimator.estimate_depth_batch.call_args[1]["target_fps"] == 30
 
 
+class TestOutOfMemoryRetry:
+    """Free VRAM can shrink while a job runs; a chunk that no longer fits is split."""
+
+    def _estimator(self, max_frames, temporal=False):
+        estimator = Mock()
+        estimator.temporally_consistent = temporal
+        sizes = []
+
+        def estimate(frames, **kwargs):
+            sizes.append(len(frames))
+            if len(frames) > max_frames:
+                raise RuntimeError("DA3 depth estimation failed: CUDA out of memory. Tried to ...")
+            return frames[..., 0].astype(np.float32)
+
+        estimator.estimate_depth_batch = Mock(side_effect=estimate)
+        return estimator, sizes
+
+    def _frames(self, count=8):
+        return [np.full((4, 6, 3), i, np.uint8) for i in range(count)]
+
+    def test_chunk_is_split_until_it_fits_and_order_is_kept(self, capsys):
+        estimator, sizes = self._estimator(max_frames=2)
+        processor = DepthMapProcessor(estimator)
+
+        with patch.object(processor, "_clear_gpu_memory"):
+            result = processor._estimate_chunk(self._frames(8), {"target_fps": 30}, 518)
+
+        assert result.shape == (8, 4, 6)
+        assert result[:, 0, 0].tolist() == list(range(8))
+        assert sizes == [8, 4, 2, 2, 4, 2, 2]
+        assert "retrying in chunks of 4" in capsys.readouterr().out
+
+    def test_single_frame_that_does_not_fit_fails(self):
+        estimator, _ = self._estimator(max_frames=0)
+        processor = DepthMapProcessor(estimator)
+        with (
+            patch.object(processor, "_clear_gpu_memory"),
+            pytest.raises(RuntimeError, match="out of memory"),
+        ):
+            processor._estimate_chunk(self._frames(2), {"target_fps": 30}, 518)
+
+    def test_other_errors_and_temporal_models_are_not_retried(self):
+        estimator = Mock()
+        estimator.temporally_consistent = False
+        estimator.estimate_depth_batch = Mock(side_effect=RuntimeError("bad input"))
+        with pytest.raises(RuntimeError, match="bad input"):
+            DepthMapProcessor(estimator)._estimate_chunk(self._frames(4), {"target_fps": 30}, 518)
+        assert estimator.estimate_depth_batch.call_count == 1
+
+        temporal, sizes = self._estimator(max_frames=2, temporal=True)
+        with pytest.raises(RuntimeError, match="out of memory"):
+            DepthMapProcessor(temporal)._estimate_chunk(self._frames(4), {"target_fps": 30}, 518)
+        assert sizes == [4]
+
+
 class TestChunkSizing:
     """Test chunk sizing helpers."""
 

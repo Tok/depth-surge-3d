@@ -63,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the same directory). `~/.cache/depth-surge-3d` from earlier versions can be deleted.
 
 ### Fixed
+- **Out of GPU memory during depth estimation** (Depth Anything V3): free VRAM can shrink while a
+  job runs. A chunk that no longer fits is retried in halves instead of failing the job.
 - **NVENC quality**: hardware-encoded videos used the encoder's default bitrate (about 2 Mbit/s,
   whatever the resolution). NVENC now encodes at constant quality (CQ 20).
 - **Output frame rate**: videos were encoded at 30 fps (or the target FPS) regardless of the
