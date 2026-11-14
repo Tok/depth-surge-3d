@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ...core.constants import BATCH_SIZE_RANGE, DEPTH_STATE_FILE
+from ...core.constants import BATCH_SIZE_RANGE, DEFAULT_SETTINGS, DEPTH_STATE_FILE
 from ...io.operations import (
     cleanup_intermediate_files,
     get_available_space,
@@ -555,7 +555,7 @@ class ProcessingOrchestrator:
     @staticmethod
     def _batch_size(settings: dict[str, Any]) -> int:
         """PURE: Frames per batch, clamped to the supported range."""
-        default = 100
+        default = int(DEFAULT_SETTINGS["batch_size"])  # type: ignore[call-overload]
         try:
             size = int(settings.get("batch_size") or default)
         except (TypeError, ValueError):

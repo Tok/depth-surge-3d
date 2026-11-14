@@ -71,7 +71,7 @@
 ### Processing Mode
 
 - **`--mode`**: `batched` (default) runs steps 2-7 batch by batch, so finished VR frames appear early; `sequential` finishes each step for the whole video first
-- **`--batch-size`**: Frames per batch, 10-2000 (default: 100). Progress is saved after every batch in both modes
+- **`--batch-size`**: Frames per batch, 10-2000 (default: 120, a whole number of seconds at 24, 30 and 60 fps). Progress is saved after every batch in both modes
 
 ## Stereo Parameters Deep Dive
 

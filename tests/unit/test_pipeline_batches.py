@@ -544,7 +544,7 @@ class TestFailures:
 
 class TestBatchSize:
     @pytest.mark.parametrize(
-        "value, expected", [(100, 100), ("60", 60), (1, 10), (99999, 2000), (None, 100), ("x", 100)]
+        "value, expected", [(100, 100), ("60", 60), (1, 10), (99999, 2000), (None, 120), ("x", 120)]
     )
     def test_clamped(self, value, expected):
         assert ProcessingOrchestrator._batch_size({"batch_size": value}) == expected

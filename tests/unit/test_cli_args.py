@@ -46,7 +46,7 @@ class TestVrResolutionArg:
 class TestBatchArgs:
     def test_defaults(self, cli):
         args = cli.create_argument_parser().parse_args(["video.mp4"])
-        assert (args.mode, args.batch_size) == ("batched", 100)
+        assert (args.mode, args.batch_size) == ("batched", 120)
 
     def test_mode_and_batch_size(self, cli):
         args = cli.create_argument_parser().parse_args(

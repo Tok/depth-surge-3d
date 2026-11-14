@@ -75,7 +75,9 @@ DEFAULT_SETTINGS = {
     # "batched": run steps 2-7 batch by batch (finished VR frames appear early, resumable)
     # "sequential": finish each step for the whole video before starting the next
     "processing_mode": "batched",
-    "batch_size": 100,  # frames per batch (both modes work through the video in batches)
+    # Frames per batch (both modes work through the video in batches). 120 is a whole
+    # number of seconds at 24, 30 and 60 fps, so batches and partial videos end on a second.
+    "batch_size": 120,
 }
 
 PROCESSING_MODES = ["batched", "sequential"]

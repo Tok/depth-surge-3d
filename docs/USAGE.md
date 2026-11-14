@@ -103,7 +103,7 @@ output/
 
 ## Processing Modes
 
-Both modes work through the video in batches (`--batch-size`, default 100 frames) and save
+Both modes work through the video in batches (`--batch-size`, default 120 frames: 5 s at 24 fps, 4 s at 30 fps, 2 s at 60 fps) and save
 their progress after every batch.
 
 - **Batched** (default, `--mode batched`): depth maps, stereo pairs, distortion, cropping,

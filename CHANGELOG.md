@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Batched processing mode** (default; `--mode batched`, `--batch-size`, "Processing Mode" in the
-  web UI): steps 2-7 run for one batch of frames (default 100), then for the next, so finished VR
+  web UI): steps 2-7 run for one batch of frames (default 120), then for the next, so finished VR
   frames appear early. `--mode sequential` keeps the old order (each step for the whole video).
 - **Real resume**: progress is saved after every batch (`pipeline_state.json`). A resumed job
   continues after the last finished batch and produces the same output as an uninterrupted run.

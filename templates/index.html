@@ -1396,8 +1396,8 @@
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Batch Size (frames)</label>
-                            <input type="number" class="form-control" id="batchSize" value="100" step="10" min="10" max="2000">
+                            <label class="form-label">Batch Size (frames) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="120 frames are a whole number of seconds at 24, 30 and 60 fps (5 s, 4 s, 2 s), so batches and partial videos end on a full second."></i></label>
+                            <input type="number" class="form-control" id="batchSize" value="120" step="10" min="10" max="2000">
                             <small class="form-text text-muted">
                                 <i class="fas fa-save"></i> Progress is saved after every batch in both modes, so a stopped or failed job can be resumed, or its finished part assembled into a video
                             </small>
@@ -2311,7 +2311,7 @@
                 upscale_model: document.getElementById('applyUpscaling').checked ? document.getElementById('upscaleModel').value : 'none',
                 experimental_frame_interpolation: document.getElementById('experimentalFrameInterpolation').checked,
                 processing_mode: document.getElementById('processingMode').value,
-                batch_size: parseInt(document.getElementById('batchSize').value) || 100,
+                batch_size: parseInt(document.getElementById('batchSize').value) || 120,
                 enable_live_preview: document.getElementById('enableLivePreview').checked,
                 preview_update_interval: parseFloat(document.getElementById('previewUpdateInterval').value)
             };
@@ -3264,7 +3264,7 @@
 
         // Settings persistence functions
         function saveSettings() {
-            const SETTINGS_VERSION = 4; // Must match version in loadSettings()
+            const SETTINGS_VERSION = 5; // Must match version in loadSettings()
             const settings = {
                 version: SETTINGS_VERSION,
                 // Processing mode (the time range belongs to a video and isn't saved)
@@ -3308,12 +3308,18 @@
         }
         
         function loadSettings() {
-            const SETTINGS_VERSION = 4; // Increment to force reset of old settings
+            const SETTINGS_VERSION = 5; // Increment to force reset of old settings
             const savedSettings = localStorage.getItem('stereoProjectorSettings');
             if (!savedSettings) return;
 
             try {
                 const settings = JSON.parse(savedSettings);
+
+                // Version 4 only differs in the default batch size: keep the other settings
+                if (settings.version === 4) {
+                    if (settings.batchSize === '100') settings.batchSize = '120';
+                    settings.version = SETTINGS_VERSION;
+                }
 
                 // Check version and reset if outdated
                 if (!settings.version || settings.version < SETTINGS_VERSION) {
@@ -3364,7 +3370,7 @@
                 modelSize: 'vitb',
                 depthModelType: 'metric',
                 processingMode: 'batched',
-                batchSize: '100',
+                batchSize: '120',
                 preserveAudio: true,
                 keepIntermediates: true,
                 videoEncoder: 'auto',

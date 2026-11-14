@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...core.constants import DEFAULT_SETTINGS
 from ..imaging.image_processing import calculate_super_sample_size
 
 # Measured compressed size per pixel, by kind of image
@@ -45,7 +46,8 @@ def estimate_disk_usage(
         ``breakdown`` (bytes per kind of file, at the peak)
     """
     keep = bool(settings.get("keep_intermediates", True))
-    batch = max(1, int(settings.get("batch_size") or 100))
+    default_batch = int(DEFAULT_SETTINGS["batch_size"])  # type: ignore[call-overload]
+    batch = max(1, int(settings.get("batch_size") or default_batch))
     # Frames on disk at once: all of them, or roughly two batches (one being read, one written)
     live = num_frames if keep else min(num_frames, 2 * batch)
 
