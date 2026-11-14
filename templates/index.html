@@ -1630,6 +1630,8 @@
                                          alt="Depth map preview"
                                          style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
                                     <small class="text-muted d-block mt-1" id="depthMapFrame">Frame: --</small>
+                                    <small class="d-block" id="depthMapStereo" style="color: var(--accent-green);"
+                                           title="How far apart the nearest and farthest parts of this frame end up between the left and right eye, in pixels, and how much of the depth range the frame uses. 0 px means a flat image without 3D effect."></small>
                                 </div>
                             </div>
 
@@ -3124,6 +3126,7 @@
             ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
+                showStereoInfo(null);
             });
 
             processingStartTime = null;
@@ -3298,6 +3301,7 @@
             ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
+                showStereoInfo(null);
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
@@ -3363,6 +3367,7 @@
             ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
+                showStereoInfo(null);
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
@@ -3425,6 +3430,7 @@
             ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
+                showStereoInfo(null);
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
@@ -3445,6 +3451,18 @@
             const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('stoppedModal'));
             assembleBtn.onclick = () => assemblePartial(data.output_dir, assembleBtn).then(() => modal.hide());
             modal.show();
+        }
+
+        // Stereo figures of the previewed depth map (flat depth = no 3D effect)
+        function showStereoInfo(info) {
+            const el = document.getElementById('depthMapStereo');
+            if (!el) return;
+            if (!info || info.shift_px === undefined) { el.textContent = ''; return; }
+            const spread = Math.round(info.depth_spread * 100);
+            const flat = info.depth_spread < 0.05;
+            el.textContent = `Stereo shift: ${info.shift_px.toFixed(1)} px · depth spread ${spread}%`
+                + (flat ? ' · flat, little or no 3D effect' : '');
+            el.style.color = flat ? '#ffe566' : 'var(--accent-green)';
         }
 
         // Handle frame preview
@@ -3473,6 +3491,7 @@
                 if (img) img.src = imageData;
                 if (label) label.textContent = `Frame: ${frameNumber}`;
                 if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'Depth Map';
+                showStereoInfo(data.info);
             } else if (frameType === 'vr_frame') {
                 const img = document.getElementById('vrFramePreview');
                 const label = document.getElementById('vrFrameFrame');

@@ -665,8 +665,8 @@ class BatchOffsetProgress:
         if name in ("send_preview_frame", "send_preview_frame_from_array"):
             offset = self._offset
 
-            def shifted(frame: Any, frame_type: str, frame_number: int) -> Any:
-                return target(frame, frame_type, frame_number + offset)
+            def shifted(frame: Any, frame_type: str, frame_number: int, **kwargs: Any) -> Any:
+                return target(frame, frame_type, frame_number + offset, **kwargs)
 
             return shifted
         return target

@@ -137,6 +137,36 @@ def depth_to_disparity(depth_map: np.ndarray, baseline: float, focal_length: flo
     return (nearness * max_disparity).astype(np.float32)
 
 
+def stereo_depth_stats(
+    depth_map: np.ndarray, baseline: float, focal_length: float, max_samples: int = 100_000
+) -> dict[str, float]:
+    """
+    PURE: How much stereo effect a normalized depth map produces.
+
+    Args:
+        depth_map: Normalized inverse depth map (0-1 range, 1 = near)
+        baseline: Stereo baseline in meters
+        focal_length: Camera focal length in pixels
+        max_samples: Maximum number of pixels looked at
+
+    Returns:
+        Dict with ``depth_spread`` (share of the 0-1 depth range the frame uses, between
+        its 2nd and 98th percentile) and ``shift_px`` (difference in disparity between
+        those near and far parts, in pixels; 0 means no 3D effect)
+    """
+    values = np.asarray(depth_map, dtype=np.float32).reshape(-1)
+    values = values[:: max(1, values.size // max_samples)]
+    values = np.clip(np.nan_to_num(values, nan=0.0), MIN_DEPTH_VALUE, MAX_DEPTH_VALUE)
+    if values.size == 0:
+        return {"depth_spread": 0.0, "shift_px": 0.0}
+    far, near = np.percentile(values, [2, 98])
+    spread = float(near - far)
+    return {
+        "depth_spread": round(spread, 4),
+        "shift_px": round(spread * baseline * focal_length / STEREO_NEAR_PLANE_M, 1),
+    }
+
+
 def match_depth_to_frame(depth_map: np.ndarray, width: int, height: int) -> np.ndarray:
     """
     Resize a depth map to the given frame size if it doesn't already match.

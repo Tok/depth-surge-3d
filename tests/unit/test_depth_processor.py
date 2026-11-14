@@ -507,6 +507,8 @@ class TestStreamDepthMaps:
         list(self._stream(processor, temp_frames, tmp_path, tracker=tracker, chunk=5))
 
         assert tracker.send_preview_frame_from_array.call_count == 5
+        info = tracker.send_preview_frame_from_array.call_args[1]["info"]
+        assert set(info) == {"depth_spread", "shift_px"}
         last = tracker.update_progress.call_args[1]
         assert last["step_name"] == "Depth Map Generation"
         assert (last["step_progress"], last["step_total"]) == (25, 25)

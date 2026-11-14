@@ -169,6 +169,16 @@ class TestBatchOffsetProgress:
         tracker.send_preview_frame.assert_called_once_with("path.png", "vr_frame", 207)
         tracker.send_preview_frame_from_array.assert_called_once_with("array", "depth_map", 208)
 
+    def test_preview_extras_are_passed_on(self):
+        tracker = Mock()
+        wrapped = BatchOffsetProgress(tracker, 200, 1000)
+
+        wrapped.send_preview_frame_from_array("array", "depth_map", 8, info={"shift_px": 3.0})
+
+        tracker.send_preview_frame_from_array.assert_called_once_with(
+            "array", "depth_map", 208, info={"shift_px": 3.0}
+        )
+
     def test_preview_support_follows_the_tracker(self):
         class NoPreviews:
             def update_progress(self, *args, **kwargs):
