@@ -286,6 +286,27 @@
             margin: 8px 0;
         }
 
+        /* Overall bar: the label lies over the whole track (not inside the filled part), dark
+           on both the light track and the lime bar, so it is readable at any progress */
+        .overall-progress {
+            position: relative;
+        }
+
+        .overall-progress-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 0.5rem;
+            color: #000;
+            font-size: 0.8rem;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
         /* Batched mode: batch counter with the steps of the inner loop nested below it */
         /* The loop is marked by a white bracket on the left of its steps: a vertical line
            with short rounded hooks at both ends */
@@ -1676,7 +1697,7 @@
                                     <strong>Overall Progress</strong>
                                     <span id="overallProgressText">0%</span>
                                 </div>
-                                <div class="progress" style="height: 24px;">
+                                <div class="progress overall-progress" style="height: 24px;">
                                     <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
                                          role="progressbar"
                                          id="overallProgressBar"
@@ -1684,8 +1705,8 @@
                                          aria-valuenow="0"
                                          aria-valuemin="0"
                                          aria-valuemax="100">
-                                        <span id="overallProgressPhase">Initializing...</span>
                                     </div>
+                                    <span class="overall-progress-label" id="overallProgressPhase">Initializing...</span>
                                 </div>
                             </div>
 
