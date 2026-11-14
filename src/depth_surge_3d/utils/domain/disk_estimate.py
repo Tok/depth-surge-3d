@@ -2,9 +2,9 @@
 Rough disk space estimate for a conversion.
 
 The pipeline works on PNG frames, which need far more space than the videos involved.
-The numbers here are typical values for camera footage; flat or noisy content can
-differ by a factor of two either way. They are meant to catch "this needs 300 GB and the
-disk has 40", not to be exact.
+The sizes per pixel were measured on a 1080p camera video converted to 1536 px square
+eyes; other content can differ (noisy footage compresses worse, flat or animated footage
+better). The estimate is meant to tell "needs 200 GB" from "needs 20 GB", not to be exact.
 """
 
 from __future__ import annotations
@@ -13,10 +13,13 @@ from typing import Any
 
 from ..imaging.image_processing import calculate_super_sample_size
 
-# Typical compressed size per pixel
-PNG_BYTES_PER_PIXEL = 1.6  # 8-bit colour frame
-DEPTH_BYTES_PER_PIXEL = 1.4  # 16-bit grayscale depth map (measured)
-VIDEO_BYTES_PER_PIXEL = 0.05  # H.264/H.265 at the quality used here
+# Measured compressed size per pixel, by kind of image
+SOURCE_FRAME_BYTES_PER_PIXEL = 1.1  # extracted frames (camera noise at native resolution)
+DEPTH_BYTES_PER_PIXEL = 1.0  # 16-bit grayscale depth maps
+STEREO_BYTES_PER_PIXEL = 0.65  # left/right views (smoother: rendered above source resolution)
+DISTORTED_BYTES_PER_PIXEL = 0.35  # fisheye views (black outside the image circle)
+EYE_BYTES_PER_PIXEL = 0.65  # cropped / upscaled eyes and assembled VR frames
+VIDEO_BYTES_PER_PIXEL = 0.01  # encoded video (hardware encoding is well below this)
 _UPSCALE_FACTORS = {"x2": 2, "x4": 4, "x4-conservative": 4}
 
 
@@ -26,8 +29,9 @@ def estimate_disk_usage(
     """
     PURE: Estimate the peak disk space a conversion needs.
 
-    With intermediates kept, every step's frames stay on disk. Without them only about
-    one batch of frames exists at any time, plus the video.
+    With intermediates kept, every step's frames stay on disk. Without them the extracted
+    frames are the largest part (deleted as the job goes), plus about one batch of
+    everything else and the video.
 
     Args:
         num_frames: Frames to convert (the selected time range)
@@ -59,22 +63,22 @@ def estimate_disk_usage(
     upscale = _UPSCALE_FACTORS.get(str(settings.get("upscale_model", "none")), 0)
 
     breakdown = {
-        "original_frames": live * source_px * PNG_BYTES_PER_PIXEL,
+        # all frames are extracted before anything else runs, so they peak in full
+        "original_frames": num_frames * source_px * SOURCE_FRAME_BYTES_PER_PIXEL,
         "depth_maps": live * source_px * DEPTH_BYTES_PER_PIXEL,
-        "vr_frames": live * vr_px * PNG_BYTES_PER_PIXEL,
+        "vr_frames": live * vr_px * EYE_BYTES_PER_PIXEL,
         # segments while converting plus the final file
         "video": 2 * num_frames * vr_px * VIDEO_BYTES_PER_PIXEL,
     }
     if keep:
-        per_eye_steps = 2 if settings.get("apply_distortion", True) else 1
-        breakdown["stereo_frames"] = (
-            2 * per_eye_steps * num_frames * stereo_px * PNG_BYTES_PER_PIXEL
-        )
-        breakdown["cropped_frames"] = 2 * num_frames * eye_px * PNG_BYTES_PER_PIXEL
+        breakdown["stereo_frames"] = 2 * num_frames * stereo_px * STEREO_BYTES_PER_PIXEL
+        if settings.get("apply_distortion", True):
+            breakdown["distorted_frames"] = 2 * num_frames * stereo_px * DISTORTED_BYTES_PER_PIXEL
+        breakdown["cropped_frames"] = 2 * num_frames * eye_px * EYE_BYTES_PER_PIXEL
     if upscale:
         # cropped frames feed the upscaler, so they exist even without intermediates
-        breakdown.setdefault("cropped_frames", 2 * live * eye_px * PNG_BYTES_PER_PIXEL)
-        breakdown["upscaled_frames"] = 2 * live * eye_px * upscale**2 * PNG_BYTES_PER_PIXEL
+        breakdown.setdefault("cropped_frames", 2 * live * eye_px * EYE_BYTES_PER_PIXEL)
+        breakdown["upscaled_frames"] = 2 * live * eye_px * upscale**2 * EYE_BYTES_PER_PIXEL
 
     sizes = {name: int(size) for name, size in breakdown.items()}
     return {
