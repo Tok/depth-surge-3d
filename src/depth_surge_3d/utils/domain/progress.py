@@ -672,34 +672,40 @@ _CONSOLE_STEP_LABELS = [
 ]
 
 
-class _TqdmStream:
-    """File-like object that prints through tqdm.write so output doesn't break the bars."""
+class _BlockStream:
+    """File-like object for print() output while the progress block is on screen."""
 
-    def __init__(self, stream: Any):
-        self._stream = stream
+    def __init__(self, tracker: TqdmProgressTracker):
+        self._tracker = tracker
         self._buffer = ""
 
     def write(self, text: str) -> int:
         self._buffer += text
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
-            tqdm.write(line, file=self._stream)
+            self._tracker.write_line(line)
         return len(text)
 
     def flush(self) -> None:
-        self._stream.flush()
+        pass
 
     def isatty(self) -> bool:
-        return bool(getattr(self._stream, "isatty", lambda: False)())
+        return True
 
 
 class TqdmProgressTracker:
     """
-    Console progress for the CLI: one bar per pipeline step plus an overall bar.
+    Console progress for the CLI and the web server: a block of progress bars.
 
-    Mirrors the web UI. In batched mode a batch counter bar is shown and the bars of the
-    inner loop (indented below it) count the frames of the current batch.
-    Without a terminal (piped output) it prints a status line every few seconds instead.
+    One bar per pipeline step plus an overall bar, mirroring the web UI. In batched mode
+    a batch counter bar is shown and the bars of the inner loop (indented below it) count
+    the frames of the current batch. Without a terminal (piped output) it prints a status
+    line every few seconds instead.
+
+    The bars are rendered by tqdm, but the block is placed by this class: it is redrawn
+    in place (cursor up, clear, rewrite) and print() output is inserted above it. tqdm's
+    own multi-bar positioning leaves stray bars in the scrollback when messages are
+    printed in between or a line reaches the terminal width.
     """
 
     def __init__(
@@ -715,63 +721,20 @@ class TqdmProgressTracker:
             use_bars: Force bars on/off (default: on if stderr is a terminal and tqdm exists)
         """
         import sys
+        import threading
 
         self.state = StepProgressState(skipped_steps)
         self.batched = batched
         if use_bars is None:
             use_bars = HAS_TQDM and sys.stderr.isatty()
         self.use_bars = bool(use_bars and HAS_TQDM)
-        self._bars: dict[str, Any] = {}
+        self._lock = threading.RLock()
+        self._start_time = time.time()
+        self._drawn_lines = 0  # lines of the block currently on screen
         self._old_stdout: Any = None
         self._last_refresh = 0.0
         self._last_line = 0.0
         self._closed = False
-
-    def _open(self) -> None:
-        """Create the bars and route print() output around them."""
-        import sys
-
-        if self._bars or not self.use_bars:
-            return
-        position = 0
-
-        def bar(key: str, desc: str, total: int, fmt: str, colour: str) -> None:
-            nonlocal position
-            self._bars[key] = tqdm(
-                total=total,
-                desc=desc,
-                position=position,
-                leave=True,
-                bar_format=fmt,
-                colour=colour,
-                dynamic_ncols=True,
-                file=sys.stderr,
-            )
-            position += 1
-
-        # `unit` carries free text (ETA, frame range): unlike postfix it has no ", " prefix.
-        # Bars of the inner loop start further right, so the loop reads as a nested block.
-        overall_fmt = "{desc:<18}|{bar}| {percentage:5.1f}% [{elapsed}<{unit}]"
-        step_fmt = "{desc:<18}|{bar}| {n_fmt}/{total_fmt}"
-        inner_fmt = "  {desc:<22}|{bar}| {n_fmt}/{total_fmt}"
-        bar("overall", "Overall", 100, overall_fmt, _COLOUR_LIME)
-        self._bars["overall"].unit = "?"
-        active = [n for n in self.state.steps if n not in self.state.skipped]
-        loop = [n for n in active if self.batched and n in PIPELINE_LOOP_STEP_NAMES]
-        for name in active:
-            i = self.state.steps.index(name)
-            label = f"{i + 1} {_CONSOLE_STEP_LABELS[i]}"
-            if name not in loop:
-                bar(name, label, 1, step_fmt, _COLOUR_BLUE)
-                continue
-            if "batch" not in self._bars:
-                bar("batch", "Batch", 1, "{desc:<18}|{bar}| {unit}", _COLOUR_GREEN)
-                self._bars["batch"].unit = ""
-            branch = "└" if name == loop[-1] else "├"
-            bar(name, f"{branch} {label}", 1, inner_fmt, _COLOUR_BLUE)
-
-        self._old_stdout = sys.stdout
-        sys.stdout = _TqdmStream(self._old_stdout)
 
     def set_batch_info(self, index: int, count: int, start: int, size: int) -> None:
         """Set the batch the inner loop is working on (index is 0-based)."""
@@ -793,13 +756,141 @@ class TqdmProgressTracker:
         self._refresh(force=finished)
 
     @staticmethod
-    def _set(bar: Any, n: float, total: float) -> None:
-        bar.total = total
-        bar.n = min(n, total)
-        bar.refresh()
+    def _bar(
+        width: int, label: str, n: float, total: float, colour: str, layout: str, text: str = ""
+    ) -> str:
+        """Render one bar line, at most ``width`` columns wide."""
+        if total <= 0:
+            # nothing known yet: an empty bar without counts
+            layout = layout.replace("{n_fmt}/{total_fmt}", "-")
+            n, total = 0, 1
+        return str(
+            tqdm.format_meter(
+                n=min(max(n, 0), total),
+                total=total,
+                elapsed=0,
+                ncols=width,
+                prefix=label,
+                unit=text,
+                bar_format=layout,
+                colour=colour,
+            )
+        )
+
+    def render_lines(self, width: int) -> list[str]:
+        """
+        The progress block as text lines (with colour codes), top to bottom.
+
+        Args:
+            width: Maximum line width in columns
+
+        Returns:
+            One line per bar: overall, the steps, and in batched mode the batch counter
+            followed by the indented steps of the inner loop
+        """
+        state = self.state
+        eta = state.eta_seconds()
+        elapsed = format_time_duration(time.time() - self._start_time)
+        remaining = format_time_duration(eta) if eta is not None else "?"
+        # `unit` carries free text; bars of the inner loop start further right, so the loop
+        # reads as a nested block
+        lines = [
+            self._bar(
+                width,
+                "Overall",
+                state.overall(),
+                100,
+                _COLOUR_LIME,
+                "{desc:<18}|{bar}| {percentage:5.1f}% [{unit}]",
+                f"{elapsed}<{remaining}",
+            )
+        ]
+        rows = {row["name"]: row for row in state.display_steps()}
+        active = [name for name in state.steps if name not in state.skipped]
+        loop = [name for name in active if self.batched and name in PIPELINE_LOOP_STEP_NAMES]
+        batch_shown = False
+        for name in active:
+            row = rows[name]
+            index = state.steps.index(name)
+            label = f"{index + 1} {_CONSOLE_STEP_LABELS[index]}"
+            # Like the UI: blue while a step runs, lime once it is finished
+            finished = row["total"] > 0 and row["progress"] >= row["total"]
+            colour = _COLOUR_LIME if finished else _COLOUR_BLUE
+            if name not in loop:
+                layout = "{desc:<18}|{bar}| {n_fmt}/{total_fmt}"
+                lines.append(self._bar(width, label, row["progress"], row["total"], colour, layout))
+                continue
+            if not batch_shown:
+                batch_shown = True
+                lines.append(self._batch_line(width))
+            branch = "└" if name == loop[-1] else "├"
+            layout = "  {desc:<22}|{bar}| {n_fmt}/{total_fmt}"
+            # before the first batch is known the inner bars are empty
+            total = row["total"] if row["in_batch"] else 0
+            progress = row["progress"] if row["in_batch"] else 0
+            lines.append(self._bar(width, f"{branch} {label}", progress, total, colour, layout))
+        return lines
+
+    def _batch_line(self, width: int) -> str:
+        """The batch counter bar (empty until the first batch is announced)."""
+        batch = self.state.batch
+        layout = "{desc:<18}|{bar}| {unit}"
+        if not batch:
+            return self._bar(width, "Batch", 0, 1, _COLOUR_GREEN, layout, "waiting")
+        first, last = batch["start"] + 1, batch["start"] + batch["size"]
+        return self._bar(
+            width,
+            f"Batch {batch['index'] + 1}/{batch['count']}",
+            batch["index"] + self.state.batch_ratio(),
+            batch["count"],
+            _COLOUR_GREEN,
+            layout,
+            f"frames {first}-{last}",
+        )
+
+    @staticmethod
+    def _terminal_width() -> int:
+        """Usable line width: one less than the terminal, so no line ever wraps."""
+        import shutil
+
+        return max(40, shutil.get_terminal_size((100, 24)).columns - 1)
+
+    def _draw(self, message: str | None = None) -> None:
+        """
+        Redraw the block in place, optionally inserting a message line above it.
+
+        Side effects:
+            - Writes to stderr
+        """
+        import sys
+
+        output = ""
+        if self._drawn_lines:
+            output += f"\x1b[{self._drawn_lines}A"  # back to the block's first line
+        output += "\r\x1b[J"  # clear the old block
+        if message is not None:
+            output += message + "\n"
+        lines = self.render_lines(self._terminal_width())
+        output += "".join(line + "\n" for line in lines)
+        self._drawn_lines = len(lines)
+        sys.stderr.write(output)
+        sys.stderr.flush()
+
+    def write_line(self, text: str) -> None:
+        """Print a line above the progress block (used for print() output while it is shown)."""
+        import sys
+
+        with self._lock:
+            if self._closed or not self.use_bars:
+                target = self._old_stdout or sys.stdout
+                target.write(text + "\n")
+                return
+            self._draw(message=text)
 
     def _refresh(self, force: bool = False) -> None:
         """Redraw the bars (throttled), or print a status line without a terminal."""
+        import sys
+
         if self._closed:
             return
         now = time.time()
@@ -808,29 +899,15 @@ class TqdmProgressTracker:
                 self._last_line = now
                 print(self._status_line(), flush=True)
             return
-        if not force and now - self._last_refresh < PROGRESS_EMIT_INTERVAL:
-            return
-        self._last_refresh = now
-        self._open()
-
-        eta = self.state.eta_seconds()
-        overall = self._bars["overall"]
-        overall.unit = format_time_duration(eta) if eta is not None else "?"
-        self._set(overall, self.state.overall(), 100)
-        for row in self.state.display_steps():
-            if row["name"] in self._bars:
-                bar = self._bars[row["name"]]
-                # Like the UI: blue while a step runs, lime once it is finished
-                finished = row["total"] > 0 and row["progress"] >= row["total"]
-                bar.colour = _COLOUR_LIME if finished else _COLOUR_BLUE
-                self._set(bar, row["progress"], max(1, row["total"]))
-        batch = self.state.batch
-        if batch and "batch" in self._bars:
-            bar = self._bars["batch"]
-            bar.set_description_str(f"Batch {batch['index'] + 1}/{batch['count']}", False)
-            first, last = batch["start"] + 1, batch["start"] + batch["size"]
-            bar.unit = f"frames {first}-{last}"
-            self._set(bar, batch["index"] + self.state.batch_ratio(), batch["count"])
+        with self._lock:
+            if not force and now - self._last_refresh < PROGRESS_EMIT_INTERVAL:
+                return
+            self._last_refresh = now
+            if self._old_stdout is None:
+                # print() output is inserted above the block from now on
+                self._old_stdout = sys.stdout
+                sys.stdout = _BlockStream(self)
+            self._draw()
 
     def _status_line(self) -> str:
         """PURE: One-line progress summary for output that isn't a terminal."""
@@ -851,20 +928,15 @@ class TqdmProgressTracker:
         self.close()
 
     def close(self) -> None:
-        """Close the bars and restore print() (safe to call more than once)."""
+        """Leave the last state of the block on screen and restore print() (idempotent)."""
         import sys
 
-        if self._closed:
-            return
-        self._closed = True
-        # Bars at fixed positions leave gaps when closed; print their final state as text
-        final_lines = [str(bar) for bar in self._bars.values()]
-        for bar in reversed(list(self._bars.values())):
-            bar.leave = False
-            bar.close()
-        self._bars = {}
-        if final_lines:
-            print("\n".join(final_lines), file=sys.stderr, flush=True)
-        if self._old_stdout is not None:
-            sys.stdout = self._old_stdout
-            self._old_stdout = None
+        with self._lock:
+            if self._closed:
+                return
+            if self.use_bars and self._drawn_lines:
+                self._draw()
+            self._closed = True
+            if self._old_stdout is not None:
+                sys.stdout = self._old_stdout
+                self._old_stdout = None

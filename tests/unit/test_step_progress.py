@@ -169,6 +169,13 @@ class TestBatchOffsetProgress:
         assert wrapped.finish() == "done"
 
 
+def _plain(lines):
+    """Lines without colour codes."""
+    import re
+
+    return [re.sub(r"\x1b\[[0-9;]*m", "", line) for line in lines]
+
+
 class TestTqdmProgressTracker:
     def _run(self, tracker):
         tracker.update_progress("x", step_name="Frame Extraction", step_progress=20, step_total=20)
@@ -180,54 +187,77 @@ class TestTqdmProgressTracker:
             "x", step_name="Stereo Pair Creation", step_progress=5, step_total=20
         )
 
-    def test_bars_mirror_the_ui(self):
+    def test_block_mirrors_the_ui(self):
+        tracker = TqdmProgressTracker(SKIPPED, batched=True, use_bars=False)
+        self._run(tracker)
+
+        coloured = tracker.render_lines(100)
+        lines = _plain(coloured)
+
+        assert [line.split("|")[0].strip() for line in lines] == [
+            "Overall",
+            "1 Extract frames",
+            "Batch 1/2",
+            "├ 2 Depth maps",
+            "├ 3 Stereo pairs",
+            "├ 4 Distortion",
+            "├ 5 Crop frames",
+            "└ 7 Assemble VR",
+            "8 Create video",
+        ]
+        # inner bars count frames of the batch and start further right than the outer ones
+        assert lines[3].endswith("| 10/10") and lines[4].endswith("| 5/10")
+        assert lines[2].endswith("| frames 1-10")
+        assert lines[3].index("|") > lines[1].index("|")
+        assert lines[8].endswith("| -")  # nothing known about the last step yet
+        # UI colours: finished lime, running blue, batch counter green
+        assert "38;2;57;255;20m" in coloured[3] and "38;2;0;217;255m" in coloured[4]
+        assert "38;2;0;255;65m" in coloured[2]
+        assert all(len(line) <= 100 for line in lines)
+
+    def test_loop_is_shown_before_the_first_batch(self):
+        """Batched mode shows the batch bar and nested steps from the start."""
+        tracker = TqdmProgressTracker(batched=True, use_bars=False)
+        tracker.update_progress("x", step_name="Frame Extraction", step_progress=5, step_total=20)
+
+        lines = _plain(tracker.render_lines(100))
+
+        assert lines[2].startswith("Batch ") and lines[2].endswith("| waiting")
+        assert lines[3].lstrip().startswith("├ 2 Depth maps") and lines[3].endswith("| -")
+
+    def test_sequential_mode_has_no_batch_bar(self):
+        tracker = TqdmProgressTracker(batched=False, use_bars=False)
+        tracker.update_progress(
+            "x", step_name="Depth Map Generation", step_progress=10, step_total=20
+        )
+
+        lines = _plain(tracker.render_lines(100))
+
+        assert len(lines) == 9 and not any(line.startswith("Batch") for line in lines)
+        assert lines[2].startswith("2 Depth maps") and lines[2].endswith("| 10/20")
+
+    def test_block_is_redrawn_in_place_and_messages_go_above_it(self):
+        """Regression: bars leaked into the scrollback whenever a message was printed."""
         stderr = io.StringIO()
         stdout = sys.stdout
         with patch("sys.stderr", stderr):
             tracker = TqdmProgressTracker(SKIPPED, batched=True, use_bars=True)
             self._run(tracker)
-            tracker._last_refresh = 0  # redraws are throttled; draw the current state now
-            tracker._refresh()
-
-            assert list(tracker._bars) == [
-                "overall",
-                "Frame Extraction",
-                "batch",
-                "Depth Map Generation",
-                "Stereo Pair Creation",
-                "Fisheye Distortion",
-                "Crop Frames",
-                "VR Assembly",
-                "Video Creation",
-            ]
-            depth, stereo, batch = (
-                tracker._bars[k] for k in ("Depth Map Generation", "Stereo Pair Creation", "batch")
-            )
-            # inner bars count frames of the batch; finished ones turn lime like in the UI
-            assert (depth.n, depth.total, depth.colour) == (10, 10, "#39ff14")
-            assert (stereo.n, stereo.total, stereo.colour) == (5, 10, "#00d9ff")
-            assert batch.desc == "Batch 1/2" and batch.unit == "frames 1-10" and 0 < batch.n < 1
-            assert tracker._bars["VR Assembly"].desc.startswith("└")
-            assert tracker._bars["overall"].n == pytest.approx(tracker.state.overall())
-
-            print("a message while bars are shown")  # routed around the bars
             assert sys.stdout is not stdout
+            print("a message while the bars are shown")
             tracker.finish()
             tracker.close()
-
         assert sys.stdout is stdout
-        assert "Batch 1/2" in stderr.getvalue() and "2 Depth maps" in stderr.getvalue()
 
-    def test_sequential_mode_has_no_batch_bar(self):
-        stderr = io.StringIO()
-        with patch("sys.stderr", stderr):
-            tracker = TqdmProgressTracker(batched=False, use_bars=True)
-            tracker.update_progress(
-                "x", step_name="Depth Map Generation", step_progress=10, step_total=20
-            )
-            assert "batch" not in tracker._bars and len(tracker._bars) == 9
-            assert tracker._bars["Depth Map Generation"].total == 20
-            tracker.close()
+        output = stderr.getvalue()
+        first_draw, later = output.split("\x1b[9A", 1)
+        assert first_draw.count("\n") == 9  # the block: nine lines
+        # every redraw goes back to the block's first line and clears it before writing
+        assert later.count("\x1b[9A") == output.count("\r\x1b[J") - 2
+        message_at = output.index("a message while the bars are shown")
+        assert output[:message_at].endswith("\x1b[9A\r\x1b[J")
+        assert output[message_at:].count("\n") >= 10  # message line, then the whole block again
+        assert output.rstrip().endswith("m")  # ends with the block, cursor below it
 
     def test_status_lines_without_a_terminal(self, capsys):
         tracker = TqdmProgressTracker(SKIPPED, use_bars=False)
@@ -244,14 +274,8 @@ class TestTqdmProgressTracker:
         tracker.update_progress("x", step_progress=20, **stereo)
         assert capsys.readouterr().out == ""  # closed
 
-    def test_stdout_wrapper(self):
-        from src.depth_surge_3d.utils.domain.progress import _TqdmStream
-
-        target = io.StringIO()
-        stream = _TqdmStream(target)
-        stream.write("partial ")
-        assert target.getvalue() == ""
-        stream.write("line\nnext")
-        stream.flush()
-        assert target.getvalue() == "partial line\n"
-        assert stream.isatty() is False
+    def test_messages_after_closing_go_to_stdout(self, capsys):
+        tracker = TqdmProgressTracker(use_bars=False)
+        tracker.close()
+        tracker.write_line("plain line")
+        assert "plain line" in capsys.readouterr().out
