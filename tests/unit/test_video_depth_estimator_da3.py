@@ -469,3 +469,43 @@ class TestEstimateDepthBatch:
         with patch("torch.no_grad"):
             with pytest.raises(RuntimeError, match="DA3 depth estimation failed"):
                 estimator.estimate_depth_batch(frames)
+
+
+class TestLibraryLogging:
+    """The DA3 library prints timing lines for every chunk; only verbose mode keeps them."""
+
+    def _logger(self):
+        import types
+
+        module = types.ModuleType("depth_anything_3.utils.logger")
+        module.LOG_LEVELS = {"ERROR": 0, "WARN": 1, "INFO": 2, "DEBUG": 3}
+        module.logger = types.SimpleNamespace(level=2)
+        return module
+
+    def test_limited_to_warnings(self):
+        from src.depth_surge_3d.inference.depth.video_depth_estimator_da3 import (
+            VideoDepthEstimatorDA3,
+        )
+
+        module = self._logger()
+        with patch.dict("sys.modules", {"depth_anything_3.utils.logger": module}):
+            VideoDepthEstimatorDA3("small", "cpu")._quiet_library_logging()
+        assert module.logger.level == 1
+
+    def test_verbose_keeps_library_output(self):
+        from src.depth_surge_3d.inference.depth.video_depth_estimator_da3 import (
+            VideoDepthEstimatorDA3,
+        )
+
+        module = self._logger()
+        with patch.dict("sys.modules", {"depth_anything_3.utils.logger": module}):
+            VideoDepthEstimatorDA3("small", "cpu", verbose=True)._quiet_library_logging()
+        assert module.logger.level == 2
+
+    def test_missing_logger_is_ignored(self):
+        from src.depth_surge_3d.inference.depth.video_depth_estimator_da3 import (
+            VideoDepthEstimatorDA3,
+        )
+
+        with patch.dict("sys.modules", {"depth_anything_3.utils.logger": None}):
+            VideoDepthEstimatorDA3("small", "cpu")._quiet_library_logging()

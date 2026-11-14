@@ -151,6 +151,8 @@ class VideoDepthEstimatorDA3:
             with suppress_output():
                 from depth_anything_3.api import DepthAnything3
 
+            self._quiet_library_logging()
+
             # Resolve model ID
             hf_model_id = self._resolve_model_id()
 
@@ -181,6 +183,23 @@ class VideoDepthEstimatorDA3:
         except Exception as e:
             print(f"Error loading DA3 model: {e}")
             return False
+
+    def _quiet_library_logging(self) -> None:
+        """
+        Limit the DA3 library's own logging to warnings (it prints timing lines for every
+        chunk, which also break the progress bars). Verbose mode keeps them.
+
+        Side effects:
+            - Changes the library logger's level
+        """
+        if self.verbose:
+            return
+        try:
+            from depth_anything_3.utils.logger import LOG_LEVELS, logger as da3_logger
+
+            da3_logger.level = LOG_LEVELS["WARN"]
+        except Exception:
+            pass  # logging is cosmetic; a changed library layout must not stop the model
 
     def estimate_depth_batch(
         self,
