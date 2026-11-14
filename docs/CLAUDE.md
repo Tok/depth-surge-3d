@@ -1,6 +1,6 @@
 # Depth Surge 3D - Development Guide
 
-**Version**: 0.10.0
+**Version**: 0.11.0
 **Purpose**: 2D to 3D VR video converter using AI depth estimation (Depth-Anything V3/V2)
 
 ---
@@ -79,20 +79,22 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 
 ## Architecture Essentials
 
-### Processing Pipeline (7 Steps)
-1. Frame Extraction → 2. Depth Maps → 3. Load Frames → 4. Stereo Pairs → 5. Fisheye Distortion → 6. VR Assembly → 7. Audio Integration
+### Processing Pipeline (9 Steps)
+1. Frame Extraction → 2. Depth Maps → 3. Stereo Pairs → 4. Fisheye Distortion (optional) → 5. Crop → 6. AI Upscaling (optional) → 7. VR Assembly → 8. Video Encoding (one segment per batch) → 9. Final Video (join segments, add audio)
 
 Steps 2-7 run batch by batch (`processing_mode: batched`, default); `sequential` finishes the depth maps for the whole video first. Stereo, distortion, crop and assembly run fused in one worker per frame (images in memory); the separate step processors remain for redoing single steps and for upscaling. The video is encoded in one segment per batch and joined at the end. Progress per step is saved after every batch (`PipelineState`); a run in an existing directory continues there. Nothing is written outside the project and batch directories (no `~/.cache`).
 
 ### Output Structure
 ```
 output/videoname_timestamp/
-├── 00_original_frames/
-├── 02_depth_maps/
-├── 04_left_frames/ + 04_right_frames/
+├── 00_original_frames/          # deleted batch by batch unless intermediates are kept
+├── 02_depth_maps/               # 16-bit PNG; same
+├── 04_left_frames/ + 04_right_frames/, 05_*, 06_*   # only with --keep-intermediates
+├── 98_video_segments/           # one encoded segment per batch
 ├── 99_vr_frames/
-├── settings.json
-└── videoname_3D_side_by_side.mp4
+├── pipeline_state.json          # resume state
+├── videoname_<timestamp>-settings.json
+└── videoname_3D_side-by-side_<resolution>.mp4
 ```
 
 ### Depth Models

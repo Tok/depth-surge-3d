@@ -1,6 +1,6 @@
 # VR Headset Compatibility Matrix
 
-**Version**: 0.10.0
+**Version**: 0.11.0
 **Last Updated**: 2026-01-18
 
 ---

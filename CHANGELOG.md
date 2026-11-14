@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-14
+
 ### Added
 - **Batched processing mode** (default; `--mode batched`, `--batch-size`, "Processing Mode" in the
   web UI): steps 2-7 run for one batch of frames (default 120), then for the next, so finished VR
@@ -26,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Framing preview** next to Frame Cropping: a schematic of how the frame sits in each eye's
   view with the current fisheye, frame fit and crop settings, with the share of the frame that
   is visible and the share of the view that is black.
+- The live preview shows the depth map and the VR output (the left-eye tile is gone: the stereo
+  pair is an in-between result that usually isn't written to disk any more).
 - Stopping a job in the web UI offers to create a video from the frames finished so far.
 - CLI: `--depth-resolution`, `--super-sample`, `--video-encoder`, and `--reuse DIR` to run in an
   existing output directory with new settings, reusing its frames and depth maps.
@@ -58,8 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   black above and below. The default shows 78% of a 16:9 frame's width. The web UI says what the
   setting means for the uploaded video and only warns at the extremes; a square target for a wide
   video without fisheye gets a notice about black bars.
-- **Intermediate files are no longer kept by default** (`--keep-intermediates` / the checkbox
-  turns them on; `--no-intermediates` is still accepted). Off now means bounded disk use: stereo/distorted/cropped images are
+- **Intermediate files are no longer kept by default.** Keeping them is a start-up option:
+  `--keep-intermediates` for the CLI and for the web server (all its jobs); the web UI's checkbox
+  is gone. `--no-intermediates` is still accepted. Off now means bounded disk use: stereo/distorted/cropped images are
   never written, and original frames, depth maps and VR frames are deleted batch by batch once
   the steps that read them are done (VR frames after their segment is encoded). An interrupted
   job can still be resumed; changing settings on such a job starts over.
@@ -279,6 +284,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For changelog entries prior to v0.9.2, see [docs/archive/CHANGELOG.md](docs/archive/CHANGELOG.md)
 
-[Unreleased]: https://github.com/Tok/depth-surge-3d/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Tok/depth-surge-3d/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/Tok/depth-surge-3d/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/Tok/depth-surge-3d/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/Tok/depth-surge-3d/compare/v0.9.1...v0.9.2
