@@ -1197,14 +1197,17 @@
                             <div class="alert alert-warning aspect-warning mt-2 mb-0" style="display: none;"></div>
                         </div>
                         <div class="mb-3" id="distortionOptions">
-                            <label class="form-label">Fisheye Projection</label>
+                            <label class="form-label">Fisheye Projection <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="How the flat picture is spread over the curved view, from its centre to its edge. All four show the same part of the frame (set by Frame Fit); they differ in whether the centre or the edges get more room. Stereographic keeps the shapes of objects natural everywhere and is the closest to looking at a flat picture. The others give the edges more room and the centre less, which bends straight lines more."></i></label>
                             <select class="form-select" id="fisheyeProjection">
-                                <option value="equidistant">Equidistant (f*θ)</option>
-                                <option value="stereographic" selected>Stereographic (2f*tan(θ/2))</option>
-                                <option value="equisolid">Equisolid Angle (2f*sin(θ/2))</option>
-                                <option value="orthogonal">Orthographic (f*sin(θ))</option>
+                                <option value="stereographic" selected>Stereographic - natural shapes, centre slightly enlarged (Recommended)</option>
+                                <option value="equidistant">Equidistant - picture spread evenly from centre to edge</option>
+                                <option value="equisolid">Equisolid - edges stretched a little, centre a little smaller</option>
+                                <option value="orthogonal">Orthographic - edges stretched strongly, centre smallest</option>
                             </select>
-                            <small class="form-text text-muted">Mathematical projection model for fisheye lens</small>
+                            <small class="form-text text-muted">
+                                How the picture is distributed between the centre and the edge of the view. The differences are moderate:
+                                halfway out from the centre you see the point 46% (stereographic), 50% (equidistant), 52% (equisolid) or 59% (orthographic) of the way to the frame's edge.
+                            </small>
                         </div>
                         <div class="mb-3" id="distortionK2Options">
                             <label class="form-label">Field of View (degrees)</label>
