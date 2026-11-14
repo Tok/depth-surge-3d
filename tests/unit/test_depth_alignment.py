@@ -96,6 +96,67 @@ class TestDepthSequenceAligner:
     def test_empty_result(self):
         assert DepthSequenceAligner().result().size == 0
 
+    def test_per_frame_contrast_survives_changing_content(self):
+        """Regression (0.11.0): depth faded to a flat gray after a few hundred frames."""
+        aligner = DepthSequenceAligner(per_frame=True)
+        first = last = None
+        for index in range(800):
+            # unrelated content in every frame, like a video full of cuts
+            frame = rng.random((1, 24, 32)).astype(np.float32) * rng.uniform(0.5, 2.0)
+            aligner.add(frame)
+            final = aligner.take()
+            first = final[0] if index == 0 else first
+            last = final[-1]
+        assert last.std() == pytest.approx(first.std(), rel=1e-3)
+        assert last.mean() == pytest.approx(first.mean(), rel=1e-3)
+
+    def test_chunk_contrast_survives_noisy_overlaps(self):
+        """Overlap fits must not lose contrast chunk after chunk (prediction noise)."""
+        aligner = DepthSequenceAligner(per_frame=False)
+        scene = _scene(6)
+        aligner.add(scene)
+        first_std = aligner.take(2)[0].std()
+        for _ in range(300):
+            noisy = scene + rng.normal(0, 0.3 * scene.std(), scene.shape).astype(np.float32)
+            aligner.add(noisy, overlap=2)
+            final = aligner.take(2)
+        assert final[-1].std() > 0.9 * first_std
+
+    def test_flat_frame_keeps_previous_scale(self):
+        aligner = DepthSequenceAligner(per_frame=True)
+        frame = _scene(1)[0]
+        aligner.add(frame[None])
+        aligner.add((frame * 2.0)[None])
+        aligner.add(np.full_like(frame, 7.0)[None])  # e.g. a black frame
+        aligner.add((frame * 2.0)[None])
+        result = aligner.result()
+        assert np.isfinite(result).all()
+        assert result[2].std() == pytest.approx(0.0, abs=1e-5)
+        np.testing.assert_allclose(result[3], result[0], rtol=1e-4, atol=1e-4)
+
+    def test_flat_first_frame_is_not_the_reference(self):
+        aligner = DepthSequenceAligner(per_frame=True)
+        frame = _scene(1)[0]
+        aligner.add(np.zeros_like(frame)[None])
+        aligner.add(frame[None])
+        aligner.add((frame * 3.0 + 1.0)[None])
+        result = aligner.result()
+        np.testing.assert_allclose(result[2], result[1], rtol=1e-4, atol=1e-4)
+
+    def test_restore_drops_flat_reference_image_of_0_11_0(self):
+        aligner = DepthSequenceAligner(per_frame=True)
+        aligner.restore({"reference": np.full((8, 8), 3.9, dtype=np.float32)})
+        frame = _scene(1)[0]
+        aligner.add(frame[None])
+        np.testing.assert_allclose(aligner.result()[0], frame, rtol=1e-6)
+
+    def test_restore_uses_moments_of_reference_image_of_0_11_0(self):
+        reference = _scene(1)[0]
+        aligner = DepthSequenceAligner(per_frame=True)
+        aligner.restore({"reference": reference})
+        aligner.add((reference * 4.0 - 2.0)[None])
+        np.testing.assert_allclose(aligner.result()[0], reference, rtol=1e-3, atol=1e-3)
+
 
 class TestNormalizeDepthSequence:
     def test_single_range_for_all_frames(self):
