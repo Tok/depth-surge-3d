@@ -142,3 +142,14 @@ class TestPipelineState:
         state = self._state(tmp_path)
         state.reconcile(_fingerprints(apply_distortion=False))
         assert "distortion" not in state.done and "distortion" not in state.fingerprints
+
+    def test_restart_from_a_step(self, tmp_path):
+        state = self._state(tmp_path)
+        state.done["encode"] = 50
+        state.segments = [[0, 50]]
+        assert state.restart_from("encode") == "encode"
+        assert state.segments == [] and state.frames_done("assemble") == 50
+
+        state.pruned = True
+        assert state.restart_from("encode") == "depth"
+        assert state.done == {}

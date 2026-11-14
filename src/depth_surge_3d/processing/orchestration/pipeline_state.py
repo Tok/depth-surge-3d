@@ -180,9 +180,26 @@ class PipelineState:
             self.done = {k: v for k, v in self.done.items() if k in keys}
             return None
 
-        if self.pruned and changed != "extract":
-            changed = "extract" if self.frames_pruned > 0 else "depth"
-        restart = keys[keys.index(changed) :]
+        return self.restart_from(changed)
+
+    def restart_from(self, key: str) -> str:
+        """
+        Drop the progress of a step and of all steps after it.
+
+        If intermediates of finished frames were deleted, later steps can't be redone on
+        their own: the restart then moves back to the depth step, or to frame extraction
+        if original frames were deleted too.
+
+        Args:
+            key: Step key to restart from (must be one of the current fingerprints)
+
+        Returns:
+            Key of the step the pipeline actually restarts from
+        """
+        keys = list(self.fingerprints)
+        if self.pruned and key != "extract":
+            key = "extract" if self.frames_pruned > 0 else "depth"
+        restart = keys[keys.index(key) :]
         self.done = {k: v for k, v in self.done.items() if k in keys and k not in restart}
         if "encode" in restart:
             self.segments = []
@@ -192,4 +209,4 @@ class PipelineState:
             self.frames_pruned = 0
         if "depth" in restart:
             self.pruned = False
-        return changed
+        return key
