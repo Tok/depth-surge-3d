@@ -97,9 +97,11 @@ PIPELINE_STEP_NAMES = [
     "Crop Frames",
     "AI Upscaling",
     "VR Assembly",
-    "Video Creation",
+    "Video Creation",  # encodes the VR frames (per batch into segments, or in one pass)
+    "Final Video",  # joins the segments and adds the audio
 ]
-# Steps that run once per batch in batched mode (the inner loop)
+# Steps that run once per batch in batched mode (the inner loop); "Video Creation" joins
+# them when the video is encoded in segments
 PIPELINE_LOOP_STEP_NAMES = PIPELINE_STEP_NAMES[1:7]
 
 # Resume state of a batch directory
@@ -223,7 +225,8 @@ PROGRESS_STEP_WEIGHTS = [
     0.02,  # Step 5: Crop Frames (fast)
     0.18,  # Step 6: AI Upscaling (slow, optional)
     0.08,  # Step 7: VR Assembly (moderate - side-by-side combining)
-    0.07,  # Step 8: Video Creation (moderate - FFmpeg encoding)
+    0.06,  # Step 8: Video Creation (moderate - FFmpeg encoding, one segment per batch)
+    0.01,  # Step 9: Final Video (fast - joins the segments and adds the audio)
 ]  # Weighted progress distribution (sums to 1.00)
 PROCESSING_STEPS = [
     "Frame Extraction",

@@ -47,7 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Segmented encoding**: the video is encoded in one segment per batch (`98_video_segments/` in
   the output directory) and the segments are joined (without re-encoding) at the end. Partial
   videos are joined from the finished segments. The progress display shows video encoding as
-  part of the batch loop.
+  part of the batch loop and joining the segments (with audio) as step 9 after it. A resumed
+  run checks that its segments still exist and re-encodes (or, without the frames to do that,
+  starts over) if one is missing.
 - Only the directories a run writes to are created (no empty folders for steps that are off or
   for intermediates that aren't kept).
 - **Fisheye frame fit** (`--fisheye-fit`, "Frame Fit" slider, default 0.5): the square fisheye

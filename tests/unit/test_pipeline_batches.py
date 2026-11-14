@@ -172,7 +172,7 @@ class _FusedPipeline(_Pipeline):
             self.fail["encode"] -= 1
         names = [f"frame_{i + 1:06d}.png" for i in range(start, start + count)]
         assert all((vr_dir / name).exists() for name in names)
-        segment_path.touch()
+        segment_path.write_bytes(b"video")
         on_frame(count)
         self.log.append(("segment", start, start + count))
         return True
@@ -302,8 +302,11 @@ class TestFusedPipeline:
             for u in tracker.updates
             if u.get("step_name") == "Video Creation" and "step_progress" in u
         ]
-        assert [u["step_progress"] for u in video] == [4, 4, 8, 8, 10, 10, 10]
+        assert [u["step_progress"] for u in video] == [4, 4, 8, 8, 10, 10]
         assert all(u["step_total"] == NUM_FRAMES for u in video)
+        # joining the segments is its own step after the loop
+        final = [u for u in tracker.updates if u.get("step_name") == "Final Video"]
+        assert [(u["step_progress"], u["step_total"]) for u in final] == [(0, 1), (1, 1)]
         state = json.loads((tmp_path / "out" / "pipeline_state.json").read_text())
         assert state["segments"] == [[0, 4], [4, 8], [8, 10]]
         assert state["done"]["encode"] == state["done"]["crop"] == NUM_FRAMES
@@ -385,6 +388,50 @@ class TestFusedPipeline:
 
         assert _run(tmp_path, pipeline) is False
         assert "Frame processing failed" in capsys.readouterr().out
+
+
+class TestResumeWithSegments:
+    """Finished batches exist only as video segments once their frames are deleted."""
+
+    def _interrupted(self, tmp_path, **changes):
+        first = _FusedPipeline()
+        first.fail["encode"] = 2  # two batches are encoded, the third fails
+        assert _run(tmp_path, first, **changes) is False
+        return tmp_path / "out" / "98_video_segments"
+
+    def test_existing_segments_are_kept(self, tmp_path, capsys):
+        self._interrupted(tmp_path, keep_intermediates=False)
+        again = _FusedPipeline()
+
+        assert _run(tmp_path, again, keep_intermediates=False) is True
+        assert [e[0] for e in _work(again)] == ["segment", "concat"]
+
+    def test_missing_segment_with_kept_frames_is_encoded_again(self, tmp_path, capsys):
+        segments = self._interrupted(tmp_path)
+        (segments / "segment_000001-000004.mp4").unlink()
+        again = _FusedPipeline()
+
+        assert _run(tmp_path, again) is True
+
+        assert "video segment(s) of the earlier run are missing" in capsys.readouterr().out
+        # the VR frames are still there: only the encoding is redone, for all batches
+        assert [e for e in _work(again) if e[0] == "segment"] == [
+            ("segment", 0, 4),
+            ("segment", 4, 8),
+            ("segment", 8, 10),
+        ]
+        assert _work(again, "fused") == [] and _work(again, "depth") == []
+
+    def test_empty_segment_without_frames_starts_over(self, tmp_path, capsys):
+        segments = self._interrupted(tmp_path, keep_intermediates=False)
+        (segments / "segment_000005-000008.mp4").write_bytes(b"")
+        again = _FusedPipeline()
+
+        assert _run(tmp_path, again, keep_intermediates=False) is True
+
+        # the frames of the finished batches are gone, so the job is redone from extraction
+        assert _work(again)[0] == ("extract",)
+        assert _work(again)[-1][0] == "concat" and _work(again)[-1][2] == NUM_FRAMES
 
 
 class TestSequentialMode:

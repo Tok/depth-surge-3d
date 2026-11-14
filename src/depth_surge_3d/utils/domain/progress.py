@@ -525,9 +525,12 @@ class StepProgressState:
         self.steps = list(PIPELINE_STEP_NAMES)
         # Steps that run once per batch in batched mode
         self.loop_steps = list(PIPELINE_LOOP_STEP_NAMES)
+        self.skipped = frozenset(skipped_steps)
         if video_in_loop:
             self.loop_steps.append("Video Creation")
-        self.skipped = frozenset(skipped_steps)
+        else:
+            # one-pass encoding writes the final video itself: nothing left to join
+            self.skipped = self.skipped | {"Final Video"}
         self.weights = effective_step_weights(self.steps, self.skipped)
         self.done = [0] * len(self.steps)
         self.totals = [0] * len(self.steps)
@@ -684,6 +687,7 @@ _CONSOLE_STEP_LABELS = [
     "AI upscaling",
     "Assemble VR",
     "Create video",
+    "Final video",
 ]
 
 

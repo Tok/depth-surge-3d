@@ -217,6 +217,7 @@ class TestTqdmProgressTracker:
             "├ 5 Crop frames",
             "├ 7 Assemble VR",
             "└ 8 Encode segment",
+            "9 Final video",
         ]
         # inner bars count frames of the batch and start further right than the outer ones
         assert lines[3].endswith("| 10/10") and lines[4].endswith("| 5/10")
@@ -246,9 +247,10 @@ class TestTqdmProgressTracker:
 
         lines = _plain(tracker.render_lines(100))
 
-        assert len(lines) == 9 and not any(line.startswith("Batch") for line in lines)
-        assert lines[8].startswith("8 Create video")
+        assert len(lines) == 10 and not any(line.startswith("Batch") for line in lines)
+        assert lines[8].startswith("8 Create video") and lines[9].startswith("9 Final video")
 
+        # one-pass encoding writes the final video itself: no joining step
         one_pass = TqdmProgressTracker(batched=True, use_bars=False, video_in_loop=False)
         assert _plain(one_pass.render_lines(100))[-1].startswith("8 Create video")
         assert lines[2].startswith("2 Depth maps") and lines[2].endswith("| 10/20")
@@ -267,13 +269,15 @@ class TestTqdmProgressTracker:
         assert sys.stdout is stdout
 
         output = stderr.getvalue()
-        first_draw, later = output.split("\x1b[9A", 1)
-        assert first_draw.count("\n") == 9  # the block: nine lines
+        block = len(tracker.render_lines(100))
+        up = f"\x1b[{block}A"
+        first_draw, later = output.split(up, 1)
+        assert first_draw.count("\n") == block
         # every redraw goes back to the block's first line and clears it before writing
-        assert later.count("\x1b[9A") == output.count("\r\x1b[J") - 2
+        assert later.count(up) == output.count("\r\x1b[J") - 2
         message_at = output.index("a message while the bars are shown")
-        assert output[:message_at].endswith("\x1b[9A\r\x1b[J")
-        assert output[message_at:].count("\n") >= 10  # message line, then the whole block again
+        assert output[:message_at].endswith(up + "\r\x1b[J")
+        assert output[message_at:].count("\n") >= block + 1  # message, then the whole block again
         assert output.rstrip().endswith("m")  # ends with the block, cursor below it
 
     def test_status_lines_without_a_terminal(self, capsys):

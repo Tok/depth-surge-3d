@@ -229,6 +229,8 @@ class ProcessingOrchestrator:
         restart = state.reconcile(
             step_fingerprints(settings, self._source_identity(video_path), self._model_identity())
         )
+        if restart is None:
+            restart = self._verify_segments(state, directories)
         if restart in ("extract", "depth"):
             depth_state_path.unlink(missing_ok=True)
         state.save()
@@ -254,7 +256,9 @@ class ProcessingOrchestrator:
             progress_tracker.update_progress(
                 "Joining video segments and adding audio",
                 phase="video_creation",
-                step_name="Video Creation",
+                step_name="Final Video",
+                step_progress=0,
+                step_total=1,
             )
             success = self.video_encoder.concat_segments(
                 [segments_dir / _segment_name(start, end) for start, end in state.segments],
@@ -266,9 +270,9 @@ class ProcessingOrchestrator:
             progress_tracker.update_progress(
                 "Created final video",
                 phase="video_creation",
-                step_name="Video Creation",
-                step_progress=num_frames,
-                step_total=num_frames,
+                step_name="Final Video",
+                step_progress=1 if success else 0,
+                step_total=1,
             )
         else:
             success = self.video_encoder.create_video(
@@ -562,6 +566,41 @@ class ProcessingOrchestrator:
         _FrameRun(
             self, frame_files, directories, settings, state, depth_state_path, progress_tracker
         ).run()
+
+    @staticmethod
+    def _verify_segments(state: PipelineState, directories: dict[str, Path]) -> str | None:
+        """
+        Make sure the video segments a resumed run relies on still exist.
+
+        Finished batches exist only as segments once their VR frames are deleted. If a
+        segment is missing or empty, the encoding (or, without the frames to redo it from,
+        everything it needs) starts over instead of failing when the video is joined.
+
+        Returns:
+            Key of the step that has to start over, or None if all segments are there
+
+        Side effects:
+            - Reads the segments directory, console output
+        """
+        segments_dir = directories.get("video_segments")
+        if not state.segments or segments_dir is None:
+            return None
+        missing = [
+            _segment_name(start, end)
+            for start, end in state.segments
+            if not (segments_dir / _segment_name(start, end)).is_file()
+            or (segments_dir / _segment_name(start, end)).stat().st_size == 0
+        ]
+        if not missing:
+            return None
+        restart = state.restart_from("encode")
+        print(
+            warning(
+                f"Warning: {len(missing)} video segment(s) of the earlier run are missing "
+                f"(e.g. {missing[0]}); starting over from the {restart} step"
+            )
+        )
+        return restart
 
     def _needed_directories(self, settings: dict[str, Any]) -> set[str]:
         """
