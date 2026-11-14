@@ -317,6 +317,14 @@
             background-image: linear-gradient(45deg, var(--accent-green) 0%, var(--accent-lime) 100%);
         }
 
+        /* Selected preset button */
+        .btn-outline-success.active {
+            background-color: var(--accent-lime) !important;
+            border-color: var(--accent-lime) !important;
+            color: #000 !important;
+            font-weight: bold;
+        }
+
         /* Jobs list */
         .job-row {
             display: flex;
@@ -1147,12 +1155,14 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">3D Strength Presets</label>
-                            <div class="btn-group w-100" role="group">
-                                <button type="button" class="btn btn-outline-success btn-sm" onclick="set3DPreset('subtle')">Subtle & Clean</button>
-                                <button type="button" class="btn btn-outline-success btn-sm" onclick="set3DPreset('balanced')">Balanced</button>
-                                <button type="button" class="btn btn-outline-success btn-sm" onclick="set3DPreset('strong')">Strong & Dirty</button>
+                            <div class="btn-group w-100" role="group" id="strengthPresets">
+                                <button type="button" class="btn btn-outline-success btn-sm" data-preset="subtle" title="Baseline 0.035 m, focal length 700 px" onclick="set3DPreset('subtle')">Subtle & Clean</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" data-preset="balanced" title="Baseline 0.065 m, focal length 1000 px (default)" onclick="set3DPreset('balanced')">Balanced</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" data-preset="strong" title="Baseline 0.10 m, focal length 1200 px" onclick="set3DPreset('strong')">Strong & Dirty</button>
                             </div>
-                            <small class="form-text text-muted">Quick presets for common use cases</small>
+                            <small class="form-text text-muted">
+                                Presets set Baseline and Focal Length above. <span id="strengthPresetState"></span>
+                            </small>
                         </div>
                         <div class="step-indicator">Preview showing [L][R] disparity</div>
                     </div>
@@ -3351,6 +3361,7 @@
 
                 // Update optional step styling after loading settings
                 updateOptionalStepStyling();
+                update3DPresetHighlight();
 
             } catch (error) {
                 console.error('Error loading settings:', error);
@@ -3401,6 +3412,7 @@
 
             // Update optional step styling
             updateOptionalStepStyling();
+            update3DPresetHighlight();
 
             // Clear saved settings
             localStorage.removeItem('stereoProjectorSettings');
@@ -3426,31 +3438,44 @@
             });
         }
         
-        // 3D Strength preset functions
+        // 3D strength presets: named pairs of baseline and focal length
+        const STRENGTH_PRESETS = {
+            subtle: {baseline: 0.035, focalLength: 700, label: 'Subtle & Clean'},
+            balanced: {baseline: 0.065, focalLength: 1000, label: 'Balanced'},
+            strong: {baseline: 0.10, focalLength: 1200, label: 'Strong & Dirty'}
+        };
+
         function set3DPreset(preset) {
-            const baselineEl = document.getElementById('baseline');
-            const focalLengthEl = document.getElementById('focalLength');
-            const holeFillEl = document.getElementById('holeFillQuality');
-            
-            switch(preset) {
-                case 'subtle':
-                    baselineEl.value = '0.035';
-                    focalLengthEl.value = '700';
-                    holeFillEl.value = 'fast';
-                    break;
-                case 'balanced':
-                    baselineEl.value = '0.065';
-                    focalLengthEl.value = '1000';
-                    holeFillEl.value = 'fast';
-                    break;
-                case 'strong':
-                    baselineEl.value = '0.10';
-                    focalLengthEl.value = '1200';
-                    holeFillEl.value = 'fast';
-                    break;
-            }
+            const values = STRENGTH_PRESETS[preset];
+            if (!values) return;
+            document.getElementById('baseline').value = values.baseline;
+            document.getElementById('focalLength').value = values.focalLength;
+            document.getElementById('holeFillQuality').value = 'fast';
+            update3DPresetHighlight();
             saveSettings(); // Save the new values
         }
+
+        // Highlight the preset the current baseline and focal length correspond to (if any)
+        function update3DPresetHighlight() {
+            const baseline = parseFloat(document.getElementById('baseline').value);
+            const focalLength = parseFloat(document.getElementById('focalLength').value);
+            let selected = null;
+            Object.entries(STRENGTH_PRESETS).forEach(([name, values]) => {
+                if (Math.abs(values.baseline - baseline) < 1e-6 && values.focalLength === focalLength) {
+                    selected = name;
+                }
+            });
+            document.querySelectorAll('#strengthPresets button').forEach(button => {
+                button.classList.toggle('active', button.dataset.preset === selected);
+            });
+            document.getElementById('strengthPresetState').textContent = selected
+                ? `Selected: ${STRENGTH_PRESETS[selected].label}.`
+                : 'Custom values (no preset selected).';
+        }
+
+        ['baseline', 'focalLength'].forEach(id => {
+            document.getElementById(id).addEventListener('input', update3DPresetHighlight);
+        });
 
         // Reset settings button
         document.getElementById('resetSettingsBtn').addEventListener('click', function() {
@@ -3500,6 +3525,7 @@
             initSocket();
             updateSystemInfo();
             loadSettings();
+            update3DPresetHighlight();
             setupAutoSave();
             refreshJobs();  // also shows a job that is still running (page reload)
             setInterval(refreshJobs, 5000);
