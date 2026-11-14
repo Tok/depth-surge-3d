@@ -287,7 +287,7 @@ class ProcessingOrchestrator:
             depth_state_path.unlink(missing_ok=True)
             state.path.unlink(missing_ok=True)
             if removed:
-                print(saved_to(f"Removed {removed} intermediate directories (--no-intermediates)"))
+                print(saved_to(f"Removed {removed} intermediate directories"))
         self._finalize_processing(success, output_path, video_path, settings, num_frames)
         return success
 
@@ -322,7 +322,7 @@ class ProcessingOrchestrator:
             hint = (
                 ""
                 if not settings.get("keep_intermediates", True)
-                else (" Without intermediate files (--no-intermediates) far less is needed.")
+                else (" Without keeping intermediate files far less is needed.")
             )
             print(warning(f"Warning: this may not fit on the disk.{hint}"))
 

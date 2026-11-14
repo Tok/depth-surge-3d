@@ -71,8 +71,8 @@ python depth_surge_3d.py input_video.mp4 -b 0.15 -fl 1200
 # Use CPU only (if no GPU available)
 python depth_surge_3d.py input_video.mp4 --device cpu
 
-# Don't save intermediate files
-python depth_surge_3d.py input_video.mp4 --no-intermediates
+# Keep every step's images (depth maps, stereo pairs, ...)
+python depth_surge_3d.py input_video.mp4 --keep-intermediates
 
 # Disable audio preservation
 python depth_surge_3d.py input_video.mp4 --no-audio
@@ -81,7 +81,7 @@ python depth_surge_3d.py input_video.mp4 --no-audio
 python depth_surge_3d.py input_video.mp4 --fps 120 --resolution 4k
 
 # Combined example: high-quality 4K 60fps processing
-python depth_surge_3d.py input_video.mp4 -s 01:30 -e 02:00 -f over_under --resolution 4k --fps 60 --no-intermediates
+python depth_surge_3d.py input_video.mp4 -s 01:30 -e 02:00 -f over_under --resolution 4k --fps 60
 ```
 
 ## Output Structure
@@ -117,11 +117,12 @@ video is encoded in one segment per batch (`98_video_segments/`), joined at the 
 
 ### Intermediate files
 
-- **Kept** (default): every step's images stay in the batch directory. Needed to redo single
-  steps with changed settings, and useful for inspection. Uses a lot of disk space.
-- **Not kept** (`--no-intermediates`, or "Keep Intermediate Files" off): only about one batch of
-  frames exists at any time, plus the video segments. Finished frames, depth maps and VR frames
-  are deleted as the job goes. The job can still be resumed.
+- **Not kept** (default): the extracted frames are deleted as the job goes; of everything
+  else only about one batch exists at any time, plus the video segments. Disk use peaks near
+  the size of the extracted frames (about 2 MB per 1080p frame). The job can still be resumed.
+- **Kept** (`--keep-intermediates`, or "Keep Intermediate Files" on): every step's images stay
+  in the batch directory. Needed to redo single steps with changed settings, and useful for
+  inspection. Needs many times the space (about 18 MB per frame for 1080p to 1536 px eyes).
 
 An estimate of the needed disk space is shown before the job starts.
 
@@ -132,7 +133,8 @@ python depth_surge_3d.py input_video.mp4 --reuse ./output/my_video_20261114_1200
 ```
 
 Only the steps the changed settings affect run again (a new baseline keeps the depth maps, a
-new encoder only re-encodes). This needs the intermediate files.
+new encoder only re-encodes). This needs the intermediate files (`--keep-intermediates` on the
+first run).
 
 ### Job queue (web UI)
 

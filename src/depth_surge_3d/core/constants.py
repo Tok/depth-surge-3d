@@ -65,7 +65,9 @@ DEFAULT_SETTINGS = {
     "target_fps": 60,
     "min_resolution": "1080p",
     "preserve_audio": True,
-    "keep_intermediates": True,
+    # Off: disk use stays near the extracted frames plus one batch. On: every step's
+    # images are kept (about 18 MB per frame for 1080p to 1536 px eyes).
+    "keep_intermediates": False,
     "apply_distortion": True,
     "output_dir": "./output",
     "experimental_frame_interpolation": False,  # Experimental feature with quality warnings

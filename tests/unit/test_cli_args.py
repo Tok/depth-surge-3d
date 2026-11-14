@@ -229,3 +229,30 @@ class TestQualityFlags:
         video.touch()
         monkeypatch.setattr(sys, "argv", ["prog", str(video), "--reuse", str(tmp_path / "nope")])
         assert cli.main() == 1
+
+
+class TestIntermediatesFlag:
+    """Intermediate files are only kept on request."""
+
+    def _settings(self, cli, tmp_path, monkeypatch, *flags):
+        from unittest.mock import Mock
+
+        video = tmp_path / "video.mp4"
+        video.touch()
+        projector = Mock()
+        projector.process_video.return_value = True
+        monkeypatch.setattr(cli, "create_stereo_projector", Mock(return_value=projector))
+        monkeypatch.setattr(sys, "argv", ["prog", str(video), "-o", str(tmp_path), *flags])
+        assert cli.main() == 0
+        return projector.process_video.call_args[1]
+
+    def test_off_by_default(self, cli, tmp_path, monkeypatch, capsys):
+        assert self._settings(cli, tmp_path, monkeypatch)["keep_intermediates"] is False
+
+    def test_keep_flag(self, cli, tmp_path, monkeypatch, capsys):
+        kwargs = self._settings(cli, tmp_path, monkeypatch, "--keep-intermediates")
+        assert kwargs["keep_intermediates"] is True
+
+    def test_old_flag_is_still_accepted(self, cli, tmp_path, monkeypatch, capsys):
+        kwargs = self._settings(cli, tmp_path, monkeypatch, "--no-intermediates")
+        assert kwargs["keep_intermediates"] is False

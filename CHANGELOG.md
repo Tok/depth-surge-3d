@@ -43,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change, and around AI upscaling.
 - **Segmented encoding**: the video is encoded in one segment per batch and the segments are
   joined (without re-encoding) at the end. Partial videos are joined from the finished segments.
-- **Keep Intermediate Files off** now means bounded disk use: stereo/distorted/cropped images are
+- **Intermediate files are no longer kept by default** (`--keep-intermediates` / the checkbox
+  turns them on; `--no-intermediates` is still accepted). Off now means bounded disk use: stereo/distorted/cropped images are
   never written, and original frames, depth maps and VR frames are deleted batch by batch once
   the steps that read them are done (VR frames after their segment is encoded). An interrupted
   job can still be resumed; changing settings on such a job starts over.

@@ -577,9 +577,9 @@ class TestDiskEstimate:
 
     def test_warns_when_the_disk_looks_too_small(self, tmp_path, capsys):
         out = self._report(tmp_path, 1024**3, capsys)
-        assert "may not fit" in out and "--no-intermediates" in out
+        assert "may not fit" in out and "Without keeping intermediate files" in out
         out = self._report(tmp_path, 1024**2, capsys, keep_intermediates=False)
-        assert "may not fit" in out and "--no-intermediates" not in out
+        assert "may not fit" in out and "Without keeping" not in out
 
     def test_unknown_video_properties_are_skipped(self, tmp_path, capsys):
         ProcessingOrchestrator._report_disk_estimate(tmp_path, {}, _settings())

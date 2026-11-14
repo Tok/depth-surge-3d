@@ -57,7 +57,7 @@
 ### Output Options
 
 - **`--no-audio`**: Do not preserve audio from original video (audio preserved by default)
-- **`--no-intermediates`**: Don't keep intermediate files: disk use stays at about one batch of frames plus the video (files of finished frames are deleted as the job goes)
+- **`--keep-intermediates`**: Keep every step's images in the output directory (needed for `--reuse` with changed settings). Off by default: the extracted frames are deleted as the job goes and nothing else is kept, so disk use stays near the size of the extracted frames
 - **`--resume DIRECTORY`**: Continue an interrupted job where it stopped (original settings and model)
 - **`--assemble-partial DIRECTORY`**: Create a video from the VR frames an unfinished job has completed so far
 - **`--reuse DIRECTORY`**: Run in an existing output directory with the settings of this command line; frames, depth maps and later steps are reused as far as the settings allow

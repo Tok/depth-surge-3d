@@ -293,7 +293,15 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
     # Output options
     parser.add_argument("--no-audio", action="store_true", help="Do not preserve audio in output")
     parser.add_argument(
-        "--no-intermediates", action="store_true", help="Do not keep intermediate processing files"
+        "--keep-intermediates",
+        action="store_true",
+        help="Keep every step's images (depth maps, stereo pairs, ...) in the output directory. "
+        "Needed to redo single steps with --reuse; uses a lot of disk space",
+    )
+    parser.add_argument(
+        "--no-intermediates",
+        action="store_true",
+        help="Do not keep intermediate files (this is the default; kept for old command lines)",
     )
     parser.add_argument("--target-fps", type=int, help="Target output FPS (default: match source)")
 
@@ -582,7 +590,7 @@ def main():  # noqa: C901
             fisheye_crop_factor=args.fisheye_crop_factor,
             hole_fill_quality=args.hole_fill_quality,
             preserve_audio=not args.no_audio,
-            keep_intermediates=not args.no_intermediates,
+            keep_intermediates=args.keep_intermediates and not args.no_intermediates,
             target_fps=args.target_fps,
             experimental_frame_interpolation=args.experimental_frame_interpolation,
             upscale_model=args.upscale_model,
