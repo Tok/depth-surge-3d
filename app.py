@@ -592,6 +592,8 @@ class ProgressCallback:
         # Per-step progress (shared with the CLI's progress bars). Step names must match
         # the `step_name` values the pipeline stages report (PIPELINE_STEP_NAMES).
         self.video_in_loop = video_in_loop
+        # A frame is finished once it is encoded (or assembled, if the video is encoded at the end)
+        self._last_frame_step = "Video Creation" if video_in_loop else "VR Assembly"
         self.state = StepProgressState(skipped_steps, video_in_loop)
         self.steps = self.state.steps
         self.step_weights = self.state.weights
@@ -816,6 +818,10 @@ class ProgressCallback:
             "stage": stage,
             "current_frame": self.current_frame,
             "total_frames": self.total_frames,
+            # frames that are through every per-frame step (for the overall label)
+            "finished_frames": min(
+                state.done[state.steps.index(self._last_frame_step)], self.total_frames
+            ),
             "phase": self.current_phase,
             "processing_mode": self.processing_mode,
             "video_in_loop": self.video_in_loop,

@@ -472,3 +472,24 @@ def test_keeping_intermediates_is_a_server_option(monkeypatch):
     page = client.get("/").get_data(as_text=True)
     assert "const KEEP_INTERMEDIATES = true;" in page
     assert "Intermediate files are kept" in page
+
+
+def test_progress_reports_frames_finished_overall(monkeypatch, capsys):
+    """The overall bar's label shows whole-video figures, not the current batch's."""
+    callback, emitted = _callback(monkeypatch)
+    callback.set_batch_info(1, 2, 100, 100)
+    callback.update_progress(
+        "Processing frame 64/100", step_name="VR Assembly", step_progress=164, step_total=200
+    )
+    callback.last_update_time = 0
+    callback.update_progress(
+        "Encoding", step_name="Video Creation", step_progress=100, step_total=200
+    )
+
+    data = emitted[-1][1]
+    assert (data["finished_frames"], data["total_frames"]) == (100, 200)
+
+    one_pass, emitted = _callback(monkeypatch, video_in_loop=False)
+    one_pass.update_progress("x", step_name="VR Assembly", step_progress=164, step_total=200)
+    assert emitted[-1][1]["finished_frames"] == 164
+    app_module.current_processing["last_progress"] = None

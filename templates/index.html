@@ -3151,8 +3151,14 @@
                 overallText.textContent = data.progress.toFixed(1) + '%';
             }
             if (overallPhase) {
-                const etaSuffix = data.eta ? ` (ETA: ${data.eta})` : '';
-                overallPhase.textContent = (data.stage || 'Processing...') + etaSuffix;
+                // Always overall figures (never the current step's or batch's counts)
+                const etaSuffix = data.eta ? ` · ETA ${data.eta}` : '';
+                if (data.total_frames > 0 && data.finished_frames !== undefined) {
+                    overallPhase.textContent =
+                        `${data.finished_frames.toLocaleString()} of ${data.total_frames.toLocaleString()} frames finished${etaSuffix}`;
+                } else {
+                    overallPhase.textContent = `${data.progress.toFixed(1)}%${etaSuffix}`;
+                }
             }
 
             // Update step-specific progress bars
