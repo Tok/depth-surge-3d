@@ -334,6 +334,11 @@ job_queue: list[dict[str, Any]] = []
 queue_lock = threading.RLock()
 
 
+def _video_in_loop(settings: dict[str, Any]) -> bool:
+    """The video is encoded per batch unless motion interpolation needs it in one pass."""
+    return not settings.get("experimental_frame_interpolation")
+
+
 def _launch_job(job: dict[str, Any]) -> None:
     """Start a job in the background (caller holds queue_lock; no job may be running)."""
     reset_progress_state(job["session_id"])
@@ -344,6 +349,7 @@ def _launch_job(job: dict[str, Any]) -> None:
     current_processing["processing_mode"] = (
         mode if mode in PROCESSING_MODES else DEFAULT_SETTINGS["processing_mode"]
     )
+    current_processing["video_in_loop"] = _video_in_loop(job["settings"])
     current_processing["thread"] = socketio.start_background_task(
         process_video_async,
         job["session_id"],
@@ -564,6 +570,7 @@ class ProgressCallback:
         enable_live_preview: bool = True,
         preview_update_interval: float = PREVIEW_UPDATE_INTERVAL,
         skipped_steps: set[str] | frozenset[str] = frozenset(),
+        video_in_loop: bool = True,
     ) -> None:
         self.session_id = session_id
         self.total_frames = total_frames
@@ -580,11 +587,14 @@ class ProgressCallback:
 
         # Per-step progress (shared with the CLI's progress bars). Step names must match
         # the `step_name` values the pipeline stages report (PIPELINE_STEP_NAMES).
-        self.state = StepProgressState(skipped_steps)
+        self.video_in_loop = video_in_loop
+        self.state = StepProgressState(skipped_steps, video_in_loop)
         self.steps = self.state.steps
         self.step_weights = self.state.weights
         # The server's console shows the same progress bars as the CLI
-        self.console = TqdmProgressTracker(skipped_steps, batched=processing_mode != "sequential")
+        self.console = TqdmProgressTracker(
+            skipped_steps, batched=processing_mode != "sequential", video_in_loop=video_in_loop
+        )
 
     def set_batch_info(self, index: int, count: int, start: int, size: int) -> None:
         """Batched mode: the batch the inner loop (steps 2-7) is working on."""
@@ -804,6 +814,7 @@ class ProgressCallback:
             "total_frames": self.total_frames,
             "phase": self.current_phase,
             "processing_mode": self.processing_mode,
+            "video_in_loop": self.video_in_loop,
             "step_name": state.steps[index],
             "step_progress": state.done[index],
             "step_total": state.totals[index],
@@ -957,6 +968,7 @@ def process_video_async(  # noqa: C901
             enable_live_preview,
             preview_update_interval,
             skipped_steps=skipped_steps,
+            video_in_loop=_video_in_loop(settings),
         )
 
         # Give client time to join the session room before starting processing
@@ -1640,6 +1652,7 @@ def list_jobs():
             running = _job_summary(Path(running_dir))
             running["session_id"] = current_processing["session_id"]
             running["processing_mode"] = current_processing.get("processing_mode")
+            running["video_in_loop"] = current_processing.get("video_in_loop", True)
             running["progress"] = current_processing.get("progress", 0)
         queued = [
             {**_job_summary(Path(job["output_dir"])), "session_id": job["session_id"]}
@@ -1783,6 +1796,7 @@ def handle_join_session(data):
                 "step_progress": current_processing.get("step_progress", 0),
                 "step_total": current_processing.get("step_total", 0),
                 "processing_mode": current_processing.get("processing_mode"),
+                "video_in_loop": current_processing.get("video_in_loop", True),
             }
             socketio.emit("progress_update", initial_data, room=session_id)
         except Exception as e:

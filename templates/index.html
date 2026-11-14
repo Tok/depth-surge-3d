@@ -1772,9 +1772,9 @@
                                     </div>
                                 </div>
 
-                                <div class="mb-2">
+                                <div class="mb-2" id="step8Row">
                                     <div class="d-flex justify-content-between align-items-center" style="font-size: 0.85rem;">
-                                        <span><i class="fas fa-video"></i> 8. Create Final Video</span>
+                                        <span><i class="fas fa-video"></i> 8. <span id="step8Label">Create Final Video</span></span>
                                         <span class="step-count" id="step8Progress">0%</span>
                                     </div>
                                     <div class="progress sub-progress">
@@ -1782,6 +1782,12 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <small class="job-status mb-3" id="segmentNote" style="display: none;">
+                                <i class="fas fa-info-circle"></i> Each batch is encoded into a video segment as soon as its frames are done
+                                (<code>98_video_segments</code> in the output directory). The segments are joined into the final video,
+                                with audio, after the last batch; stopping earlier leaves them for a partial video.
+                            </small>
 
                             <!-- Batch Directory Info -->
                             <div class="mb-3" id="currentBatchDirectory" style="display: none;">
@@ -3077,7 +3083,7 @@
             }
             // Batched jobs show the batch loop from the start, not only once the first batch runs.
             // An unknown mode (resumed job) is corrected by the first progress update.
-            showBatchLoop(processingMode ? processingMode === 'batched' : true);
+            showBatchLoop(processingMode ? processingMode === 'batched' : true, true);
             document.getElementById('batchBar').style.width = '0%';
             document.getElementById('batchLabel').textContent = '--';
             document.getElementById('batchFrames').textContent = 'starts after frame extraction';
@@ -3135,8 +3141,17 @@
             updateStepProgress(data);
         }
 
-        function showBatchLoop(batched) {
-            document.getElementById('batchLoop').classList.toggle('batched', batched);
+        // Batched jobs show the batch counter with the looped steps nested below it. The
+        // video step is part of the loop when the video is encoded per batch (the usual case).
+        function showBatchLoop(batched, videoInLoop) {
+            const loop = document.getElementById('batchLoop');
+            loop.classList.toggle('batched', batched);
+            const inLoop = batched && videoInLoop !== false;
+            const row = document.getElementById('step8Row');
+            const target = inLoop ? loop.querySelector('.batch-steps') : loop.parentNode;
+            if (row.parentNode !== target) target.appendChild(row);
+            document.getElementById('step8Label').textContent = inLoop ? 'Encode Video Segment' : 'Create Final Video';
+            document.getElementById('segmentNote').style.display = inLoop ? 'block' : 'none';
         }
 
         // Update the step bars and, in batched mode, the batch counter.
@@ -3144,7 +3159,7 @@
         // counts are frames of the current batch, otherwise frames of the whole video.
         function updateStepProgress(data) {
             if (data.processing_mode || data.batch) {
-                showBatchLoop(data.processing_mode === 'batched' || !!data.batch);
+                showBatchLoop(data.processing_mode === 'batched' || !!data.batch, data.video_in_loop);
             }
             if (!Array.isArray(data.steps)) return;
 
