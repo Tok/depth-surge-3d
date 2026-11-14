@@ -302,6 +302,9 @@ class RunningDepthRange:
             return out
 
         chunk_range = self._chunk_range(out, max_samples)
+        # per-frame range start/end (annotated: numpy's stubs differ between versions)
+        lows: np.ndarray
+        highs: np.ndarray
         if self.low is None or self.high is None:
             if chunk_range is None:
                 out.fill(0.0)
@@ -317,8 +320,8 @@ class RunningDepthRange:
                 self.low = low if low < old_low else old_low + (low - old_low) * narrow
                 self.high = high if high > old_high else old_high + (high - old_high) * narrow
             weights = np.linspace(0.0, 1.0, count + 1, dtype=np.float32)[1:]
-            lows = old_low + (self.low - old_low) * weights
-            highs = old_high + (self.high - old_high) * weights
+            lows = np.asarray(old_low + (self.low - old_low) * weights, dtype=np.float32)
+            highs = np.asarray(old_high + (self.high - old_high) * weights, dtype=np.float32)
 
         np.nan_to_num(
             out, copy=False, nan=float(lows[0]), posinf=float(highs[0]), neginf=float(lows[0])
