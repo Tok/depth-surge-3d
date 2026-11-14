@@ -120,9 +120,11 @@ video is encoded in one segment per batch (`98_video_segments/`), joined at the 
 - **Not kept** (default): the extracted frames are deleted as the job goes; of everything
   else only about one batch exists at any time, plus the video segments. Disk use peaks near
   the size of the extracted frames (about 2 MB per 1080p frame). The job can still be resumed.
-- **Kept** (`--keep-intermediates`, or "Keep Intermediate Files" on): every step's images stay
-  in the batch directory. Needed to redo single steps with changed settings, and useful for
-  inspection. Needs many times the space (about 18 MB per frame for 1080p to 1536 px eyes).
+- **Kept** (`--keep-intermediates`): every step's images stay in the batch directory. Needed to
+  redo single steps with changed settings, and useful for inspection. Needs many times the space
+  (about 18 MB per frame for 1080p to 1536 px eyes). It is a start-up option, for the CLI and
+  for the web server (`./run_ui.sh --keep-intermediates` applies it to all jobs); the web UI has
+  no per-job switch.
 
 An estimate of the needed disk space is shown before the job starts.
 

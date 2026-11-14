@@ -1524,16 +1524,13 @@
                                 <i class="fas fa-save"></i> Progress is saved after every batch in both modes, so a stopped or failed job can be resumed, or its finished part assembled into a video
                             </small>
                         </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="keepIntermediates">
-                            <label class="form-check-label" for="keepIntermediates">
-                                Keep Intermediate Files
-                            </label>
-                            <small class="text-muted d-block ms-4">
-                                Off (default): the extracted frames are deleted as the job goes and nothing else is kept; the job can still be resumed.<br>
-                                On: every step's images stay in the output directory (needed to redo single steps with changed settings). Needs many times the disk space.
-                            </small>
-                        </div>
+                        <small class="form-text text-muted d-block mb-2">
+                            {% if keep_intermediates %}
+                            <i class="fas fa-folder-open"></i> Intermediate files are kept: the server was started with <code>--keep-intermediates</code>, so every step's images stay in the output directory. This needs many times the disk space.
+                            {% else %}
+                            <i class="fas fa-broom"></i> Intermediate files are deleted as the job goes (a stopped job can still be resumed). To keep every step's images, start the server with <code>--keep-intermediates</code>.
+                            {% endif %}
+                        </small>
                         <div class="step-indicator">
                             <strong>Estimated disk space:</strong> <span id="diskEstimate">upload a video to see the estimate</span>
                         </div>
@@ -2015,6 +2012,9 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <script>
+        // Server option (--keep-intermediates), the same for all jobs
+        const KEEP_INTERMEDIATES = {{ 'true' if keep_intermediates else 'false' }};
+
         // Global variables
         let socket;
         let currentSessionId = null;
@@ -2423,7 +2423,6 @@
                 baseline: parseFloat(document.getElementById('baseline').value),
                 focal_length: parseInt(document.getElementById('focalLength').value),
                 preserve_audio: document.getElementById('preserveAudio').checked,
-                keep_intermediates: document.getElementById('keepIntermediates').checked,
                 video_encoder: document.getElementById('videoEncoder').value,
                 device: document.getElementById('device').value,
                 model_size: document.getElementById('modelSize').value,
@@ -2985,8 +2984,8 @@
                     let text = `about ${formatBytes(data.estimated_bytes)} at peak for ${data.frames.toLocaleString()} frames`
                         + ` (${parts.join(', ')}); ${formatBytes(data.free_bytes)} free`;
                     if (tooSmall) {
-                        text += settings.keep_intermediates
-                            ? ' — may not fit; turning off "Keep Intermediate Files" needs far less'
+                        text += KEEP_INTERMEDIATES
+                            ? ' — may not fit; without --keep-intermediates far less is needed'
                             : ' — may not fit';
                     }
                     target.textContent = text;
@@ -3694,7 +3693,6 @@
 
                 // Audio and intermediates
                 preserveAudio: document.getElementById('preserveAudio').checked,
-                keepIntermediates: document.getElementById('keepIntermediates').checked,
                 videoEncoder: document.getElementById('videoEncoder').value,
 
                 // Fisheye and cropping
@@ -3782,7 +3780,6 @@
                 processingMode: 'batched',
                 batchSize: '120',
                 preserveAudio: true,
-                keepIntermediates: false,
                 videoEncoder: 'auto',
                 applyDistortion: true,
                 fisheyeFrameFit: '0.5',
@@ -3826,7 +3823,7 @@
             const settingsElements = [
                 'processingMode', 'batchSize', 'vrFormat', 'vrResolution', 'baseline', 'focalLength',
                 'resolution', 'targetFps', 'superSample', 'device', 'modelSize', 'depthModelType', 'depthResolution', 'videoEncoder',
-                'preserveAudio', 'keepIntermediates', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
+                'preserveAudio', 'applyDistortion', 'fisheyeProjection', 'fisheyeFov', 'cropFactor',
                 'fisheyeFrameFit', 'fisheyeCropFactor', 'holeFillQuality', 'applyUpscaling', 'upscaleModel', 'experimentalFrameInterpolation'
             ];
             

@@ -390,9 +390,12 @@ def test_disk_estimate_endpoint(tmp_path, monkeypatch):
         body = {"output_dir": str(job), "settings": {"vr_resolution": "auto", **settings}}
         return client.post("/estimate", json=body).get_json()
 
-    full = estimate(keep_intermediates=True)
-    ranged = estimate(keep_intermediates=True, start_time="00:10", end_time="00:20")
-    lean = estimate(keep_intermediates=False)
+    # keeping intermediates is a server option; a value sent by the page is ignored
+    monkeypatch.setattr(app_module, "KEEP_INTERMEDIATES", True)
+    full = estimate(keep_intermediates=False)
+    ranged = estimate(start_time="00:10", end_time="00:20")
+    monkeypatch.setattr(app_module, "KEEP_INTERMEDIATES", False)
+    lean = estimate(keep_intermediates=True)
 
     assert full["success"] and full["frames"] == 900 and full["free_bytes"] == 5 * 1024**3
     assert ranged["frames"] == 300 and ranged["estimated_bytes"] < full["estimated_bytes"]
@@ -453,3 +456,19 @@ def test_processing_mode_is_known_before_the_first_progress_update(tmp_path, job
         assert update["args"][0]["processing_mode"] == "batched"
     finally:
         client.disconnect()
+
+
+def test_keeping_intermediates_is_a_server_option(monkeypatch):
+    """The page has no per-job switch; it says how the server was started."""
+    client = app_module.app.test_client()
+
+    monkeypatch.setattr(app_module, "KEEP_INTERMEDIATES", False)
+    page = client.get("/").get_data(as_text=True)
+    assert 'id="keepIntermediates"' not in page
+    assert "const KEEP_INTERMEDIATES = false;" in page
+    assert "Intermediate files are deleted as the job goes" in page
+
+    monkeypatch.setattr(app_module, "KEEP_INTERMEDIATES", True)
+    page = client.get("/").get_data(as_text=True)
+    assert "const KEEP_INTERMEDIATES = true;" in page
+    assert "Intermediate files are kept" in page

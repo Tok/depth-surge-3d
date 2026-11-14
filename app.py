@@ -99,6 +99,9 @@ from depth_surge_3d.utils.domain.progress import (  # noqa: E402,F401
 
 # Global flags and state
 VERBOSE = False
+# Keep every step's images of all jobs (server started with --keep-intermediates).
+# Off by default: jobs only keep what they still need, plus the video.
+KEEP_INTERMEDIATES = False
 SHUTDOWN_FLAG = False
 ACTIVE_PROCESSES = set()
 
@@ -866,6 +869,8 @@ def process_video_async(  # noqa: C901
         for key, value in DEFAULT_SETTINGS.items():
             if key not in ("output_dir", "target_fps"):
                 settings.setdefault(key, value)
+        # Keeping intermediate files is a server option, not a per-job setting
+        settings["keep_intermediates"] = KEEP_INTERMEDIATES
 
         # Check CUDA availability in this thread
         cuda_available = torch.cuda.is_available()
@@ -1054,7 +1059,7 @@ def process_video_async(  # noqa: C901
 @app.route("/")
 def index():
     """Main page"""
-    return render_template("index.html")
+    return render_template("index.html", keep_intermediates=KEEP_INTERMEDIATES)
 
 
 @app.route("/upload", methods=["POST"])
@@ -1705,6 +1710,7 @@ def estimate_disk_space():
     for key, value in DEFAULT_SETTINGS.items():
         if key not in ("output_dir", "target_fps"):
             settings.setdefault(key, value)
+    settings["keep_intermediates"] = KEEP_INTERMEDIATES
     try:
         resolve_output_dimensions(settings, video_info)
     except Exception as e:
@@ -1824,10 +1830,18 @@ if __name__ == "__main__":
         default=DEFAULT_SERVER_HOST,
         help=f"Host to bind to (default: {DEFAULT_SERVER_HOST})",
     )
+    parser.add_argument(
+        "--keep-intermediates",
+        action="store_true",
+        help="Keep every step's images (depth maps, stereo pairs, ...) of all jobs in their "
+        "output directories. For inspection or redoing single steps; needs many times the "
+        "disk space",
+    )
     args = parser.parse_args()
 
-    # Set global verbose flag
+    # Set global flags
     VERBOSE = args.verbose
+    KEEP_INTERMEDIATES = args.keep_intermediates
 
     ensure_directories()
 
