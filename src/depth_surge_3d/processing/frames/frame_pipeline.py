@@ -15,7 +15,6 @@ from typing import Any
 
 import cv2
 
-from ...core.constants import PREVIEW_FRAME_SAMPLE_RATE
 from ...io.operations import load_depth_map
 from ...utils import (
     apply_center_crop,
@@ -217,14 +216,8 @@ class FusedFrameProcessor:
 
     @staticmethod
     def _send_previews(tracker, outputs: dict[str, str], name: str, index: int, total: int) -> None:
-        """Send previews of the images this frame wrote (if the tracker shows previews)."""
-        if not hasattr(tracker, "send_preview_frame"):
-            return
-        if index % PREVIEW_FRAME_SAMPLE_RATE == 0 or index == total - 1:
-            if "left_frames" in outputs:
-                left = Path(outputs["left_frames"]) / f"{name}.png"
-                tracker.send_preview_frame(left, "stereo_left", index + 1)
-        if "vr_frames" in outputs:
+        """Send a preview of the VR frame this frame wrote (if the tracker shows previews)."""
+        if "vr_frames" in outputs and hasattr(tracker, "send_preview_frame"):
             # throttled by time in the tracker
             vr_path = Path(outputs["vr_frames"]) / f"{name}.png"
             tracker.send_preview_frame(vr_path, "vr_frame", index + 1)

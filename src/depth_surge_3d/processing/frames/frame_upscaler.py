@@ -11,7 +11,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from ...core.constants import INTERMEDIATE_DIRS, PREVIEW_FRAME_SAMPLE_RATE
+from ...core.constants import INTERMEDIATE_DIRS
 
 
 class FrameUpscalerProcessor:
@@ -222,23 +222,11 @@ class FrameUpscalerProcessor:
 
         frame_name = left_file.stem
 
-        # Determine if we should send preview for this frame
-        should_send_preview = (
-            progress_tracker
-            and hasattr(progress_tracker, "send_preview_frame_from_array")
-            and (frame_idx % PREVIEW_FRAME_SAMPLE_RATE == 0 or frame_idx == total_frames - 1)
-        )
-
         # Always save (VR assembly reads these from disk)
         if left_upscaled:
             cv2.imwrite(str(left_upscaled / f"{frame_name}.png"), left_upscaled_img)
         if right_upscaled:
             cv2.imwrite(str(right_upscaled / f"{frame_name}.png"), right_upscaled_img)
-
-        if should_send_preview:
-            progress_tracker.send_preview_frame_from_array(
-                left_upscaled_img, "upscaled_left", frame_idx + 1
-            )
 
         # Progress update (every frame since upscaling is slow)
         if frame_idx % 1 == 0 or frame_idx == total_frames - 1:

@@ -19,7 +19,7 @@ import cv2
 
 from ...io.operations import load_depth_map
 from ...utils import render_stereo_pair
-from ...core.constants import MAX_STEREO_WORKERS, PREVIEW_FRAME_SAMPLE_RATE
+from ...core.constants import MAX_STEREO_WORKERS
 
 
 def _init_stereo_worker() -> None:
@@ -276,7 +276,7 @@ class StereoPairGenerator:
 
     @staticmethod
     def _report_progress(i: int, args_list: list[tuple], progress_tracker) -> None:
-        """Send progress and preview updates for the i-th finished pair."""
+        """Send a progress update for the i-th finished pair."""
         if not progress_tracker:
             return
         total = len(args_list)
@@ -291,9 +291,3 @@ class StereoPairGenerator:
                 step_progress=i + 1,
                 step_total=total,
             )
-
-        if hasattr(progress_tracker, "send_preview_frame"):
-            if i % PREVIEW_FRAME_SAMPLE_RATE == 0 or is_last:
-                left_path = args_list[i][3]
-                if left_path:
-                    progress_tracker.send_preview_frame(Path(left_path), "stereo_left", i + 1)

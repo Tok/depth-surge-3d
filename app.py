@@ -581,7 +581,8 @@ class ProgressCallback:
 
         # Preview tracking
         self.enable_live_preview = enable_live_preview
-        self.last_preview_time = 0
+        # Throttled per kind of preview: otherwise the frequent VR previews crowd out the rest
+        self.last_preview_times: dict[str, float] = {}
         self.preview_interval = preview_update_interval
         self.preview_downscale_width = PREVIEW_DOWNSCALE_WIDTH
 
@@ -612,7 +613,7 @@ class ProgressCallback:
 
         Args:
             frame_path: Path to the frame image file
-            frame_type: Type of frame ("depth_map", "stereo_left", "stereo_right", "vr_frame")
+            frame_type: Type of frame ("depth_map" or "vr_frame")
             frame_number: Frame number being processed
         """
         # Check if preview is enabled
@@ -622,7 +623,7 @@ class ProgressCallback:
         current_time = time.time()
 
         # Throttle preview updates
-        if current_time - self.last_preview_time < self.preview_interval:
+        if current_time - self.last_preview_times.get(frame_type, 0) < self.preview_interval:
             return
 
         try:
@@ -677,7 +678,7 @@ class ProgressCallback:
 
             socketio.emit("frame_preview", preview_data, room=self.session_id)
 
-            self.last_preview_time = current_time
+            self.last_preview_times[frame_type] = current_time
 
         except Exception as e:
             # Log error but don't interrupt processing
@@ -697,7 +698,7 @@ class ProgressCallback:
 
         Args:
             frame_array: Frame as numpy array (BGR format)
-            frame_type: Type of frame ("depth_map", "stereo_left", "upscaled_left", etc)
+            frame_type: Type of frame ("depth_map" or "vr_frame")
             frame_number: Frame number being processed
         """
         # Check if preview is enabled
@@ -707,7 +708,7 @@ class ProgressCallback:
         current_time = time.time()
 
         # Throttle preview updates
-        if current_time - self.last_preview_time < self.preview_interval:
+        if current_time - self.last_preview_times.get(frame_type, 0) < self.preview_interval:
             return
 
         try:
@@ -756,7 +757,7 @@ class ProgressCallback:
 
             socketio.emit("frame_preview", preview_data, room=self.session_id)
 
-            self.last_preview_time = current_time
+            self.last_preview_times[frame_type] = current_time
 
         except Exception as e:
             # Log error but don't interrupt processing

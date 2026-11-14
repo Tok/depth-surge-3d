@@ -154,7 +154,7 @@ class TestProgressAndFailures:
             last[call[1]["step_name"]] = (call[1]["step_progress"], call[1]["step_total"])
         assert last == {name: (3, 3) for name in FusedFrameProcessor.step_names(SETTINGS, True)}
         kinds = {call[0][1] for call in tracker.send_preview_frame.call_args_list}
-        assert kinds == {"stereo_left", "vr_frame"}
+        assert kinds == {"vr_frame"}
 
     def test_tracker_without_previews(self, tmp_path):
         directories, frames, depths = _batch(tmp_path, count=1)

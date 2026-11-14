@@ -201,7 +201,7 @@ class TestCreateStereoPairs:
         assert len(list(temp_frames["directories"]["left_frames"].glob("*.png"))) == 3
         assert len(list(temp_frames["directories"]["right_frames"].glob("*.png"))) == 3
         mock_progress_tracker.update_progress.assert_called()
-        mock_progress_tracker.send_preview_frame.assert_called()
+        mock_progress_tracker.send_preview_frame.assert_not_called()  # no left-eye preview
 
     def test_create_stereo_pairs_without_progress_tracker(self, temp_frames):
         """CLI runs pass no progress tracker (regression: NoneType.update_progress)."""

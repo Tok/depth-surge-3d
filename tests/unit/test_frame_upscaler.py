@@ -442,8 +442,8 @@ class TestUpscaleFramePair:
             progress_tracker=mock_progress_tracker,
         )
 
-        # Preview is sent straight from memory
-        mock_progress_tracker.send_preview_frame_from_array.assert_called()
+        # Upscaled eyes are an in-between result: no preview (the VR frame preview follows)
+        mock_progress_tracker.send_preview_frame_from_array.assert_not_called()
 
     def test_upscale_pair_with_preview_last_frame(
         self, mock_upscaler, mock_progress_tracker, temp_frames, tmp_path
@@ -470,8 +470,7 @@ class TestUpscaleFramePair:
             progress_tracker=mock_progress_tracker,
         )
 
-        # Check preview was sent (from array since keep_intermediates=False)
-        mock_progress_tracker.send_preview_frame_from_array.assert_called()
+        mock_progress_tracker.send_preview_frame_from_array.assert_not_called()
 
     def test_upscale_pair_missing_image(self, mock_upscaler, mock_progress_tracker, tmp_path):
         """Test upscaling when image file is missing."""

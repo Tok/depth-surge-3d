@@ -1553,7 +1553,7 @@
                                 </label>
                             </div>
                             <small class="form-text text-muted">
-                                <i class="fas fa-info-circle"></i> Shows real-time depth maps, stereo pairs, and VR frames while processing<br>
+                                <i class="fas fa-info-circle"></i> Shows the newest depth map and VR frame while processing<br>
                                 <i class="fas fa-network-wired"></i> Bandwidth usage: ~25-100 KB/sec (negligible performance impact)
                             </small>
                         </div>
@@ -1618,7 +1618,7 @@
                     <div class="card-body">
                         <div class="row">
                             <!-- Depth Map Preview -->
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <div class="preview-item">
                                     <div class="preview-label mb-2"><strong id="depthMapLabel">Depth Map</strong></div>
                                     <img id="depthMapPreview"
@@ -1629,20 +1629,8 @@
                                 </div>
                             </div>
 
-                            <!-- Stereo Left Preview -->
-                            <div class="col-md-4">
-                                <div class="preview-item">
-                                    <div class="preview-label mb-2"><strong id="stereoLeftLabel">Stereo Pair (Left)</strong></div>
-                                    <img id="stereoLeftPreview"
-                                         src=""
-                                         alt="Left eye preview"
-                                         style="width: 100%; height: auto; background: #000; border: 1px solid #1a1a1a; min-height: 180px;">
-                                    <small class="text-muted d-block mt-1" id="stereoLeftFrame">Frame: --</small>
-                                </div>
-                            </div>
-
                             <!-- VR Frame Preview -->
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <div class="preview-item">
                                     <div class="preview-label mb-2"><strong id="vrFrameLabel">VR Output</strong></div>
                                     <img id="vrFramePreview"
@@ -3119,11 +3107,11 @@
             document.getElementById('batchLabel').textContent = '--';
             document.getElementById('batchFrames').textContent = 'starts after frame extraction';
 
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
@@ -3280,21 +3268,19 @@
                 previewCard.style.display = 'none';
             }
             // Clear preview images
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
             // Reset frame counters
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
-            const stereoLabel = document.getElementById('stereoLeftLabel');
             const vrLabel = document.getElementById('vrFrameLabel');
             if (depthLabel) depthLabel.textContent = 'Depth Map';
-            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
             if (vrLabel) vrLabel.textContent = 'VR Output';
 
             // Show output directory card
@@ -3347,21 +3333,19 @@
                 previewCard.style.display = 'none';
             }
             // Clear preview images
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
             // Reset frame counters
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
-            const stereoLabel = document.getElementById('stereoLeftLabel');
             const vrLabel = document.getElementById('vrFrameLabel');
             if (depthLabel) depthLabel.textContent = 'Depth Map';
-            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
             if (vrLabel) vrLabel.textContent = 'VR Output';
 
             // Show error modal (after all state is reset)
@@ -3411,21 +3395,19 @@
                 previewCard.style.display = 'none';
             }
             // Clear preview images
-            ['depthMapPreview', 'stereoLeftPreview', 'vrFramePreview'].forEach(id => {
+            ['depthMapPreview', 'vrFramePreview'].forEach(id => {
                 const img = document.getElementById(id);
                 if (img) img.src = '';
             });
             // Reset frame counters
-            ['depthMapFrame', 'stereoLeftFrame', 'vrFrameFrame'].forEach(id => {
+            ['depthMapFrame', 'vrFrameFrame'].forEach(id => {
                 const label = document.getElementById(id);
                 if (label) label.textContent = 'Frame: --';
             });
             // Reset labels to defaults
             const depthLabel = document.getElementById('depthMapLabel');
-            const stereoLabel = document.getElementById('stereoLeftLabel');
             const vrLabel = document.getElementById('vrFrameLabel');
             if (depthLabel) depthLabel.textContent = 'Depth Map';
-            if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
             if (vrLabel) vrLabel.textContent = 'VR Output';
 
             // The job stays resumable from the jobs list; offer a video of the finished part
@@ -3459,8 +3441,6 @@
             // Map frame types to descriptive labels
             const frameTypeLabels = {
                 'depth_map': 'Depth Map',
-                'stereo_left': 'Stereo Pair (Left)',
-                'upscaled_left': 'Upscaled (Left)',
                 'vr_frame': 'VR Output'
             };
 
@@ -3471,13 +3451,6 @@
                 if (img) img.src = imageData;
                 if (label) label.textContent = `Frame: ${frameNumber}`;
                 if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'Depth Map';
-            } else if (frameType === 'stereo_left' || frameType === 'upscaled_left') {
-                const img = document.getElementById('stereoLeftPreview');
-                const label = document.getElementById('stereoLeftFrame');
-                const titleLabel = document.getElementById('stereoLeftLabel');
-                if (img) img.src = imageData;
-                if (label) label.textContent = `Frame: ${frameNumber}`;
-                if (titleLabel) titleLabel.textContent = frameTypeLabels[frameType] || 'Left Eye';
             } else if (frameType === 'vr_frame') {
                 const img = document.getElementById('vrFramePreview');
                 const label = document.getElementById('vrFrameFrame');
