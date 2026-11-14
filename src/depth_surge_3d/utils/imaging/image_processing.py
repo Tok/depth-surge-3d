@@ -464,12 +464,31 @@ def _fisheye_source_radius(
     return max_radius * np.sin(theta) / np.sin(fov_radians / 2)  # orthogonal
 
 
+def fisheye_zoom_out(width: int, height: int, frame_fit: float) -> float:
+    """
+    PURE: Factor by which the fisheye view is zoomed out to show more of the frame.
+
+    Args:
+        width: Frame width
+        height: Frame height
+        frame_fit: 0.0 (fill the view) to 1.0 (show the whole frame)
+
+    Returns:
+        1.0 for no zoom, up to the frame's long/short side ratio for the whole frame
+    """
+    short_side, long_side = min(width, height), max(width, height)
+    if short_side <= 0:
+        return 1.0
+    return 1.0 + min(max(float(frame_fit), 0.0), 1.0) * (long_side / short_side - 1.0)
+
+
 def calculate_fisheye_coordinates(
     width: int,
     height: int,
     fov_degrees: float,
     projection_type: str = "stereographic",
     fit_radius: float | None = None,
+    frame_fit: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate coordinate mappings for fisheye projection.
@@ -485,6 +504,11 @@ def calculate_fisheye_coordinates(
             clamped into edge streaks. With fit_radius, everything inside that circle comes
             from real image content and coordinates outside the source are returned
             unclamped (render them as black). None keeps the legacy clamped mapping.
+        frame_fit: Zooms the view out for frames that aren't square (needs fit_radius).
+            0.0: the circle at fit_radius touches the frame's long edges (top/bottom of a
+            wide video), so the view is filled and the short edges are cut off.
+            1.0: it touches the short edges (left/right of a wide video), so the whole
+            frame is visible, with black above and below. Values between interpolate.
 
     Returns:
         Tuple of (x_map, y_map) coordinate arrays
@@ -509,7 +533,8 @@ def calculate_fisheye_coordinates(
         r_fit = float(_fisheye_source_radius(rho_fit, max_radius, fov_radians, projection_type))
         if np.isfinite(r_fit) and r_fit > 0:
             # land on the outermost pixel centre, not half a pixel beyond it
-            r_fisheye = r_fisheye * ((max_radius - 0.5) / r_fit)
+            zoom_out = fisheye_zoom_out(width, height, frame_fit)
+            r_fisheye = r_fisheye * (zoom_out * (max_radius - 0.5) / r_fit)
 
     x_fisheye = r_fisheye * np.cos(angle) + center_x
     y_fisheye = r_fisheye * np.sin(angle) + center_y
@@ -524,11 +549,16 @@ def calculate_fisheye_coordinates(
 
 @functools.lru_cache(maxsize=8)
 def _cached_fisheye_maps(
-    width: int, height: int, fov_degrees: float, projection_type: str, fit_radius: float | None
+    width: int,
+    height: int,
+    fov_degrees: float,
+    projection_type: str,
+    fit_radius: float | None,
+    frame_fit: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fisheye maps depend only on size and settings: compute once per video, not per frame."""
     x_map, y_map = calculate_fisheye_coordinates(
-        width, height, fov_degrees, projection_type, fit_radius
+        width, height, fov_degrees, projection_type, fit_radius, frame_fit
     )
     x_map.flags.writeable = False
     y_map.flags.writeable = False
@@ -540,6 +570,7 @@ def apply_fisheye_distortion(
     fov_degrees: float,
     projection_type: str = "stereographic",
     fit_radius: float | None = None,
+    frame_fit: float = 0.0,
 ) -> np.ndarray:
     """
     Apply fisheye distortion to image.
@@ -550,13 +581,15 @@ def apply_fisheye_distortion(
         projection_type: Type of fisheye projection
         fit_radius: See calculate_fisheye_coordinates. When set, areas outside the source
             are black (standard circular fisheye) instead of stretched edge pixels.
+        frame_fit: See calculate_fisheye_coordinates (0.0 fills the view, 1.0 shows the
+            whole frame).
 
     Returns:
         Fisheye distorted image array
     """
     height, width = image.shape[:2]
     x_map, y_map = _cached_fisheye_maps(
-        width, height, float(fov_degrees), projection_type, fit_radius
+        width, height, float(fov_degrees), projection_type, fit_radius, float(frame_fit)
     )
 
     if fit_radius is None:

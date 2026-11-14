@@ -258,8 +258,8 @@ class TestIntermediatesFlag:
         assert kwargs["keep_intermediates"] is False
 
 
-class TestFisheyeFlag:
-    """Flat 3D that keeps the whole frame is the default; fisheye is opt-in."""
+class TestFisheyeFlags:
+    """Fisheye output is the default; how much of the frame it shows is adjustable."""
 
     def _settings(self, cli, tmp_path, monkeypatch, *flags):
         from unittest.mock import Mock
@@ -271,16 +271,24 @@ class TestFisheyeFlag:
         monkeypatch.setattr(cli, "create_stereo_projector", Mock(return_value=projector))
         monkeypatch.setattr(sys, "argv", ["prog", str(video), "-o", str(tmp_path), *flags])
         assert cli.main() == 0
-        kwargs = projector.process_video.call_args[1]
-        return kwargs["apply_distortion"], kwargs["progress_tracker"].state.skipped
+        return projector.process_video.call_args[1]
 
-    def test_flat_by_default(self, cli, tmp_path, monkeypatch, capsys):
-        distortion, skipped = self._settings(cli, tmp_path, monkeypatch)
-        assert distortion is False and "Fisheye Distortion" in skipped
+    def test_fisheye_by_default_with_moderate_zoom_out(self, cli, tmp_path, monkeypatch, capsys):
+        kwargs = self._settings(cli, tmp_path, monkeypatch)
+        assert kwargs["apply_distortion"] is True and kwargs["fisheye_frame_fit"] == 0.5
+        assert "Fisheye Distortion" not in kwargs["progress_tracker"].state.skipped
 
-    def test_fisheye_flag(self, cli, tmp_path, monkeypatch, capsys):
-        distortion, skipped = self._settings(cli, tmp_path, monkeypatch, "--fisheye")
-        assert distortion is True and "Fisheye Distortion" not in skipped
+    def test_flat_output(self, cli, tmp_path, monkeypatch, capsys):
+        kwargs = self._settings(cli, tmp_path, monkeypatch, "--no-distortion")
+        assert kwargs["apply_distortion"] is False
+        assert "Fisheye Distortion" in kwargs["progress_tracker"].state.skipped
 
-    def test_old_flag_is_still_accepted(self, cli, tmp_path, monkeypatch, capsys):
-        assert self._settings(cli, tmp_path, monkeypatch, "--no-distortion")[0] is False
+    def test_fit_value(self, cli, tmp_path, monkeypatch, capsys):
+        kwargs = self._settings(cli, tmp_path, monkeypatch, "--fisheye-fit", "1")
+        assert kwargs["fisheye_frame_fit"] == 1.0
+
+    def test_fit_out_of_range(self, cli, tmp_path, monkeypatch, capsys):
+        video = tmp_path / "video.mp4"
+        video.touch()
+        monkeypatch.setattr(sys, "argv", ["prog", str(video), "--fisheye-fit", "1.5"])
+        assert cli.main() == 1

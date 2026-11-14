@@ -445,7 +445,10 @@ Stereo offset controls the perceived depth intensity by determining how much the
 **Cause**: VR player FOV mismatch or fisheye distortion issues
 
 **Solutions**:
-1. Use flat 3D (the default; don't pass `--fisheye`)
+1. Disable fisheye distortion:
+   ```bash
+   --no-distortion
+   ```
 2. Adjust FOV in VR player to 90-100°
 3. Use "Flat" projection mode (not dome/sphere)
 

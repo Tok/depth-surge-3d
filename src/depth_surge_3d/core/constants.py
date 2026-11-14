@@ -60,6 +60,9 @@ DEFAULT_SETTINGS = {
     "fisheye_fov": 180,  # degrees - full 180° dome view
     "crop_factor": 1.0,  # default: 1.0 (no crop)
     "fisheye_crop_factor": 0.7,  # default: 0.7 (zoom into center ~70%, crops ~20% each edge to hide distortion)
+    # How much of a wide (or tall) video the square fisheye view shows:
+    # 0 = fill the view, cutting off the long sides; 1 = the whole frame, with black bars
+    "fisheye_frame_fit": 0.5,
     "hole_fill_quality": "fast",
     "super_sample": "auto",  # stereo warp resolution: auto (<=2x), 2x, 1080p, 4k, none
     "target_fps": 60,
@@ -68,9 +71,7 @@ DEFAULT_SETTINGS = {
     # Off: disk use stays near the extracted frames plus one batch. On: every step's
     # images are kept (about 18 MB per frame for 1080p to 1536 px eyes).
     "keep_intermediates": False,
-    # Fisheye (VR180) output keeps a central square per eye, which cuts the sides of wide
-    # videos. Off: flat 3D with the whole frame at the source aspect ratio.
-    "apply_distortion": False,
+    "apply_distortion": True,
     "output_dir": "./output",
     "experimental_frame_interpolation": False,  # Experimental feature with quality warnings
     "temporal_window_size": DEPTH_MODEL_CHUNK_SIZE,  # V2 only: frames per temporal window
@@ -295,6 +296,10 @@ STEREO_NEAR_PLANE_M = 1.0
 # Upper bound on stereo worker processes (each holds a full frame + depth map in RAM)
 MAX_STEREO_WORKERS = 16
 
+# Constant-quality target for NVENC H.265 (lower = better; comparable to x264 CRF 18).
+# Without it NVENC falls back to a low default bitrate (about 2 Mbit/s).
+NVENC_CONSTANT_QUALITY = 20
+
 # Real-ESRGAN weights are downloaded next to the depth models (not into ~/.cache)
 UPSCALE_MODEL_DIR = "models/Real-ESRGAN"
 
@@ -420,6 +425,7 @@ VALIDATION_RANGES = {
     "focal_length": (100, 5000),  # pixels
     "fisheye_fov": (MIN_FOV, MAX_FOV),  # degrees (75-180)
     "crop_factor": (0.5, 1.0),  # ratio for non-fisheye crop
+    "fisheye_frame_fit": (0.0, 1.0),  # 0 = fill the view, 1 = show the whole frame
     "fisheye_crop_factor": (
         0.5,
         2.0,

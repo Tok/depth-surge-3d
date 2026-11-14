@@ -73,9 +73,10 @@ def process_frame(task: FrameTask) -> str:
     eye_w, eye_h = settings["per_eye_width"], settings["per_eye_height"]
     if settings.get("apply_distortion", True):
         fit_radius = DistortionProcessor._fisheye_crop_factor(settings)
+        frame_fit = DistortionProcessor._fisheye_frame_fit(settings)
         fov, projection = settings["fisheye_fov"], settings["fisheye_projection"]
-        left = apply_fisheye_distortion(left, fov, projection, fit_radius)
-        right = apply_fisheye_distortion(right, fov, projection, fit_radius)
+        left = apply_fisheye_distortion(left, fov, projection, fit_radius, frame_fit)
+        right = apply_fisheye_distortion(right, fov, projection, fit_radius, frame_fit)
         _write_pair(outputs, "distorted", name, left, right)
         left = apply_fisheye_square_crop(left, eye_w, eye_h, fit_radius)
         right = apply_fisheye_square_crop(right, eye_w, eye_h, fit_radius)

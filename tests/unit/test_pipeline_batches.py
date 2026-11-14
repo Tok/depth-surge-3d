@@ -586,18 +586,26 @@ class TestDiskEstimate:
         assert capsys.readouterr().out == ""
 
 
-class TestCutOffWarning:
-    def _warn(self, capsys, width, height, **changes):
+class TestFisheyeViewNote:
+    def _note(self, capsys, width, height, **changes):
         ProcessingOrchestrator._warn_about_cut_off_sides(
-            {"width": width, "height": height}, _settings(**changes)
+            {"width": width, "height": height}, _settings(**{"apply_distortion": True, **changes})
         )
         return capsys.readouterr().out
 
-    def test_fisheye_on_a_wide_video(self, capsys):
-        out = self._warn(capsys, 1920, 1080, apply_distortion=True)
-        assert "about 44% of the video's width" in out
+    def test_says_how_much_is_outside_the_view(self, capsys):
+        assert "about 44% of the video's width" in self._note(
+            capsys, 1920, 1080, fisheye_frame_fit=0
+        )
+        assert "about 22% of the video's width" in self._note(
+            capsys, 1920, 1080, fisheye_frame_fit=0.5
+        )
+        assert "about 44% of the video's height" in self._note(
+            capsys, 1080, 1920, fisheye_frame_fit=0
+        )
 
-    def test_no_warning_without_fisheye_or_for_square_videos(self, capsys):
-        assert self._warn(capsys, 1920, 1080, apply_distortion=False) == ""
-        assert self._warn(capsys, 1080, 1080, apply_distortion=True) == ""
-        assert self._warn(capsys, 0, 0, apply_distortion=True) == ""
+    def test_quiet_when_little_or_nothing_is_cut(self, capsys):
+        assert self._note(capsys, 1920, 1080, fisheye_frame_fit=1) == ""
+        assert self._note(capsys, 1080, 1080) == ""
+        assert self._note(capsys, 0, 0) == ""
+        assert self._note(capsys, 1920, 1080, apply_distortion=False) == ""

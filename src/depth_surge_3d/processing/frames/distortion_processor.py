@@ -11,6 +11,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from ...core.constants import DEFAULT_SETTINGS
 from .parallel import map_frames
 from ...utils import (
     apply_fisheye_distortion,
@@ -122,11 +123,16 @@ class DistortionProcessor:
         # Apply fisheye distortion, fitted so the circle kept by the crop step
         # contains only real image content (no stretched edge streaks)
         fit_radius = self._fisheye_crop_factor(settings)
+        frame_fit = self._fisheye_frame_fit(settings)
         left_distorted = apply_fisheye_distortion(
-            left_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
+            left_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius, frame_fit
         )
         right_distorted = apply_fisheye_distortion(
-            right_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
+            right_img,
+            settings["fisheye_fov"],
+            settings["fisheye_projection"],
+            fit_radius,
+            frame_fit,
         )
 
         # Always save: the crop step reads the distorted frames from disk
@@ -281,6 +287,16 @@ class DistortionProcessor:
     def _fisheye_crop_factor(settings: dict[str, Any]) -> float:
         """PURE: Fisheye crop factor, clamped to the supported 0.5-2.0 range."""
         return max(0.5, min(2.0, float(settings.get("fisheye_crop_factor", 0.7))))
+
+    @staticmethod
+    def _fisheye_frame_fit(settings: dict[str, Any]) -> float:
+        """PURE: Fisheye frame fit (0 = fill the view, 1 = whole frame), clamped to 0-1."""
+        default = DEFAULT_SETTINGS["fisheye_frame_fit"]
+        try:
+            value = float(settings.get("fisheye_frame_fit", default))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            value = float(default)  # type: ignore[arg-type]
+        return max(0.0, min(1.0, value))
 
     @staticmethod
     def _get_stereo_source_dirs(

@@ -26,6 +26,7 @@ from ...io.operations import (
 from ...utils.path_utils import calculate_frame_range, format_file_size, generate_output_filename
 from ...utils.domain.disk_estimate import estimate_disk_usage
 from ...utils.domain.resolution import fisheye_cut_fraction
+from ..frames.distortion_processor import DistortionProcessor
 from ...utils.domain.progress import BatchOffsetProgress, NullProgressTracker
 from .pipeline_state import PipelineState, step_fingerprints
 from ...utils import (
@@ -298,22 +299,23 @@ class ProcessingOrchestrator:
         video_properties: dict[str, Any], settings: dict[str, Any]
     ) -> None:
         """
-        Warn when fisheye output will cut a noticeable part off the sides of the video.
+        Say how much of a video that isn't square the fisheye view shows.
 
         Side effects:
             - Console output
         """
         if not settings.get("apply_distortion", True):
             return
-        cut = fisheye_cut_fraction(
-            int(video_properties.get("width") or 0), int(video_properties.get("height") or 0)
-        )
+        width = int(video_properties.get("width") or 0)
+        height = int(video_properties.get("height") or 0)
+        fit = DistortionProcessor._fisheye_frame_fit(settings)
+        cut = fisheye_cut_fraction(width, height, fit)
         if cut >= 0.1:
+            side = "width" if width >= height else "height"
             print(
-                warning(
-                    f"Warning: fisheye output keeps a square view per eye; about {cut:.0%} of the "
-                    "video's width (left and right edges) is cut off. Without fisheye the whole "
-                    "frame is kept."
+                saved_to(
+                    f"Fisheye view: about {cut:.0%} of the video's {side} is outside the square "
+                    f"view (frame fit {fit:g}; 1 shows the whole frame with black bars)"
                 )
             )
 

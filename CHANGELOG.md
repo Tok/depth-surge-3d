@@ -43,12 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   change, and around AI upscaling.
 - **Segmented encoding**: the video is encoded in one segment per batch and the segments are
   joined (without re-encoding) at the end. Partial videos are joined from the finished segments.
-- **Flat 3D is the default; fisheye is optional** (`--fisheye` / "Fisheye Output"; `--no-distortion`
-  is still accepted). Fisheye (VR180) output keeps a square view per eye, which cuts the left and
-  right edges of wide videos (about 44% of a 16:9 frame's width). The default now keeps the whole
-  frame at the video's aspect ratio. With fisheye on, the web UI and the console warn how much is
-  cut and the UI offers to switch; a square target for a wide video without fisheye gets a notice
-  about black bars.
+- **Fisheye frame fit** (`--fisheye-fit`, "Frame Fit" slider, default 0.5): the square fisheye
+  view used to be filled by the frame's height, cutting about 44% of a 16:9 video's width. The
+  view can now be zoomed out: 0 fills the view (old behaviour), 1 shows the whole frame with
+  black above and below. The default shows 78% of a 16:9 frame's width. The web UI says what the
+  setting means for the uploaded video and only warns at the extremes; a square target for a wide
+  video without fisheye gets a notice about black bars.
 - **Intermediate files are no longer kept by default** (`--keep-intermediates` / the checkbox
   turns them on; `--no-intermediates` is still accepted). Off now means bounded disk use: stereo/distorted/cropped images are
   never written, and original frames, depth maps and VR frames are deleted batch by batch once
@@ -60,6 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the same directory). `~/.cache/depth-surge-3d` from earlier versions can be deleted.
 
 ### Fixed
+- **NVENC quality**: hardware-encoded videos used the encoder's default bitrate (about 2 Mbit/s,
+  whatever the resolution). NVENC now encodes at constant quality (CQ 20).
 - **Output frame rate**: videos were encoded at 30 fps (or the target FPS) regardless of the
   source frame rate, changing playback speed for e.g. 24 fps sources. Frames are now read at the
   source rate; a target FPS is produced on output. Frame interpolation (experimental) is applied.

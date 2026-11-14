@@ -17,7 +17,8 @@
 
 ### Resolution Options
 
-- **`--fisheye`**: Fisheye (VR180) output with a square view per eye, for hemispherical projection. Off by default: flat 3D that keeps the whole frame at the video's aspect ratio. Fisheye cuts the left and right edges of wide videos (about 44% of a 16:9 frame's width)
+- **`--fisheye-fit`**: How much of a wide or tall video the square fisheye view shows, 0-1 (default: 0.5). 0 fills the view and cuts off the sides (44% of a 16:9 frame's width); 1 shows the whole frame with black above and below; 0.5 shows 78% of the width
+- **`--no-distortion`**: Flat 3D without fisheye, keeping the whole frame at the video's aspect ratio
 - **`--vr-resolution`**: Per-eye resolution: a preset, `custom:WIDTHxHEIGHT`, or `auto` (default). Auto picks a square preset when fisheye is enabled (VR180 eyes are square) and a preset matching the source aspect for flat 3D (`--no-distortion`). If the content's aspect differs from the chosen resolution, it's fitted with black bars, never stretched.
   - **Square**: square-480, square-720, square-1k, square-2k, square-3k, square-4k, square-5k
   - **16:9**: 16x9-480p, 16x9-720p, 16x9-1080p, 16x9-1440p, 16x9-4k, 16x9-5k, 16x9-8k

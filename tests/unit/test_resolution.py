@@ -104,17 +104,23 @@ class TestAutoResolutionFisheye:
 
 
 class TestFisheyeCutFraction:
-    """Fisheye output keeps a centre part as wide as the frame is high."""
+    """How much of the frame's long side the square fisheye view leaves out."""
 
-    def test_wide_video_loses_its_sides(self):
+    def test_filled_view_cuts_the_long_sides(self):
         from src.depth_surge_3d.utils.domain.resolution import fisheye_cut_fraction
 
         assert fisheye_cut_fraction(1920, 1080) == pytest.approx(0.4375)
-        assert fisheye_cut_fraction(3840, 1600) == pytest.approx(1 - 1600 / 3840)
+        assert fisheye_cut_fraction(1080, 1920) == pytest.approx(0.4375)
 
-    def test_square_tall_and_invalid_sizes_lose_nothing(self):
+    def test_zooming_out_cuts_less(self):
+        from src.depth_surge_3d.utils.domain.resolution import fisheye_cut_fraction
+
+        assert fisheye_cut_fraction(1920, 1080, 0.5) == pytest.approx(0.21875)
+        assert fisheye_cut_fraction(1920, 1080, 1.0) == 0.0
+        assert fisheye_cut_fraction(1920, 1080, 5.0) == 0.0
+
+    def test_square_and_invalid_sizes_lose_nothing(self):
         from src.depth_surge_3d.utils.domain.resolution import fisheye_cut_fraction
 
         assert fisheye_cut_fraction(1080, 1080) == 0.0
-        assert fisheye_cut_fraction(1080, 1920) == 0.0
         assert fisheye_cut_fraction(0, 1080) == 0.0

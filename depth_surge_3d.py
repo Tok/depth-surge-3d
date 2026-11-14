@@ -221,15 +221,18 @@ Note: Always uses Video-Depth-Anything for temporal consistency across frames.
         help=f'Fisheye field of view in degrees (default: {DEFAULT_SETTINGS["fisheye_fov"]})',
     )
     parser.add_argument(
-        "--fisheye",
-        action="store_true",
-        help="Fisheye (VR180) output: a square view per eye for hemispherical projection. "
-        "Cuts the left and right edges of wide videos (about 44%% of a 16:9 frame's width)",
-    )
-    parser.add_argument(
         "--no-distortion",
         action="store_true",
-        help="Flat 3D without fisheye distortion (this is the default; kept for old command lines)",
+        help="Disable fisheye distortion: flat 3D that keeps the whole frame at the video's "
+        "aspect ratio",
+    )
+    parser.add_argument(
+        "--fisheye-fit",
+        type=float,
+        default=DEFAULT_SETTINGS["fisheye_frame_fit"],
+        metavar="0-1",
+        help="How much of a wide or tall video the square fisheye view shows: 0 fills the view "
+        "and cuts off the sides, 1 shows the whole frame with black bars (default: %(default)s)",
     )
 
     # Quality and processing options
@@ -399,6 +402,11 @@ def validate_arguments(args) -> bool:  # noqa: C901
         print(
             f"Error: Crop factor must be between {VALIDATION_RANGES['crop_factor'][0]} and {VALIDATION_RANGES['crop_factor'][1]}"
         )
+        return False
+
+    low, high = VALIDATION_RANGES["fisheye_frame_fit"]
+    if not low <= args.fisheye_fit <= high:
+        print(f"Error: Fisheye fit must be between {low} and {high}")
         return False
 
     if args.target_fps and (
@@ -575,7 +583,7 @@ def main():  # noqa: C901
 
         tracker = create_progress_tracker(
             {
-                "apply_distortion": args.fisheye and not args.no_distortion,
+                "apply_distortion": not args.no_distortion,
                 "upscale_model": args.upscale_model,
                 "processing_mode": args.mode,
             }
@@ -589,7 +597,8 @@ def main():  # noqa: C901
             focal_length=args.focal_length,
             start_time=args.start,
             end_time=args.end,
-            apply_distortion=args.fisheye and not args.no_distortion,
+            apply_distortion=not args.no_distortion,
+            fisheye_frame_fit=args.fisheye_fit,
             fisheye_projection=args.fisheye_projection,
             fisheye_fov=args.fisheye_fov,
             crop_factor=args.crop_factor,

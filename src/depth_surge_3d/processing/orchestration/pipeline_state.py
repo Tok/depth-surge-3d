@@ -32,7 +32,12 @@ _STEP_SETTINGS: dict[str, tuple[str, ...]] = {
         "per_eye_width",
         "per_eye_height",
     ),
-    "distortion": ("fisheye_projection", "fisheye_fov", "fisheye_crop_factor"),
+    "distortion": (
+        "fisheye_projection",
+        "fisheye_fov",
+        "fisheye_crop_factor",
+        "fisheye_frame_fit",
+    ),
     "crop": (
         "apply_distortion",
         "crop_factor",
