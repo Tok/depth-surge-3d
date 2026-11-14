@@ -776,27 +776,53 @@ class TqdmProgressTracker:
         finished = step_total is not None and step_progress == step_total
         self._refresh(force=finished)
 
-    @staticmethod
+    # Column layout of the block. Outer bars start after the label column, bars of the inner
+    # loop four columns further right; all bars end at the same column, followed by the text
+    # column (counts, frame range, time). So there are exactly two bar lengths, as in the UI.
+    _LABEL_WIDTH = 18
+    _INNER_INDENT = 4
+    _TEXT_WIDTH = 22
+
+    @classmethod
     def _bar(
-        width: int, label: str, n: float, total: float, colour: str, layout: str, text: str = ""
+        cls,
+        width: int,
+        label: str,
+        n: float,
+        total: float,
+        colour: str,
+        text: str,
+        inner: bool = False,
     ) -> str:
-        """Render one bar line, at most ``width`` columns wide."""
+        """
+        Render one bar line.
+
+        Args:
+            width: Line width in columns
+            label: Text of the label column
+            n: Progress value
+            total: Value at which the bar is full (0: nothing known yet, empty bar)
+            colour: Bar colour
+            text: Text after the bar (shortened to the text column)
+            inner: Bar of the inner loop (indented label, shorter bar)
+
+        Returns:
+            The line, with colour codes around the bar
+        """
+        indent = cls._INNER_INDENT if inner else 0
+        label_column = f"{' ' * (indent // 2)}{label}".ljust(cls._LABEL_WIDTH + indent)
+        bar_width = max(10, width - cls._LABEL_WIDTH - indent - cls._TEXT_WIDTH - 3)
         if total <= 0:
-            # nothing known yet: an empty bar without counts
-            layout = layout.replace("{n_fmt}/{total_fmt}", "-")
             n, total = 0, 1
-        return str(
-            tqdm.format_meter(
-                n=min(max(n, 0), total),
-                total=total,
-                elapsed=0,
-                ncols=width,
-                prefix=label,
-                unit=text,
-                bar_format=layout,
-                colour=colour,
-            )
+        bar = tqdm.format_meter(
+            n=min(max(n, 0), total),
+            total=total,
+            elapsed=0,
+            ncols=bar_width,
+            bar_format="{bar}",
+            colour=colour,
         )
+        return f"{label_column[: cls._LABEL_WIDTH + indent]}|{bar}| {text[: cls._TEXT_WIDTH]}"
 
     def render_lines(self, width: int) -> list[str]:
         """
@@ -813,8 +839,6 @@ class TqdmProgressTracker:
         eta = state.eta_seconds()
         elapsed = format_time_duration(time.time() - self._start_time)
         remaining = format_time_duration(eta) if eta is not None else "?"
-        # `unit` carries free text; bars of the inner loop start further right, so the loop
-        # reads as a nested block
         lines = [
             self._bar(
                 width,
@@ -822,8 +846,7 @@ class TqdmProgressTracker:
                 state.overall(),
                 100,
                 _COLOUR_LIME,
-                "{desc:<18}|{bar}| {percentage:5.1f}% [{unit}]",
-                f"{elapsed}<{remaining}",
+                f"{state.overall():5.1f}% {elapsed}<{remaining}",
             )
         ]
         rows = {row["name"]: row for row in state.display_steps()}
@@ -839,27 +862,24 @@ class TqdmProgressTracker:
             # Like the UI: blue while a step runs, lime once it is finished
             finished = row["total"] > 0 and row["progress"] >= row["total"]
             colour = _COLOUR_LIME if finished else _COLOUR_BLUE
-            if name not in loop:
-                layout = "{desc:<18}|{bar}| {n_fmt}/{total_fmt}"
-                lines.append(self._bar(width, label, row["progress"], row["total"], colour, layout))
-                continue
-            if not batch_shown:
+            in_loop = name in loop
+            if in_loop and not batch_shown:
                 batch_shown = True
                 lines.append(self._batch_line(width))
-            branch = "└" if name == loop[-1] else "├"
-            layout = "  {desc:<22}|{bar}| {n_fmt}/{total_fmt}"
             # before the first batch is known the inner bars are empty
-            total = row["total"] if row["in_batch"] else 0
-            progress = row["progress"] if row["in_batch"] else 0
-            lines.append(self._bar(width, f"{branch} {label}", progress, total, colour, layout))
+            known = row["total"] > 0 and (row["in_batch"] or not in_loop)
+            progress, total = (row["progress"], row["total"]) if known else (0, 0)
+            text = f"{progress}/{total}" if known else "-"
+            if in_loop:
+                label = f"{'└' if name == loop[-1] else '├'} {label}"
+            lines.append(self._bar(width, label, progress, total, colour, text, inner=in_loop))
         return lines
 
     def _batch_line(self, width: int) -> str:
         """The batch counter bar (empty until the first batch is announced)."""
         batch = self.state.batch
-        layout = "{desc:<18}|{bar}| {unit}"
         if not batch:
-            return self._bar(width, "Batch", 0, 1, _COLOUR_GREEN, layout, "waiting")
+            return self._bar(width, "Batch", 0, 1, _COLOUR_GREEN, "waiting")
         first, last = batch["start"] + 1, batch["start"] + batch["size"]
         return self._bar(
             width,
@@ -867,7 +887,6 @@ class TqdmProgressTracker:
             batch["index"] + self.state.batch_ratio(),
             batch["count"],
             _COLOUR_GREEN,
-            layout,
             f"frames {first}-{last}",
         )
 

@@ -229,6 +229,27 @@ class TestTqdmProgressTracker:
         assert "38;2;0;255;65m" in coloured[2]
         assert all(len(line) <= 100 for line in lines)
 
+    def test_bars_are_aligned_like_in_the_ui(self):
+        """All bars end at the same column; there are only two bar lengths (outer and inner)."""
+        tracker = TqdmProgressTracker(SKIPPED, batched=True, use_bars=False)
+        self._run(tracker)
+        tracker.update_progress(
+            "x", step_name="Video Creation", step_progress=10638, step_total=10638
+        )
+
+        lines = _plain(tracker.render_lines(120))
+        starts = [line.index("|") for line in lines]
+        ends = [line.rindex("|") for line in lines]
+
+        assert len(set(ends)) == 1
+        assert sorted(set(starts)) == [18, 22]
+        inner = [i for i, line in enumerate(lines) if line.lstrip().startswith(("├", "└"))]
+        assert [starts[i] for i in inner] == [22] * len(inner) and len(inner) == 6
+        assert all(starts[i] == 18 for i in range(len(lines)) if i not in inner)
+        # narrow and wide terminals keep the alignment
+        for width in (60, 200):
+            assert len({line.rindex("|") for line in _plain(tracker.render_lines(width))}) == 1
+
     def test_loop_is_shown_before_the_first_batch(self):
         """Batched mode shows the batch bar and nested steps from the start."""
         tracker = TqdmProgressTracker(batched=True, use_bars=False)
@@ -278,7 +299,7 @@ class TestTqdmProgressTracker:
         message_at = output.index("a message while the bars are shown")
         assert output[:message_at].endswith(up + "\r\x1b[J")
         assert output[message_at:].count("\n") >= block + 1  # message, then the whole block again
-        assert output.rstrip().endswith("m")  # ends with the block, cursor below it
+        assert "9 Final video" in output.rstrip().splitlines()[-1]  # ends with the block
 
     def test_status_lines_without_a_terminal(self, capsys):
         tracker = TqdmProgressTracker(SKIPPED, use_bars=False)
