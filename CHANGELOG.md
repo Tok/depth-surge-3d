@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Job queue** in the web UI: a job started while another is running is queued. The new Jobs
   list shows the running job, the queue and unfinished jobs, each with Resume / Assemble / Open.
 - **Disk space estimate** before starting (web UI and CLI), with a warning if it exceeds the
-  free space. The numbers are rough (typical PNG sizes), meant to catch gross mismatches.
+  free space. Sizes per pixel were measured on a 1080p camera video; other content differs.
+- Stopping a job in the web UI offers to create a video from the frames finished so far.
 - CLI: `--depth-resolution`, `--super-sample`, `--video-encoder`, and `--reuse DIR` to run in an
   existing output directory with new settings, reusing its frames and depth maps.
 - Frame extraction and video encoding report progress (both steps used to jump from 0 to 100%).

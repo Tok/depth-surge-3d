@@ -989,6 +989,7 @@ def process_video_async(  # noqa: C901
                     "message": str(e),
                     "output_dir": str(output_dir),
                     "finished_frames": finished,
+                    "fps": settings.get("source_fps"),
                 },
                 room=session_id,
             )

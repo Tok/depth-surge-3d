@@ -287,13 +287,24 @@
         }
 
         /* Batched mode: batch counter with the steps of the inner loop nested below it */
-        /* The loop is drawn as a white bracket with rounded corners around its steps */
+        /* The loop is marked by a white bracket on the left of its steps: a vertical line
+           with short rounded hooks at both ends */
         .batch-loop.batched .batch-steps {
+            position: relative;
             margin-left: 1.75rem;
-            padding: 0.5rem 0 0.15rem 0.9rem;
+            padding: 0.35rem 0 0.1rem 1.4rem;
+        }
+
+        .batch-loop.batched .batch-steps::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 14px;
             border: 3px solid #f5f5f5;
             border-right: none;
-            border-radius: 12px 0 0 12px;
+            border-radius: 10px 0 0 10px;
         }
 
         .batch-loop.batched #batchRow {
@@ -977,9 +988,6 @@
                                     <strong>Selected Frames:</strong> <span id="rangeFrames">--</span>
                                 </div>
                             </div>
-                            <div class="mt-1">
-                                <strong>Disk Space:</strong> <span id="diskEstimate">--</span>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -1347,15 +1355,6 @@
                                 Preserve Audio
                             </label>
                         </div>
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="keepIntermediates" checked>
-                            <label class="form-check-label" for="keepIntermediates">
-                                Keep Intermediate Files
-                            </label>
-                            <small class="text-muted d-block ms-4">
-                                <i class="fas fa-exclamation-triangle"></i> May use significant disk space (~10-50GB for long videos)
-                            </small>
-                        </div>
                         <div class="mb-3">
                             <label class="form-label">Video Encoder <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Auto detects NVENC (NVIDIA GPU) and falls back to software. Software encoding is slower but works on all systems."></i></label>
                             <select class="form-select" id="videoEncoder">
@@ -1401,6 +1400,19 @@
                             <small class="form-text text-muted">
                                 <i class="fas fa-save"></i> Progress is saved after every batch in both modes, so a stopped or failed job can be resumed, or its finished part assembled into a video
                             </small>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="keepIntermediates" checked>
+                            <label class="form-check-label" for="keepIntermediates">
+                                Keep Intermediate Files
+                            </label>
+                            <small class="text-muted d-block ms-4">
+                                On: every step's images stay in the output directory (needed to redo single steps with changed settings).<br>
+                                Off: only about one batch of frames exists at a time, plus the video; the job can still be resumed.
+                            </small>
+                        </div>
+                        <div class="step-indicator">
+                            <strong>Estimated disk space:</strong> <span id="diskEstimate">upload a video to see the estimate</span>
                         </div>
                     </div>
 
@@ -1844,6 +1856,27 @@
                     <p id="errorMessage">An error occurred during processing.</p>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="stoppedModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-pause-circle"></i> Processing Stopped</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="stoppedMessage">Processing stopped.</p>
+                    <p class="job-status mb-0">The job stays in the Jobs list and can be resumed at any time, also after creating the video.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" id="stoppedAssembleBtn">
+                        <i class="fas fa-film"></i> Create Video from Finished Frames
+                    </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
@@ -2377,7 +2410,7 @@
             const originalHtml = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Encoding...';
-            fetch('/assemble_partial', {
+            return fetch('/assemble_partial', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({output_dir: directory})
@@ -2539,7 +2572,8 @@
                 const target = document.getElementById('diskEstimate');
                 const settings = uploadedOutputDir ? collectSettings(false) : null;
                 if (!settings) {
-                    target.textContent = '--';
+                    target.textContent = 'upload a video to see the estimate';
+                    target.style.color = '';
                     return;
                 }
                 fetch('/estimate', {
@@ -2567,11 +2601,8 @@
             }, 400);
         }
 
-        ['keepIntermediates', 'vrResolution', 'vrFormat', 'superSample', 'applyDistortion', 'applyUpscaling',
-         'upscaleModel', 'batchSize', 'customWidth', 'customHeight'].forEach(id => {
-            const element = document.getElementById(id);
-            if (element) element.addEventListener('change', updateDiskEstimate);
-        });
+        // Most settings change the estimate (sizes, optional steps, time range, batch size)
+        document.querySelector('.settings-panel').addEventListener('change', updateDiskEstimate);
 
         // Stop processing
         document.getElementById('stopBtn').addEventListener('click', function() {
@@ -2962,9 +2993,19 @@
             if (stereoLabel) stereoLabel.textContent = 'Stereo Pair (Left)';
             if (vrLabel) vrLabel.textContent = 'VR Output';
 
-            // The job stays resumable from the jobs list
+            // The job stays resumable from the jobs list; offer a video of the finished part
             const finished = data.finished_frames || 0;
             notify(`Processing stopped with ${finished} VR frames finished. The job is in the list above.`);
+
+            const seconds = data.fps > 0 ? ` (${(finished / data.fps).toFixed(1)} s)` : '';
+            document.getElementById('stoppedMessage').textContent = finished > 0
+                ? `${finished} VR frames${seconds} are finished. Create a video from them now?`
+                : 'No VR frames are finished yet, so there is nothing to create a video from.';
+            const assembleBtn = document.getElementById('stoppedAssembleBtn');
+            assembleBtn.style.display = finished > 0 && data.output_dir ? 'inline-block' : 'none';
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('stoppedModal'));
+            assembleBtn.onclick = () => assemblePartial(data.output_dir, assembleBtn).then(() => modal.hide());
+            modal.show();
         }
 
         // Handle frame preview
