@@ -336,3 +336,13 @@ class TestSegments:
                 encoder._build_encoder_cmd("auto", tmp_path / "out.mp4")
         assert run.call_count == 1
         assert capsys.readouterr().out.count("NVENC") == 1
+
+
+def test_nvenc_uses_constant_quality(tmp_path, capsys):
+    """Regression: without a quality target NVENC encoded at about 2 Mbit/s."""
+    encoder = VideoEncoder()
+    with patch.object(encoder, "_check_nvenc_available", return_value=True):
+        args, _ = encoder._build_encoder_cmd("nvenc", tmp_path / "out.mp4")
+    assert args[args.index("-rc") + 1] == "vbr"
+    assert args[args.index("-cq") + 1] == "20"
+    assert args[args.index("-b:v") + 1] == "0"

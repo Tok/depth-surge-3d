@@ -24,6 +24,7 @@ from ...utils.path_utils import (
 from ...core.constants import (
     INTERMEDIATE_DIRS,
     DEFAULT_FALLBACK_FPS,
+    NVENC_CONSTANT_QUALITY,
 )
 
 
@@ -527,6 +528,13 @@ class VideoEncoder:
                         "p7",
                         "-tune",
                         "hq",
+                        # Constant quality; without it NVENC uses a low default bitrate
+                        "-rc",
+                        "vbr",
+                        "-cq",
+                        str(NVENC_CONSTANT_QUALITY),
+                        "-b:v",
+                        "0",
                         str(output_path),
                     ],
                     True,
