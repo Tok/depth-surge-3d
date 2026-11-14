@@ -697,6 +697,7 @@ class ProgressCallback:
         frame_array: np.ndarray,
         frame_type: str,
         frame_number: int,
+        info: dict | None = None,
     ) -> None:
         """
         Send preview frame directly from numpy array (no disk I/O).
@@ -705,6 +706,7 @@ class ProgressCallback:
             frame_array: Frame as numpy array (BGR format)
             frame_type: Type of frame ("depth_map" or "vr_frame")
             frame_number: Frame number being processed
+            info: Figures shown below the preview (e.g. stereo shift of a depth map)
         """
         # Check if preview is enabled
         if not self.enable_live_preview:
@@ -759,6 +761,8 @@ class ProgressCallback:
                 "image_data": f"data:image/png;base64,{img_base64}",
                 "dimensions": {"width": new_width, "height": new_height},
             }
+            if info:
+                preview_data["info"] = info
 
             socketio.emit("frame_preview", preview_data, room=self.session_id)
 

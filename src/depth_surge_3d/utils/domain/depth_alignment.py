@@ -29,14 +29,33 @@ def _sample(arrays: list[np.ndarray], max_samples: int) -> list[np.ndarray]:
     return [a.reshape(-1)[::step].astype(np.float64) for a in arrays]
 
 
+def _moments(values: np.ndarray, max_samples: int = _MAX_FIT_SAMPLES) -> tuple[float, float] | None:
+    """PURE: (mean, std) of the finite values of a strided sample, or None without any."""
+    (sample,) = _sample([values], max_samples)
+    sample = sample[np.isfinite(sample)]
+    if sample.size < 2:
+        return None
+    return float(sample.mean()), float(sample.std())
+
+
+def _has_spread(mean: float, std: float) -> bool:
+    """PURE: Whether a depth map has enough variation to take a scale from."""
+    return std > 1e-8 + 1e-6 * abs(mean)
+
+
 def fit_scale_shift(
     source: np.ndarray, reference: np.ndarray, max_samples: int = _MAX_FIT_SAMPLES
 ) -> tuple[float, float]:
     """
-    PURE: Least-squares scale and shift so that ``source * scale + shift ~= reference``.
+    PURE: Scale and shift so that ``source * scale + shift`` has the mean and spread of
+    ``reference``.
 
-    Falls back to matching mean/std when the fit is degenerate (non-positive scale, e.g.
-    for near-constant input), and to identity if that fails too.
+    The scale is the ratio of the standard deviations, not the least-squares slope. The
+    slope is smaller than that ratio whenever the two inputs aren't perfectly correlated
+    (prediction noise, changed content), so a chain of least-squares fits loses a little
+    contrast with every link and ends up flat. Matching the spread keeps the contrast.
+
+    Falls back to shifting only when either input has no spread.
 
     Args:
         source: Depth values to transform (any shape)
@@ -52,20 +71,12 @@ def fit_scale_shift(
     if src.size < 2:
         return 1.0, 0.0
 
-    src_mean, ref_mean = src.mean(), ref.mean()
-    src_var = ((src - src_mean) ** 2).mean()
-    if src_var > 1e-12:
-        scale = float(((src - src_mean) * (ref - ref_mean)).mean() / src_var)
-        if np.isfinite(scale) and scale > 0:
-            return scale, float(ref_mean - scale * src_mean)
-
-        # Degenerate covariance: match first and second moments instead
-        ref_std = ref.std()
-        if ref_std > 0:
-            scale = float(ref_std / np.sqrt(src_var))
-            return scale, float(ref_mean - scale * src_mean)
-
-    return 1.0, float(ref_mean - src_mean)
+    src_mean, ref_mean = float(src.mean()), float(ref.mean())
+    src_std, ref_std = float(src.std()), float(ref.std())
+    if _has_spread(src_mean, src_std) and _has_spread(ref_mean, ref_std):
+        scale = ref_std / src_std
+        return scale, ref_mean - scale * src_mean
+    return 1.0, ref_mean - src_mean
 
 
 class DepthSequenceAligner:
@@ -81,19 +92,19 @@ class DepthSequenceAligner:
 
     Temporally consistent models (``per_frame=False``): each chunk is fitted to the
     previous output on its overlapping frames, and the overlap is crossfaded.
-    Per-frame models (``per_frame=True``): every frame is additionally fitted to an
-    exponential moving average of the aligned frames before it.
+    Per-frame models (``per_frame=True``): every frame is additionally brought to the
+    mean and spread of the first usable frame. That target is fixed, so nothing can drift
+    or fade over a long video; how the values map to 0-1 is left to the normalization.
     """
 
-    def __init__(self, per_frame: bool = False, reference_decay: float = 0.3):
+    def __init__(self, per_frame: bool = False):
         """
         Args:
             per_frame: Model output has independent scale/shift per frame
-            reference_decay: EMA weight of the newest frame in the per-frame reference
         """
         self.per_frame = per_frame
-        self.reference_decay = reference_decay
         self._frames: list[np.ndarray] = []
+        # per-frame target: [mean, std, scale used for the newest frame]
         self._reference: np.ndarray | None = None
 
     def __len__(self) -> int:
@@ -131,15 +142,21 @@ class DepthSequenceAligner:
             self._frames.append(frame)
 
     def _align_to_reference(self, frame: np.ndarray) -> np.ndarray:
-        """Fit a per-frame prediction to the running reference and update it."""
-        if self._reference is None:
-            self._reference = frame.copy()
+        """Bring a per-frame prediction to the mean and spread of the reference frame."""
+        moments = _moments(frame)
+        if moments is None:
             return frame
-        scale, shift = fit_scale_shift(frame, self._reference)
-        aligned = frame * scale + shift
-        decay = self.reference_decay
-        self._reference = (1.0 - decay) * self._reference + decay * aligned
-        return aligned
+        mean, std = moments
+        if self._reference is None:
+            if _has_spread(mean, std):
+                self._reference = np.array([mean, std, 1.0], dtype=np.float64)
+            return frame
+
+        ref_mean, ref_std, last_scale = (float(v) for v in self._reference)
+        # A flat frame (e.g. black) has no scale of its own: keep the previous one
+        scale = ref_std / std if _has_spread(mean, std) else last_scale
+        self._reference[2] = scale
+        return (frame * scale + (ref_mean - scale * mean)).astype(np.float32, copy=False)
 
     def take(self, hold_back: int = 0) -> np.ndarray:
         """
@@ -167,15 +184,28 @@ class DepthSequenceAligner:
         if self._frames:
             state["tail"] = np.stack(self._frames).astype(np.float32, copy=False)
         if self._reference is not None:
-            state["reference"] = np.asarray(self._reference, dtype=np.float32)
+            state["reference"] = np.asarray(self._reference, dtype=np.float64)
         return state
 
     def restore(self, state: dict[str, np.ndarray]) -> None:
         """Continue a sequence from arrays returned by ``state``."""
         tail = state.get("tail")
         self._frames = [] if tail is None else [np.array(f, dtype=np.float32) for f in tail]
-        reference = state.get("reference")
-        self._reference = None if reference is None else np.array(reference, dtype=np.float32)
+        self._reference = self._restored_reference(state.get("reference"))
+
+    @staticmethod
+    def _restored_reference(reference: np.ndarray | None) -> np.ndarray | None:
+        """PURE: Per-frame target from a saved state (None if it can't be used)."""
+        if reference is None:
+            return None
+        if reference.ndim == 1 and reference.size == 3:
+            return np.array(reference, dtype=np.float64)
+        # State of 0.11.0, which kept a reference image: continue with its mean and spread,
+        # or start over if that image had already gone flat
+        moments = _moments(reference)
+        if moments is None or not _has_spread(*moments):
+            return None
+        return np.array([moments[0], moments[1], 1.0], dtype=np.float64)
 
     def result(self) -> np.ndarray:
         """

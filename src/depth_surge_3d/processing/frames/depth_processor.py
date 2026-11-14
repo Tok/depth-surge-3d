@@ -40,6 +40,7 @@ from ...core.constants import (
     DEPTH_CHUNK_MAX_FRAMES,
 )
 from ...io.operations import save_depth_map
+from ...utils.imaging.image_processing import stereo_depth_stats
 from ...utils.domain.depth_alignment import DepthSequenceAligner, RunningDepthRange
 from ...utils import calculate_optimal_chunk_size, get_vram_info
 
@@ -311,8 +312,10 @@ class DepthMapProcessor:
         requested = settings.get("temporal_window_overlap") or DEPTH_MODEL_CHUNK_OVERLAP
         return int(min(max(int(requested), 4), chunk_size // 2))
 
-    def _send_chunk_preview(self, normalized: np.ndarray, frame_num: int, progress_tracker):
-        """Send a live preview of the newest finished depth map."""
+    def _send_chunk_preview(
+        self, normalized: np.ndarray, frame_num: int, progress_tracker, settings: dict[str, Any]
+    ):
+        """Send a live preview of the newest finished depth map, with its stereo figures."""
         if not progress_tracker or not hasattr(progress_tracker, "send_preview_frame_from_array"):
             return
         if len(normalized) == 0:
@@ -320,7 +323,14 @@ class DepthMapProcessor:
         preview_bgr = cv2.cvtColor(
             (normalized[-1] * DEPTH_MAP_SCALE).astype("uint8"), cv2.COLOR_GRAY2BGR
         )
-        progress_tracker.send_preview_frame_from_array(preview_bgr, "depth_map", frame_num)
+        info = stereo_depth_stats(
+            normalized[-1],
+            float(settings.get("baseline") or 0.0),
+            float(settings.get("focal_length") or 0.0),
+        )
+        progress_tracker.send_preview_frame_from_array(
+            preview_bgr, "depth_map", frame_num, info=info
+        )
 
     def stream_depth_maps(  # noqa: C901
         self,
@@ -415,7 +425,7 @@ class DepthMapProcessor:
             emitted += len(normalized)
             self._save_stream_state(state_path, emitted, aligner, depth_range)
 
-            self._send_chunk_preview(normalized, emitted, progress_tracker)
+            self._send_chunk_preview(normalized, emitted, progress_tracker, settings)
             del normalized
             if progress_tracker:
                 progress_tracker.update_progress(

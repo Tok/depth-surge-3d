@@ -8,7 +8,7 @@ using state-of-the-art depth estimation models.
 import sys
 import warnings
 
-__version__ = "0.11.0"
+__version__ = "0.11.1"
 __author__ = "Depth Surge 3D Team"
 __description__ = "Convert 2D videos to immersive 3D VR format using AI depth estimation"
 

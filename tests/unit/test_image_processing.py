@@ -5,6 +5,7 @@ import pytest
 from src.depth_surge_3d.utils.imaging.image_processing import (
     normalize_depth_map,
     depth_to_disparity,
+    stereo_depth_stats,
     resize_image,
     apply_center_crop,
     create_vr_frame,
@@ -1066,3 +1067,25 @@ class TestFisheyeFrameFit:
         assert filled[2, 48].min() > 150 and filled[48, 2].min() > 150  # view is filled
         assert whole[2, 48].max() == 0 and whole[93, 48].max() == 0  # black bars
         assert whole[48, 2].min() > 150 and whole[48, 48].min() > 150  # full width shown
+
+
+class TestStereoDepthStats:
+    def test_flat_depth_has_no_shift(self):
+        stats = stereo_depth_stats(np.full((20, 30), 0.43, dtype=np.float32), 0.1, 1200)
+        assert stats == {"depth_spread": 0.0, "shift_px": 0.0}
+
+    def test_full_range_gives_maximum_shift(self):
+        depth = np.tile(np.linspace(0, 1, 100, dtype=np.float32), (10, 1))
+        stats = stereo_depth_stats(depth, 0.1, 1200)
+        assert stats["depth_spread"] == pytest.approx(0.96, abs=0.02)
+        assert stats["shift_px"] == pytest.approx(0.96 * 120, abs=3)
+
+    def test_shift_scales_with_baseline(self):
+        depth = np.tile(np.linspace(0.2, 0.6, 100, dtype=np.float32), (10, 1))
+        narrow = stereo_depth_stats(depth, 0.05, 1000)["shift_px"]
+        wide = stereo_depth_stats(depth, 0.1, 1000)["shift_px"]
+        assert wide == pytest.approx(2 * narrow, rel=0.01)
+
+    def test_empty_and_invalid_input(self):
+        assert stereo_depth_stats(np.empty((0, 0)), 0.1, 1200)["shift_px"] == 0.0
+        assert stereo_depth_stats(np.full((4, 4), np.nan), 0.1, 1200)["shift_px"] == 0.0

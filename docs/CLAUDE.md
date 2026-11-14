@@ -1,6 +1,6 @@
 # Depth Surge 3D - Development Guide
 
-**Version**: 0.11.0
+**Version**: 0.11.1
 **Purpose**: 2D to 3D VR video converter using AI depth estimation (Depth-Anything V3/V2)
 
 ---
