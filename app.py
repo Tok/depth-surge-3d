@@ -1682,6 +1682,9 @@ def estimate_disk_space():
         return jsonify({"success": False, "error": "Video not found"})
 
     settings = dict(data.get("settings") or {})
+    for key, value in DEFAULT_SETTINGS.items():
+        if key not in ("output_dir", "target_fps"):
+            settings.setdefault(key, value)
     try:
         resolve_output_dimensions(settings, video_info)
     except Exception as e:

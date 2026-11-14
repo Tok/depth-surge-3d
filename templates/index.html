@@ -1175,12 +1175,16 @@
                         </div>
                         <div class="mb-3">
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="applyDistortion" checked>
+                                <input class="form-check-input" type="checkbox" id="applyDistortion">
                                 <label class="form-check-label" for="applyDistortion">
-                                    Enable Fisheye Processing
+                                    Fisheye Output (VR180, square view per eye)
                                 </label>
                             </div>
-                            <small class="form-text text-muted">Enable fisheye distortion for hemispherical VR projection</small>
+                            <small class="form-text text-muted">
+                                Off (default): flat 3D that keeps the whole frame at the video's aspect ratio; VR players show it as a 3D screen.<br>
+                                On: fisheye distortion for hemispherical VR projection. Each eye is a square, so the sides of wide videos are cut off.
+                            </small>
+                            <div class="alert alert-warning aspect-warning mt-2 mb-0" style="display: none;"></div>
                         </div>
                         <div class="mb-3" id="distortionOptions">
                             <label class="form-label">Fisheye Projection</label>
@@ -1458,6 +1462,8 @@
                             </small>
                         </div>
                     </div>
+
+                    <div class="alert alert-warning aspect-warning mt-3 mb-0" style="display: none;"></div>
 
                     <!-- Process Button -->
                     <div class="text-center mt-3">
@@ -2155,6 +2161,8 @@
             // Update Step 1 display
             updateStep1Display();
 
+            updateAspectWarning();
+
             // A new video always starts with its full length selected
             document.getElementById('startTime').value = '00:00';
             document.getElementById('endTime').value = formatTime(info.duration);
@@ -2382,6 +2390,7 @@
             document.getElementById('rangeInfo').style.display = 'none';
             document.getElementById('uploadBtnText').textContent = 'Choose Video File';
             updateProcessButton();
+            updateAspectWarning();
         }
 
         // "Start" needs an uploaded video; while a job runs, new ones are queued
@@ -2568,6 +2577,71 @@
                 })
                 .catch(error => console.error('Error loading jobs:', error));
         }
+
+        // Warn when the settings cut off or letterbox a wide video, with a one-click fix
+        const WIDE_ASPECT = 1.2;
+
+        function selectedEyeAspect() {
+            const resolution = document.getElementById('vrResolution').value;
+            if (resolution.startsWith('square')) return 1;
+            if (resolution === 'custom') {
+                const width = parseFloat(document.getElementById('customWidth').value);
+                const height = parseFloat(document.getElementById('customHeight').value);
+                return width > 0 && height > 0 ? width / height : null;
+            }
+            return null;  // auto and the wide presets follow the video
+        }
+
+        function useWholeFrame() {
+            const distortion = document.getElementById('applyDistortion');
+            distortion.checked = false;
+            distortion.dispatchEvent(new Event('change', {bubbles: true}));
+            const resolution = document.getElementById('vrResolution');
+            resolution.value = 'auto';
+            resolution.dispatchEvent(new Event('change', {bubbles: true}));
+            saveSettings();
+            updateAspectWarning();
+        }
+
+        function updateAspectWarning() {
+            const boxes = document.querySelectorAll('.aspect-warning');
+            const info = currentVideoInfo;
+            let message = null;
+            let action = null;
+            if (info && info.height > 0 && info.width / info.height > WIDE_ASPECT) {
+                const ratio = `${info.width}×${info.height}`;
+                if (document.getElementById('applyDistortion').checked) {
+                    const cut = Math.round((1 - info.height / info.width) * 100);
+                    message = `Fisheye output keeps a square view per eye: about ${cut}% of this ${ratio} video's width (the left and right edges) will be cut off.`;
+                    action = 'Keep the whole frame (flat 3D at the video\'s aspect ratio)';
+                } else {
+                    const eyeAspect = selectedEyeAspect();
+                    if (eyeAspect !== null && eyeAspect < WIDE_ASPECT) {
+                        message = `The selected per-eye resolution is not wide: this ${ratio} video will get black bars above and below (nothing is cut off).`;
+                        action = 'Use the video\'s aspect ratio';
+                    }
+                }
+            }
+            boxes.forEach(box => {
+                box.replaceChildren();
+                box.style.display = message ? 'block' : 'none';
+                if (!message) return;
+                const icon = document.createElement('i');
+                icon.className = 'fas fa-exclamation-triangle';
+                box.appendChild(icon);
+                box.appendChild(document.createTextNode(' ' + message + ' '));
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-sm btn-outline-secondary ms-1';
+                button.textContent = action;
+                button.addEventListener('click', useWholeFrame);
+                box.appendChild(button);
+            });
+        }
+
+        ['applyDistortion', 'vrResolution', 'customWidth', 'customHeight'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateAspectWarning);
+        });
 
         // Disk space the current settings need (rough), next to what is free
         let diskEstimateTimer = null;
@@ -3396,7 +3470,7 @@
                 preserveAudio: true,
                 keepIntermediates: false,
                 videoEncoder: 'auto',
-                applyDistortion: true,
+                applyDistortion: false,
                 fisheyeProjection: 'stereographic',
                 fisheyeFov: '180',
                 cropFactor: '1.0',
@@ -3536,6 +3610,8 @@
             initSocket();
             updateSystemInfo();
             loadSettings();
+            // Show/hide the fisheye options for the loaded (or default) state
+            document.getElementById('applyDistortion').dispatchEvent(new Event('change'));
             update3DPresetHighlight();
             setupAutoSave();
             refreshJobs();  // also shows a job that is still running (page reload)
