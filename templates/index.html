@@ -291,15 +291,16 @@
            with short rounded hooks at both ends */
         .batch-loop.batched .batch-steps {
             position: relative;
-            margin-left: 1.75rem;
-            padding: 0.35rem 0 0.1rem 1.4rem;
+            margin-left: 0.6rem;
+            padding: 0 0 0 1.4rem;
         }
 
+        /* Spans exactly from the first label to the last bar */
         .batch-loop.batched .batch-steps::before {
             content: '';
             position: absolute;
             left: 0;
-            top: 0;
+            top: 3px;
             bottom: 0;
             width: 14px;
             border: 3px solid #f5f5f5;
