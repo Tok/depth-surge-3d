@@ -82,7 +82,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 ### Processing Pipeline (7 Steps)
 1. Frame Extraction → 2. Depth Maps → 3. Load Frames → 4. Stereo Pairs → 5. Fisheye Distortion → 6. VR Assembly → 7. Audio Integration
 
-Each step has resume capability (skips if intermediate files exist).
+Steps 2-7 run batch by batch (`processing_mode: batched`, default); `sequential` finishes the depth maps for the whole video first. Stereo, distortion, crop and assembly run fused in one worker per frame (images in memory); the separate step processors remain for redoing single steps and for upscaling. The video is encoded in one segment per batch and joined at the end. Progress per step is saved after every batch (`PipelineState`); a run in an existing directory continues there. Nothing is written outside the project and batch directories (no `~/.cache`).
 
 ### Output Structure
 ```

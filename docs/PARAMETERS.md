@@ -57,8 +57,21 @@
 ### Output Options
 
 - **`--no-audio`**: Do not preserve audio from original video (audio preserved by default)
-- **`--no-intermediates`**: Don't save intermediate depth maps and stereo frames
-- **`--resume`**: Resume processing from an existing output directory
+- **`--no-intermediates`**: Don't keep intermediate files: disk use stays at about one batch of frames plus the video (files of finished frames are deleted as the job goes)
+- **`--resume DIRECTORY`**: Continue an interrupted job where it stopped (original settings and model)
+- **`--assemble-partial DIRECTORY`**: Create a video from the VR frames an unfinished job has completed so far
+- **`--reuse DIRECTORY`**: Run in an existing output directory with the settings of this command line; frames, depth maps and later steps are reused as far as the settings allow
+- **`--video-encoder`**: `auto` (NVENC H.265 if available, else H.264), `nvenc`, `libx264`, `libx265`
+
+### Quality Options
+
+- **`--depth-resolution`**: Depth model input resolution: `auto` (matches the source), `518`, `720`, `1080`, `1440`, `2160`
+- **`--super-sample`**: Resolution the stereo views are rendered at: `auto`, `none`, `2x`, `1080p`, `4k`
+
+### Processing Mode
+
+- **`--mode`**: `batched` (default) runs steps 2-7 batch by batch, so finished VR frames appear early; `sequential` finishes each step for the whole video first
+- **`--batch-size`**: Frames per batch, 10-2000 (default: 100). Progress is saved after every batch in both modes
 
 ## Stereo Parameters Deep Dive
 

@@ -19,7 +19,7 @@ Depth Surge 3D transforms flat videos into stereoscopic 3D for VR headsets using
 - **Configurable Depth Quality**: Adjustable depth map resolution (518px to 4K) for quality vs. speed
 - **Multiple VR Formats**: Side-by-side and over-under stereoscopic formats
 - **Flexible Resolutions**: Square (VR-optimized), 16:9 (standard), cinema, and custom resolutions up to 8K
-- **Resume Capability**: Intelligent step-level resume for interrupted processing
+- **Batched Processing & Resume**: Works through the video in batches, so finished VR frames appear early; interrupted jobs continue after the last finished batch, or their finished part can be assembled into a video
 - **Audio Preservation**: Maintains original audio synchronization with lossless FLAC extraction
 - **Web Interface**: Modern browser-based UI with real-time progress tracking and live previews
 - **Wide Format Support**: Cinema, ultra-wide, and standard aspect ratios

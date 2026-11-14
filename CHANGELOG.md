@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Batched processing mode** (default; `--mode batched`, `--batch-size`, "Processing Mode" in the
+  web UI): steps 2-7 run for one batch of frames (default 100), then for the next, so finished VR
+  frames appear early. `--mode sequential` keeps the old order (each step for the whole video).
+- **Real resume**: progress is saved after every batch (`pipeline_state.json`). A resumed job
+  continues after the last finished batch and produces the same output as an uninterrupted run.
+  Re-running a directory with changed settings only repeats the steps those settings affect.
+- **Partial videos**: `--assemble-partial DIR` / "Assemble Partial Video" encodes the VR frames an
+  unfinished job has completed, with the matching part of the audio.
+- **CLI progress bars**: tqdm bars per step plus overall progress and ETA, in the web UI's colours.
+  In batched mode a batch counter is shown and the inner steps count frames of the current batch.
+  The web UI shows the same batch counter with the looped steps nested below it.
+- **Job queue** in the web UI: a job started while another is running is queued. The new Jobs
+  list shows the running job, the queue and unfinished jobs, each with Resume / Assemble / Open.
+- **Disk space estimate** before starting (web UI and CLI), with a warning if it exceeds the
+  free space. The numbers are rough (typical PNG sizes), meant to catch gross mismatches.
+- CLI: `--depth-resolution`, `--super-sample`, `--video-encoder`, and `--reuse DIR` to run in an
+  existing output directory with new settings, reusing its frames and depth maps.
+- Frame extraction and video encoding report progress (both steps used to jump from 0 to 100%).
+- Web UI: selected time range shows its duration and frame count; a reloaded page re-attaches to
+  the running job; output paths are copied by clicking them.
+
+### Changed
+- Depth maps are written to `02_depth_maps/` as 16-bit PNGs as soon as each chunk is final
+  (previously 8-bit, and only after the whole video). Memory use no longer grows with video
+  length: frames and depth maps are read from disk per batch instead of being held in RAM.
+- Depth is normalized with a running range (widens at once, narrows slowly) instead of one range
+  computed after the whole video, which is what makes writing depth maps early possible.
+- **Fused frame pipeline**: stereo generation, distortion, cropping and VR assembly run in one
+  worker per frame with the images passed in memory, instead of writing and re-reading a PNG
+  between every step. Output is identical. Intermediate images are written only if they are kept.
+  The separate steps (now multi-threaded) are still used to redo single steps after a settings
+  change, and around AI upscaling.
+- **Segmented encoding**: the video is encoded in one segment per batch and the segments are
+  joined (without re-encoding) at the end. Partial videos are joined from the finished segments.
+- **Keep Intermediate Files off** now means bounded disk use: stereo/distorted/cropped images are
+  never written, and original frames, depth maps and VR frames are deleted batch by batch once
+  the steps that read them are done (VR frames after their segment is encoded). An interrupted
+  job can still be resumed; changing settings on such a job starts over.
+- **Nothing is written to `~/.cache` any more.** Real-ESRGAN weights are stored in
+  `models/Real-ESRGAN/`. The global depth map cache (`--cache-info`, `--cache-clear`) is removed:
+  depth maps live in the batch directory and are reused there (`--reuse`, or starting a job again
+  in the same directory). `~/.cache/depth-surge-3d` from earlier versions can be deleted.
+
+### Fixed
+- **Output frame rate**: videos were encoded at 30 fps (or the target FPS) regardless of the
+  source frame rate, changing playback speed for e.g. 24 fps sources. Frames are now read at the
+  source rate; a target FPS is produced on output. Frame interpolation (experimental) is applied.
+- **Audio with a time range**: audio started at the beginning of the source instead of at the
+  selected start time.
+- FFmpeg could pick the source's video stream instead of the VR frames (explicit stream mapping).
+- **Stop button**: stopping was reported as "Video processing failed"; it now pauses the job.
+- **Web UI progress**: updates were throttled to one per 10 seconds, and progress stopped after a
+  socket reconnect.
+- `--resume` crashed on saved settings it didn't accept and loaded the default model instead of
+  the job's model; `--upscale-model` was ignored by the CLI.
+- Web UI: uploading a video resets the time range to the full video; headset presets no longer
+  raise a script error; the depth model is unloaded after a job (VRAM was kept until the next job).
+
 ## [0.10.0] - 2026-11-06
 
 ### Fixed
