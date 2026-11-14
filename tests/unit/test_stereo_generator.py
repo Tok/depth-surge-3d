@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import pytest
 
+from src.depth_surge_3d.io.operations import save_depth_map
 from src.depth_surge_3d.processing.frames.stereo_generator import (
     StereoPairGenerator,
     _process_single_stereo_pair,
@@ -33,6 +34,9 @@ class _InlineExecutor:
     def map(self, fn, iterable, chunksize=1):
         return map(fn, iterable)
 
+    def shutdown(self, wait=True, cancel_futures=False):
+        self.was_shut_down = True
+
 
 class _BrokenExecutor(_InlineExecutor):
     """Executor whose workers all die (e.g. OOM killer)."""
@@ -49,69 +53,75 @@ BASE_SETTINGS = {
 }
 
 
+def _write_inputs(directory, count=1, h=100, w=100, depth_shape=None):
+    """Write frame and 16-bit depth map files; returns (frame_files, depth_files)."""
+    frames, depths = [], []
+    for i in range(count):
+        frame = directory / f"frame_{i:04d}.png"
+        depth = directory / f"depth_{i:04d}.png"
+        cv2.imwrite(str(frame), np.random.randint(0, 255, (h, w, 3), dtype=np.uint8))
+        save_depth_map(depth, np.random.rand(*(depth_shape or (h, w))))
+        frames.append(frame)
+        depths.append(depth)
+    return frames, depths
+
+
 class TestProcessSingleStereoPair:
     """Test _process_single_stereo_pair worker function."""
 
+    def _args(self, tmp_path, settings=None, with_outputs=True, **kwargs):
+        frames, depths = _write_inputs(tmp_path, **kwargs)
+        left = str(tmp_path / "left.png") if with_outputs else None
+        right = str(tmp_path / "right.png") if with_outputs else None
+        return (
+            str(frames[0]),
+            str(depths[0]),
+            "frame_0000",
+            left,
+            right,
+            settings or BASE_SETTINGS,
+        )
+
     def test_process_pair_basic(self, tmp_path):
-        """Worker writes both eyes and returns the frame name."""
-        frame = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
-        depth_map = np.random.rand(100, 100)
-        left_path = str(tmp_path / "left.png")
-        right_path = str(tmp_path / "right.png")
+        """Worker reads frame and depth map, writes both eyes and returns the frame name."""
+        args = self._args(tmp_path)
 
-        name = _process_single_stereo_pair(
-            (frame, depth_map, "frame_0000", left_path, right_path, BASE_SETTINGS)
-        )
+        assert _process_single_stereo_pair(args) == "frame_0000"
+        assert cv2.imread(args[3]).shape == (100, 100, 3)
+        assert cv2.imread(args[4]).shape == (100, 100, 3)
 
-        assert name == "frame_0000"
-        assert cv2.imread(left_path).shape == (100, 100, 3)
-        assert cv2.imread(right_path).shape == (100, 100, 3)
-
-    def test_process_pair_no_paths(self):
-        """Worker without paths writes nothing and doesn't fail."""
-        frame = np.random.randint(0, 255, (50, 80, 3), dtype=np.uint8)
-        depth_map = np.random.rand(50, 80)
-
-        assert (
-            _process_single_stereo_pair((frame, depth_map, "f", None, None, BASE_SETTINGS)) == "f"
-        )
+    def test_process_pair_no_paths(self, tmp_path):
+        assert _process_single_stereo_pair(self._args(tmp_path, with_outputs=False)) == "frame_0000"
 
     def test_depth_map_resolution_mismatch(self, tmp_path):
-        """Regression #16/#17: depth maps at a different resolution than the frame."""
-        frame = np.random.randint(0, 255, (192, 108, 3), dtype=np.uint8)
-        depth_map = np.random.rand(307, 307)  # e.g. stale 2x-upscaled cached depth
-        left_path = str(tmp_path / "left.png")
-
-        _process_single_stereo_pair((frame, depth_map, "f", left_path, None, BASE_SETTINGS))
-
-        assert cv2.imread(left_path).shape == (192, 108, 3)
+        """Depth maps smaller than the frame are resized, not an error."""
+        args = self._args(tmp_path, depth_shape=(50, 50))
+        _process_single_stereo_pair(args)
+        assert cv2.imread(args[3]).shape == (100, 100, 3)
 
     def test_super_sampling_upscales_output(self, tmp_path):
-        """Super sampling renders at a higher resolution and preserves aspect ratio."""
-        frame = np.random.randint(0, 255, (100, 200, 3), dtype=np.uint8)
-        depth_map = np.random.rand(100, 200)
-        left_path = str(tmp_path / "left.png")
-        settings = {
-            **BASE_SETTINGS,
-            "super_sample": "auto",
-            "per_eye_width": 400,
-            "per_eye_height": 400,
-        }
+        settings = {**BASE_SETTINGS, "super_sample": "2x"}
+        args = self._args(tmp_path, settings=settings, h=60, w=80)
+        _process_single_stereo_pair(args)
+        assert cv2.imread(args[3]).shape == (120, 160, 3)
 
-        _process_single_stereo_pair((frame, depth_map, "f", left_path, None, settings))
+    def test_missing_frame(self, tmp_path):
+        args = list(self._args(tmp_path))
+        args[0] = str(tmp_path / "missing.png")
+        with pytest.raises(IOError, match="Failed to read"):
+            _process_single_stereo_pair(tuple(args))
 
-        # scale capped at 2x
-        assert cv2.imread(left_path).shape == (200, 400, 3)
+    def test_missing_depth_map(self, tmp_path):
+        args = list(self._args(tmp_path))
+        args[1] = str(tmp_path / "missing.png")
+        with pytest.raises(IOError, match="Failed to read"):
+            _process_single_stereo_pair(tuple(args))
 
-    def test_hole_fill_skipped_when_disabled(self):
-        """hole_fill_quality='none' skips hole filling."""
-        frame = np.random.randint(0, 255, (20, 20, 3), dtype=np.uint8)
-        settings = {**BASE_SETTINGS, "hole_fill_quality": "none"}
-
-        with patch("src.depth_surge_3d.utils.imaging.image_processing.hole_fill_image") as fill:
-            _process_single_stereo_pair((frame, np.random.rand(20, 20), "f", None, None, settings))
-
-        fill.assert_not_called()
+    def test_unwritable_output(self, tmp_path):
+        args = list(self._args(tmp_path))
+        args[3] = str(tmp_path / "no_such_dir" / "left.png")
+        with pytest.raises(IOError, match="Failed to write"):
+            _process_single_stereo_pair(tuple(args))
 
 
 class TestStereoWorkerCount:
@@ -160,23 +170,25 @@ class TestCreateStereoPairs:
         right_dir = tmp_path / "right_frames"
         left_dir.mkdir()
         right_dir.mkdir()
-
+        frame_files, depth_files = _write_inputs(tmp_path, count=3, h=60, w=80)
         return {
-            "frames": np.random.randint(0, 255, (3, 60, 80, 3), dtype=np.uint8),
-            "depth_maps": np.random.rand(3, 60, 80),
-            "frame_files": [tmp_path / f"frame_{i:04d}.png" for i in range(3)],
+            "frame_files": frame_files,
+            "depth_files": depth_files,
             "directories": {"left_frames": left_dir, "right_frames": right_dir},
         }
 
-    def _run(self, temp_frames, settings, tracker=None):
-        return StereoPairGenerator().create_stereo_pairs(
-            temp_frames["frames"],
-            temp_frames["depth_maps"],
-            temp_frames["frame_files"],
-            temp_frames["directories"],
-            settings,
-            tracker,
-        )
+    def _run(self, temp_frames, settings, tracker=None, generator=None):
+        generator = generator or StereoPairGenerator()
+        try:
+            return generator.create_stereo_pairs(
+                temp_frames["frame_files"],
+                temp_frames["depth_files"],
+                temp_frames["directories"],
+                settings,
+                tracker,
+            )
+        finally:
+            generator.close()
 
     def test_create_stereo_pairs_parallel(self, temp_frames, mock_progress_tracker):
         """Pool path writes all pairs and reports progress."""
@@ -225,7 +237,7 @@ class TestCreateStereoPairs:
 
     def test_frame_depth_count_mismatch(self, temp_frames):
         """Mismatched frame/depth counts fail fast with a clear error."""
-        temp_frames["depth_maps"] = temp_frames["depth_maps"][:2]
+        temp_frames["depth_files"] = temp_frames["depth_files"][:2]
         assert self._run(temp_frames, BASE_SETTINGS) is False
 
     def test_real_process_pool(self, temp_frames):
@@ -234,3 +246,37 @@ class TestCreateStereoPairs:
             assert self._run(temp_frames, BASE_SETTINGS) is True
 
         assert len(list(Path(temp_frames["directories"]["left_frames"]).glob("*.png"))) == 3
+
+    def test_pool_is_reused_across_batches(self, temp_frames):
+        """Batches share one worker pool instead of starting a new one each time."""
+        generator = StereoPairGenerator()
+        with (
+            patch(f"{MODULE}.ProcessPoolExecutor", _InlineExecutor),
+            patch(f"{MODULE}.get_stereo_worker_count", return_value=4),
+        ):
+            args = (temp_frames["frame_files"], temp_frames["depth_files"])
+            assert generator.create_stereo_pairs(*args, temp_frames["directories"], BASE_SETTINGS)
+            pool = generator._executor
+            assert generator.create_stereo_pairs(*args, temp_frames["directories"], BASE_SETTINGS)
+            assert generator._executor is pool
+
+        generator.close()
+        assert generator._executor is None and pool.was_shut_down
+
+    def test_stop_request_propagates_and_closes_pool(self, temp_frames):
+        """A stop request (InterruptedError from the tracker) isn't reported as a failure."""
+        tracker = Mock()
+        tracker.update_progress = Mock(side_effect=InterruptedError("stop"))
+        generator = StereoPairGenerator()
+        with (
+            patch(f"{MODULE}.ProcessPoolExecutor", _InlineExecutor),
+            patch(f"{MODULE}.get_stereo_worker_count", return_value=4),
+            pytest.raises(InterruptedError),
+        ):
+            self._run(temp_frames, BASE_SETTINGS, tracker, generator)
+        assert generator._executor is None
+
+    def test_no_frames(self, temp_frames):
+        temp_frames["frame_files"] = []
+        temp_frames["depth_files"] = []
+        assert self._run(temp_frames, BASE_SETTINGS) is False

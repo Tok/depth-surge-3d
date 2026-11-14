@@ -72,7 +72,40 @@ DEFAULT_SETTINGS = {
     "temporal_window_size": DEPTH_MODEL_CHUNK_SIZE,  # V2 only: frames per temporal window
     "temporal_window_overlap": DEPTH_MODEL_CHUNK_OVERLAP,  # V2 only: frame overlap between windows
     "upscale_model": "none",  # AI upscaling: none, x2, x4, x4-conservative
+    # "batched": run steps 2-7 batch by batch (finished VR frames appear early, resumable)
+    # "sequential": finish each step for the whole video before starting the next
+    "processing_mode": "batched",
+    "batch_size": 100,  # frames per batch (both modes work through the video in batches)
 }
+
+PROCESSING_MODES = ["batched", "sequential"]
+BATCH_SIZE_RANGE = (10, 2000)
+
+# Pipeline steps in order; these names are the `step_name` values the stages report
+PIPELINE_STEP_NAMES = [
+    "Frame Extraction",
+    "Depth Map Generation",
+    "Stereo Pair Creation",
+    "Fisheye Distortion",
+    "Crop Frames",
+    "AI Upscaling",
+    "VR Assembly",
+    "Video Creation",
+]
+# Steps that run once per batch in batched mode (the inner loop)
+PIPELINE_LOOP_STEP_NAMES = PIPELINE_STEP_NAMES[1:7]
+
+# Resume state of a batch directory
+PIPELINE_STATE_FILE = "pipeline_state.json"
+DEPTH_STATE_FILE = "depth_stream_state.npz"
+
+# Depth maps are stored as 16-bit PNGs (8-bit files from older versions are still read)
+DEPTH_MAP_PNG_SCALE = 65535
+# Frames after which the running depth range has moved halfway towards a narrower range
+DEPTH_RANGE_HALF_LIFE_FRAMES = 600
+
+# Minimum seconds between progress emissions to the UI / console
+PROGRESS_EMIT_INTERVAL = 0.2
 
 # VR resolution configurations (per eye)
 VR_RESOLUTIONS: dict[str, tuple[int, int]] = {
@@ -256,8 +289,8 @@ STEREO_NEAR_PLANE_M = 1.0
 # Upper bound on stereo worker processes (each holds a full frame + depth map in RAM)
 MAX_STEREO_WORKERS = 16
 
-# Bump whenever the meaning of cached depth maps changes (invalidates the global depth cache)
-DEPTH_CACHE_FORMAT_VERSION = 3
+# Real-ESRGAN weights are downloaded next to the depth models (not into ~/.cache)
+UPSCALE_MODEL_DIR = "models/Real-ESRGAN"
 
 # Progress reporting
 PROGRESS_UPDATE_INTERVAL = 10  # Update progress every N frames processed
@@ -297,6 +330,7 @@ INTERMEDIATE_DIRS = {
     "right_upscaled": "07_right_upscaled",  # Step 6: AI upscaled - right (optional)
     "left_final": "08_left_final",  # Legacy: kept for compatibility
     "right_final": "08_right_final",  # Legacy: kept for compatibility
+    "video_segments": "98_video_segments",  # Step 8: encoded video segments (one per batch)
     "vr_frames": "99_vr_frames",  # Step 7: Final VR assembled frames
 }
 

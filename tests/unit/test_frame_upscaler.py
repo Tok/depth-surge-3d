@@ -110,8 +110,16 @@ class TestApplyUpscaling:
         ):
             result = processor.apply_upscaling(temp_frames, settings, mock_progress_tracker)
 
+            # A second batch reuses the loaded model
+            assert processor.apply_upscaling(temp_frames, settings, mock_progress_tracker)
+
         assert result is True
         mock_upscaler.load_model.assert_called_once()
+        mock_upscaler.unload_model.assert_not_called()
+
+        processor.close()
+        mock_upscaler.unload_model.assert_called_once()
+        processor.close()  # closing twice is harmless
         mock_upscaler.unload_model.assert_called_once()
 
     def test_apply_upscaling_missing_directories(self, mock_progress_tracker, tmp_path):

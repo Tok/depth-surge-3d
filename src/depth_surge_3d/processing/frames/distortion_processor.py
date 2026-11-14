@@ -11,6 +11,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from .parallel import map_frames
 from ...utils import (
     apply_fisheye_distortion,
     apply_fisheye_square_crop,
@@ -64,52 +65,77 @@ class DistortionProcessor:
             - Writes distorted frames to output directories
         """
         try:
-            for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
-                # Load images
-                left_img = cv2.imread(str(left_file))
-                right_img = cv2.imread(str(right_file))
-
-                if left_img is None or right_img is None:
-                    print(f"Warning: Could not load {left_file} or {right_file}")
-                    continue
-
-                # Apply fisheye distortion, fitted so the circle kept by the crop step
-                # contains only real image content (no stretched edge streaks)
-                fit_radius = self._fisheye_crop_factor(settings)
-                left_distorted = apply_fisheye_distortion(
-                    left_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
-                )
-                right_distorted = apply_fisheye_distortion(
-                    right_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
-                )
-
-                # Always save: the crop step reads the distorted frames from disk
-                frame_name = left_file.stem
-                if "left_distorted" in directories:
-                    cv2.imwrite(
-                        str(directories["left_distorted"] / f"{frame_name}.png"), left_distorted
-                    )
-                if "right_distorted" in directories:
-                    cv2.imwrite(
-                        str(directories["right_distorted"] / f"{frame_name}.png"), right_distorted
-                    )
+            pairs = list(zip(left_files, right_files))
+            results = map_frames(
+                lambda pair: self._distort_single_frame_pair(
+                    pair[0], pair[1], directories, settings
+                ),
+                pairs,
+            )
+            for i, success in enumerate(results):
+                if not success:
+                    return False
 
                 # Update progress
-                if i % 5 == 0 or i == len(left_files) - 1:
+                if i % 5 == 0 or i == len(pairs) - 1:
                     progress_tracker.update_progress(
                         "Applying distortion",
                         phase="distortion",
                         frame_num=i + 1,
                         step_name="Fisheye Distortion",
                         step_progress=i + 1,
-                        step_total=len(left_files),
+                        step_total=len(pairs),
                     )
 
             return True
 
+        except InterruptedError:
+            raise
         except Exception as e:
             print(f"Error applying distortion: {e}")
             return False
+
+    def _distort_single_frame_pair(
+        self,
+        left_file: Path,
+        right_file: Path,
+        directories: dict[str, Path],
+        settings: dict[str, Any],
+    ) -> bool:
+        """
+        Apply fisheye distortion to a single stereo frame pair.
+
+        Returns:
+            True if successful, False if a frame couldn't be loaded
+
+        Side effects:
+            - Reads images from disk
+            - Writes distorted images to disk
+        """
+        left_img = cv2.imread(str(left_file))
+        right_img = cv2.imread(str(right_file))
+
+        if left_img is None or right_img is None:
+            print(f"Error: Could not load {left_file} or {right_file}")
+            return False
+
+        # Apply fisheye distortion, fitted so the circle kept by the crop step
+        # contains only real image content (no stretched edge streaks)
+        fit_radius = self._fisheye_crop_factor(settings)
+        left_distorted = apply_fisheye_distortion(
+            left_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
+        )
+        right_distorted = apply_fisheye_distortion(
+            right_img, settings["fisheye_fov"], settings["fisheye_projection"], fit_radius
+        )
+
+        # Always save: the crop step reads the distorted frames from disk
+        frame_name = left_file.stem
+        if "left_distorted" in directories:
+            cv2.imwrite(str(directories["left_distorted"] / f"{frame_name}.png"), left_distorted)
+        if "right_distorted" in directories:
+            cv2.imwrite(str(directories["right_distorted"] / f"{frame_name}.png"), right_distorted)
+        return True
 
     def crop_frames(
         self,
@@ -117,6 +143,7 @@ class DistortionProcessor:
         settings: dict[str, Any],
         progress_tracker=None,
         total_frames: int = 0,
+        frame_names: list[str] | None = None,
     ) -> bool:
         """
         Crop frames to VR specifications.
@@ -126,6 +153,7 @@ class DistortionProcessor:
             settings: Processing settings with crop parameters
             progress_tracker: Optional progress tracker
             total_frames: Total number of frames (for progress tracking)
+            frame_names: Frame names (file stems) to crop; all frames if None
 
         Returns:
             True if successful, False otherwise
@@ -143,17 +171,26 @@ class DistortionProcessor:
             left_dir, right_dir = stereo_dirs
 
             # Get frame files
-            left_files = sorted(left_dir.glob("*.png"))
-            right_files = sorted(right_dir.glob("*.png"))
+            if frame_names is not None:
+                left_files = [left_dir / f"{name}.png" for name in frame_names]
+                right_files = [right_dir / f"{name}.png" for name in frame_names]
+            else:
+                left_files = sorted(left_dir.glob("*.png"))
+                right_files = sorted(right_dir.glob("*.png"))
 
             if len(left_files) != len(right_files):
                 print(
                     f"Warning: Mismatched frame count: {len(left_files)} left, {len(right_files)} right"
                 )
 
-            # Process each frame pair
-            for i, (left_file, right_file) in enumerate(zip(left_files, right_files)):
-                self._crop_single_frame_pair(left_file, right_file, directories, settings)
+            # Process the frame pairs (in parallel threads)
+            results = map_frames(
+                lambda pair: self._crop_single_frame_pair(pair[0], pair[1], directories, settings),
+                list(zip(left_files, right_files)),
+            )
+            for i, success in enumerate(results):
+                if not success:
+                    return False
 
                 # Update progress more frequently (every frame for slow operations)
                 if i % 1 == 0 or i == len(left_files) - 1:
@@ -168,6 +205,8 @@ class DistortionProcessor:
 
             return True
 
+        except InterruptedError:
+            raise
         except Exception as e:
             print(f"Error cropping frames: {e}")
 

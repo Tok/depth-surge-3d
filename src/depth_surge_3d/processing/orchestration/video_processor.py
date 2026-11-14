@@ -18,6 +18,7 @@ from ..frames.stereo_generator import StereoPairGenerator
 from ..frames.distortion_processor import DistortionProcessor
 from ..frames.frame_upscaler import FrameUpscalerProcessor
 from ..frames.vr_assembler import VRFrameAssembler
+from ..frames.frame_pipeline import FusedFrameProcessor
 from ..video.video_encoder import VideoEncoder
 from .pipeline_orchestrator import ProcessingOrchestrator
 
@@ -68,6 +69,7 @@ class VideoProcessor:
             vr_assembler=self.vr_assembler,
             video_encoder=self.video_encoder,
             verbose=verbose,
+            frame_pipeline=FusedFrameProcessor(self.stereo_generator, verbose=verbose),
         )
 
     def process(

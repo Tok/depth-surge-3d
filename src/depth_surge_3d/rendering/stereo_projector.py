@@ -55,6 +55,8 @@ class StereoProjector:
             temporal_window_overlap: Frame overlap for V2 temporal windows (default: 10)
         """
         self.depth_model_version = depth_model_version
+        self.model_path = model_path
+        self.metric = metric
 
         if depth_model_version == "v3":
             # Use Depth Anything V3 (model_path is used as model_name)
@@ -72,39 +74,32 @@ class StereoProjector:
         self,
         video_path: str,
         output_dir: str,
-        vr_format: str | None = None,
-        baseline: float | None = None,
-        focal_length: float | None = None,
-        keep_intermediates: bool | None = None,
-        start_time: str | None = None,
-        end_time: str | None = None,
-        preserve_audio: bool | None = None,
-        target_fps: int | None = None,
-        min_resolution: str | None = None,
-        super_sample: str | None = None,
-        apply_distortion: bool | None = None,
-        fisheye_projection: str | None = None,
-        fisheye_fov: float | None = None,
-        crop_factor: float | None = None,
-        vr_resolution: str | None = None,
-        fisheye_crop_factor: float | None = None,
-        hole_fill_quality: str | None = None,
-        processing_mode: str | None = None,
-        experimental_frame_interpolation: bool | None = None,
+        progress_tracker: Any = None,
+        **kwargs: Any,
     ) -> bool:
         """
         Process video to create 3D VR version.
 
+        If ``output_dir`` holds an unfinished run of the same video, it is continued.
+
         Args:
             video_path: Path to input video
             output_dir: Output directory path
-            **kwargs: Processing parameters (defaults from DEFAULT_SETTINGS)
+            progress_tracker: Optional progress tracker (e.g. TqdmProgressTracker)
+            **kwargs: Processing settings (defaults from DEFAULT_SETTINGS), e.g. vr_format,
+                baseline, start_time, processing_mode, batch_size
 
         Returns:
             True if processing completed successfully
         """
         # Apply defaults for None values
-        settings = self._apply_default_settings(locals())
+        settings = self._apply_default_settings(
+            {**kwargs, "video_path": video_path, "output_dir": output_dir}
+        )
+        # The depth model is part of what a resumed run and the depth cache must match
+        settings["depth_model_version"] = self.depth_model_version
+        settings["depth_model_path"] = self.model_path
+        settings["use_metric_depth"] = self.metric
 
         try:
             # Validate inputs
@@ -135,6 +130,7 @@ class StereoProjector:
                 output_dir=output_dir,
                 video_properties=video_props,
                 settings=resolved_settings,
+                progress_callback=progress_tracker,
             )
 
         except Exception as e:
@@ -268,6 +264,11 @@ class StereoProjector:
         for param in special_params:
             if param in params:
                 settings[param] = params[param]
+
+        # Settings without a default (e.g. depth_resolution, video_encoder) pass through
+        for key, value in params.items():
+            if key not in settings and key != "self" and value is not None:
+                settings[key] = value
 
         return settings
 

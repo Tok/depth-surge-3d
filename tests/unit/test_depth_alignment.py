@@ -150,3 +150,128 @@ class TestMemoryBehaviour:
         aligner.add(chunk * 2.0, overlap=2)
         aligner.add(chunk, overlap=2)
         np.testing.assert_array_equal(chunk, original)
+
+
+class TestAlignerStreaming:
+    """Taking finished frames out of the aligner and continuing a saved sequence."""
+
+    def test_take_holds_back_newest_frames(self):
+        from src.depth_surge_3d.utils.domain.depth_alignment import DepthSequenceAligner
+
+        aligner = DepthSequenceAligner()
+        aligner.add(np.arange(5, dtype=np.float32)[:, None, None] * np.ones((5, 2, 2), np.float32))
+
+        final = aligner.take(hold_back=2)
+
+        assert final[:, 0, 0].tolist() == [0.0, 1.0, 2.0]
+        assert len(aligner) == 2
+        assert aligner.take(hold_back=5).shape[0] == 0
+        assert aligner.take()[:, 0, 0].tolist() == [3.0, 4.0]
+
+    def test_streamed_result_equals_one_shot(self):
+        """Emitting frames chunk by chunk gives the same sequence as collecting everything."""
+        from src.depth_surge_3d.utils.domain.depth_alignment import DepthSequenceAligner
+
+        rng = np.random.default_rng(0)
+        truth = rng.random((20, 6, 8)).astype(np.float32)
+        chunks = [(truth[0:10] * 2 + 1, 0), (truth[6:16] * 3 - 1, 4), (truth[12:20] * 0.5, 4)]
+
+        one_shot = DepthSequenceAligner()
+        for chunk, overlap in chunks:
+            one_shot.add(chunk, overlap)
+        expected = one_shot.result()
+
+        streamed = DepthSequenceAligner()
+        parts = []
+        for i, (chunk, overlap) in enumerate(chunks):
+            streamed.add(chunk, overlap)
+            parts.append(streamed.take(0 if i == len(chunks) - 1 else 4))
+        assert np.allclose(np.concatenate(parts), expected, atol=1e-5)
+
+    @pytest.mark.parametrize("per_frame", [False, True])
+    def test_state_round_trip(self, per_frame):
+        from src.depth_surge_3d.utils.domain.depth_alignment import DepthSequenceAligner
+
+        rng = np.random.default_rng(1)
+        first, second = rng.random((6, 4, 4)).astype(np.float32), rng.random((6, 4, 4))
+
+        original = DepthSequenceAligner(per_frame=per_frame)
+        original.add(first)
+        original.take(hold_back=2)
+        restored = DepthSequenceAligner(per_frame=per_frame)
+        restored.restore(original.state())
+
+        for aligner in (original, restored):
+            aligner.add(second.astype(np.float32), overlap=2)
+        assert np.array_equal(original.result(), restored.result())
+
+    def test_empty_state(self):
+        from src.depth_surge_3d.utils.domain.depth_alignment import DepthSequenceAligner
+
+        aligner = DepthSequenceAligner()
+        assert aligner.state() == {}
+        aligner.restore({})
+        assert len(aligner) == 0
+
+
+class TestRunningDepthRange:
+    """Chunk-by-chunk normalization without knowing the whole video."""
+
+    def _range(self, **kwargs):
+        from src.depth_surge_3d.utils.domain.depth_alignment import RunningDepthRange
+
+        return RunningDepthRange(low_percentile=0, high_percentile=100, **kwargs)
+
+    @staticmethod
+    def _chunk(low, high, frames=4):
+        return np.tile(np.linspace(low, high, 16, dtype=np.float32).reshape(4, 4), (frames, 1, 1))
+
+    def test_first_chunk_sets_the_range(self):
+        depth_range = self._range()
+        out = depth_range.normalize(self._chunk(2.0, 6.0))
+        assert (depth_range.low, depth_range.high) == (2.0, 6.0)
+        assert out.min() == 0.0 and out.max() == 1.0 and out.dtype == np.float32
+
+    def test_same_content_gives_same_values(self):
+        """A constant scene is normalized identically in every chunk (no flicker)."""
+        depth_range = self._range()
+        first = depth_range.normalize(self._chunk(2.0, 6.0))
+        second = depth_range.normalize(self._chunk(2.0, 6.0))
+        assert np.array_equal(first, second)
+
+    def test_range_widens_at_once_but_gradually_within_the_chunk(self):
+        depth_range = self._range()
+        depth_range.normalize(self._chunk(0.0, 1.0))
+        out = depth_range.normalize(self._chunk(0.0, 2.0, frames=4))
+
+        assert depth_range.high == 2.0
+        # the range moves linearly to its new value: no jump at the chunk boundary
+        value_of_one = out[:, 1, 3]  # pixel with raw value 1.2
+        assert np.all(np.diff(value_of_one) < 0)
+        assert out[-1].max() == pytest.approx(1.0)
+
+    def test_range_narrows_slowly(self):
+        depth_range = self._range(half_life_frames=4)
+        depth_range.normalize(self._chunk(0.0, 4.0))
+        depth_range.normalize(self._chunk(0.0, 2.0, frames=4))
+        assert depth_range.high == pytest.approx(3.0)  # halfway after one half-life
+
+    def test_resumed_range_continues(self):
+        depth_range = self._range()
+        depth_range.normalize(self._chunk(0.0, 4.0))
+        resumed = self._range(low=depth_range.low, high=depth_range.high)
+        chunk = self._chunk(1.0, 3.0)
+        assert np.array_equal(depth_range.normalize(chunk), resumed.normalize(chunk))
+
+    def test_flat_or_invalid_chunks(self):
+        depth_range = self._range()
+        assert depth_range.normalize(np.full((2, 4, 4), 5.0, np.float32)).max() == 0.0
+        assert depth_range.low is None  # a flat first chunk doesn't define a range
+        depth_range.normalize(self._chunk(0.0, 2.0))
+        flat = depth_range.normalize(np.full((2, 4, 4), 1.0, np.float32))
+        assert np.allclose(flat, 0.5) and depth_range.high == 2.0
+        with_nan = self._chunk(0.0, 2.0)
+        with_nan[0, 0, 0] = np.nan
+        assert np.isfinite(depth_range.normalize(with_nan)).all()
+        assert depth_range.normalize(np.full((1, 2, 2), np.nan, np.float32)).shape == (1, 2, 2)
+        assert depth_range.normalize(np.empty((0, 4, 4), np.float32)).shape == (0, 4, 4)

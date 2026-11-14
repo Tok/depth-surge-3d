@@ -6,16 +6,19 @@ Handles depth map generation with caching, VRAM management, and chunking strateg
 
 from __future__ import annotations
 
-import cv2
-import numpy as np
-import torch
+import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import cv2
+import numpy as np
+import torch
+
 from ...core.constants import (
     DEPTH_MAP_SCALE,
-    DEPTH_MAP_SCALE_FLOAT,
     DEFAULT_FALLBACK_FPS,
+    DEPTH_RANGE_HALF_LIFE_FRAMES,
     RESOLUTION_4K,
     RESOLUTION_1440P,
     RESOLUTION_1080P,
@@ -29,32 +32,27 @@ from ...core.constants import (
     CHUNK_SIZE_1080P_MANUAL,
     CHUNK_SIZE_720P,
     CHUNK_SIZE_SMALL,
-    PREVIEW_FRAME_SAMPLE_RATE,
     DEPTH_MODEL_CHUNK_OVERLAP,
     DEPTH_CHUNK_RAM_BUDGET_BYTES,
     DEPTH_CHUNK_BYTES_PER_PIXEL,
     DEPTH_CHUNK_MIN_FRAMES,
     DEPTH_CHUNK_MAX_FRAMES,
 )
-from ...utils.domain.depth_alignment import DepthSequenceAligner, normalize_depth_sequence
-from ...utils import (
-    get_cached_depth_maps,
-    save_depth_maps_to_cache,
-    get_cache_size,
-)
+from ...io.operations import save_depth_map
+from ...utils.domain.depth_alignment import DepthSequenceAligner, RunningDepthRange
 from ...utils import calculate_optimal_chunk_size, get_vram_info
 
 
 class DepthMapProcessor:
     """
-    Depth map generation with caching and memory management.
+    Streaming depth map generation with bounded memory.
 
     Responsibilities:
-    - Depth map generation with model inference
-    - VRAM-based chunk sizing
-    - Global and local depth cache management
-    - GPU memory management
-    - Batch and chunked processing strategies
+    - Depth map generation with model inference, chunk by chunk
+    - Temporal alignment of the chunks and running normalization
+    - Writing finished depth maps to disk as soon as they are final
+    - Saving the stream state so an interrupted run continues where it stopped
+    - VRAM/RAM-based chunk sizing and GPU memory management
     """
 
     def __init__(self, depth_estimator, verbose: bool = False):
@@ -67,73 +65,6 @@ class DepthMapProcessor:
         """
         self.depth_estimator = depth_estimator
         self.verbose = verbose
-
-    def generate_depth_maps(
-        self,
-        frame_files: list[Path],
-        settings: dict[str, Any],
-        directories: dict[str, Path],
-        progress_tracker,
-    ) -> np.ndarray | None:
-        """
-        Main entry point - generates depth maps with caching.
-
-        Tries cache first, then generates if needed.
-
-        Args:
-            frame_files: List of frame file paths
-            settings: Processing settings with depth parameters
-            directories: Dictionary of processing directories
-            progress_tracker: Optional progress tracker
-
-        Returns:
-            Numpy array of depth maps, or None if failed
-
-        Side effects:
-            - GPU memory operations
-            - Filesystem I/O (cache reads/writes)
-            - Depth map image writes
-        """
-        # Check if depth maps already exist (only if keep_intermediates is enabled)
-        if settings.get("keep_intermediates") and "depth_maps" in directories:
-            existing = self._try_load_existing_depth_maps(
-                frame_files, directories, progress_tracker
-            )
-            if existing is not None:
-                return existing
-
-        # Check global depth cache (works across different output batches)
-        video_path = settings.get("video_path")
-        if video_path:
-            cached = self._try_load_cached_depth_maps(
-                video_path, settings, len(frame_files), progress_tracker
-            )
-            if cached is not None:
-                return cached
-
-        print("Step 2/7: Generating depth maps (temporal consistency enabled)...")
-        print("  Using memory-efficient chunked processing...")
-        if progress_tracker:
-            progress_tracker.update_progress(
-                "Generating depth maps",
-                phase="depth_estimation",
-                frame_num=0,
-                step_name="Depth Map Generation",
-                step_progress=0,
-                step_total=len(frame_files),
-            )
-
-        depth_maps = self._generate_depth_maps_chunked(
-            frame_files, settings, directories, progress_tracker
-        )
-        if depth_maps is None:
-            return None
-
-        # Save to global cache for future runs
-        if video_path and depth_maps is not None:
-            self._save_to_depth_cache(video_path, settings, depth_maps)
-
-        return depth_maps
 
     def _determine_chunk_params(
         self, frame_w: int, frame_h: int, depth_resolution: str = "auto"
@@ -254,8 +185,9 @@ class DepthMapProcessor:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
-            mem_free = torch.cuda.mem_get_info()[0] / (1024**3)  # Convert to GB
-            print(f"  GPU memory freed: {mem_free:.2f} GB available")
+            if self.verbose:
+                mem_free = torch.cuda.mem_get_info()[0] / (1024**3)  # Convert to GB
+                print(f"  GPU memory freed: {mem_free:.2f} GB available")
 
     def _load_chunk_frames(self, chunk_files: list[Path], settings: dict[str, Any]) -> list | None:
         """
@@ -336,291 +268,194 @@ class DepthMapProcessor:
         requested = settings.get("temporal_window_overlap") or DEPTH_MODEL_CHUNK_OVERLAP
         return int(min(max(int(requested), 4), chunk_size // 2))
 
-    def _send_chunk_preview(self, depth_chunk: np.ndarray, frame_num: int, progress_tracker):
-        """Send a live preview of the newest depth map (normalized on its own)."""
+    def _send_chunk_preview(self, normalized: np.ndarray, frame_num: int, progress_tracker):
+        """Send a live preview of the newest finished depth map."""
         if not progress_tracker or not hasattr(progress_tracker, "send_preview_frame_from_array"):
             return
-        preview = normalize_depth_sequence(depth_chunk[-1:])[0]
-        preview_bgr = cv2.cvtColor((preview * DEPTH_MAP_SCALE).astype("uint8"), cv2.COLOR_GRAY2BGR)
+        if len(normalized) == 0:
+            return
+        preview_bgr = cv2.cvtColor(
+            (normalized[-1] * DEPTH_MAP_SCALE).astype("uint8"), cv2.COLOR_GRAY2BGR
+        )
         progress_tracker.send_preview_frame_from_array(preview_bgr, "depth_map", frame_num)
 
-    def _generate_depth_maps_chunked(
+    def stream_depth_maps(  # noqa: C901
         self,
         frame_files: list[Path],
+        depth_dir: Path,
+        state_path: Path,
         settings: dict[str, Any],
-        directories: dict[str, Path],
-        progress_tracker,
-    ) -> np.ndarray | None:
+        progress_tracker=None,
+    ) -> Iterator[int]:
         """
-        Memory-efficient chunked depth generation.
+        Generate depth maps chunk by chunk, writing each one to disk once it is final.
 
-        Processes frames in small batches to avoid CUDA OOM errors.
+        Continues from ``state_path`` if it exists. After every chunk the finished depth
+        maps are written to ``depth_dir`` (16-bit PNG, named like the frames), the state
+        is saved and the number of finished depth maps is yielded, so the caller can run
+        later pipeline steps on them while the generator is suspended.
+
+        Chunks of temporally consistent models overlap: the overlapping frames are held
+        back until the next chunk has been aligned and crossfaded with them.
 
         Args:
-            frame_files: List of frame file paths
-            settings: Processing settings
-            directories: Dictionary of processing directories
+            frame_files: All frame files of the video, in order
+            depth_dir: Directory for the depth map PNGs
+            state_path: File holding the stream state (created/updated here)
+            settings: Processing settings with depth parameters
             progress_tracker: Optional progress tracker
 
-        Returns:
-            Numpy array of depth maps, or None if failed
+        Yields:
+            Number of depth maps finished so far (always increasing, ends at len(frame_files))
+
+        Raises:
+            RuntimeError: If frames can't be read or depth estimation fails
 
         Side effects:
-            - GPU memory operations
-            - Filesystem I/O
+            - GPU inference
+            - Writes depth map images and the state file
         """
-        # Determine chunk parameters based on resolution
-        sample_frame = cv2.imread(str(frame_files[0]))
-        if sample_frame is None:
-            return None
+        num_frames = len(frame_files)
+        temporal = getattr(self.depth_estimator, "temporally_consistent", False) is True
+        emitted, aligner, depth_range = self._load_stream_state(state_path, temporal)
+        if emitted >= num_frames:
+            return
 
+        # Frames before `emitted` may be deleted already (runs without intermediates)
+        sample_frame = cv2.imread(str(frame_files[emitted]))
+        if sample_frame is None:
+            raise RuntimeError(f"Could not read frame {frame_files[emitted]}")
         frame_h, frame_w = sample_frame.shape[:2]
-        depth_resolution = settings.get("depth_resolution", "auto")
-        chunk_size, input_size = self._determine_chunk_params(frame_w, frame_h, depth_resolution)
+        chunk_size, input_size = self._determine_chunk_params(
+            frame_w, frame_h, settings.get("depth_resolution", "auto")
+        )
 
         # Temporally consistent models (VDA): long chunks, aligned on overlapping frames.
         # Per-frame models (DA3): VRAM-sized chunks, every frame aligned to its predecessors.
-        temporal = getattr(self.depth_estimator, "temporally_consistent", False) is True
         overlap = 0
         if temporal:
             chunk_size = self._temporal_chunk_size(frame_w, frame_h)
+            if settings.get("processing_mode", "batched") != "sequential":
+                # Batched mode: don't estimate far beyond the batch being worked on
+                try:
+                    batch_size = int(settings.get("batch_size") or chunk_size)
+                except (TypeError, ValueError):
+                    batch_size = chunk_size
+                chunk_size = min(chunk_size, max(DEPTH_CHUNK_MIN_FRAMES, batch_size))
             overlap = self._chunk_overlap(settings, chunk_size)
-
         print(
-            f"  Processing in chunks of {chunk_size} frames "
-            f"(input_size={input_size}, overlap={overlap})..."
+            f"  Depth chunks of {chunk_size} frames (input_size={input_size}, overlap={overlap})"
+            + (f", continuing at frame {emitted + 1}" if emitted else "")
         )
-
-        # Clear GPU cache before processing
         self._clear_gpu_memory()
 
-        aligner = DepthSequenceAligner(per_frame=not temporal)
-        num_frames = len(frame_files)
-        total_chunks = (num_frames + chunk_size - 1) // chunk_size
-
-        for chunk_start in range(0, num_frames, chunk_size):
-            chunk_end = min(chunk_start + chunk_size, num_frames)
-            load_start = max(0, chunk_start - overlap)
-            chunk_files = frame_files[load_start:chunk_end]
-            chunk_num = chunk_start // chunk_size + 1
-
-            # Load chunk frames (including the overlap with the previous chunk)
+        while emitted < num_frames:
+            held = len(aligner)  # frames estimated before but not final yet
+            chunk_end = min(emitted + held + chunk_size, num_frames)
+            chunk_files = frame_files[emitted:chunk_end]
             chunk_frames = self._load_chunk_frames(chunk_files, settings)
             if not chunk_frames or len(chunk_frames) != len(chunk_files):
-                print("Error: Could not load all frames in chunk")
-                return None
+                raise RuntimeError("Could not load all frames of a depth chunk")
 
-            try:
-                raw_depths = self._estimate_chunk(chunk_frames, settings, input_size)
-                aligner.add(raw_depths, overlap=chunk_start - load_start)
-                self._send_chunk_preview(raw_depths, chunk_end, progress_tracker)
+            raw_depths = self._estimate_chunk(chunk_frames, settings, input_size)
+            del chunk_frames
+            aligner.add(raw_depths, overlap=held)
+            del raw_depths
+            self._clear_gpu_memory()
 
-                del chunk_frames
-                del raw_depths
-                self._clear_gpu_memory()
+            is_last = chunk_end >= num_frames
+            normalized = depth_range.normalize(aligner.take(0 if is_last else overlap))
+            for offset, depth_map in enumerate(normalized):
+                depth_path = depth_dir / f"{frame_files[emitted + offset].stem}.png"
+                if not save_depth_map(depth_path, depth_map):
+                    raise RuntimeError(f"Could not write depth map {depth_path}")
+            emitted += len(normalized)
+            self._save_stream_state(state_path, emitted, aligner, depth_range)
 
-                if progress_tracker:
-                    progress_tracker.update_progress(
-                        f"Chunk {chunk_num}/{total_chunks}: Depth maps {chunk_end}/{num_frames}",
-                        phase="depth_estimation",
-                        frame_num=chunk_end,
-                        step_name="Depth Map Generation",
-                        step_progress=chunk_end,
-                        step_total=num_frames,
-                    )
-
-            except Exception as e:
-                print(f"Error processing chunk {chunk_start}-{chunk_end}: {e}")
-                return None
-
-        # One normalization range for the whole video keeps depth stable over time
-        depth_maps = normalize_depth_sequence(aligner.result(), copy=False)
-
-        if settings.get("keep_intermediates") and "depth_maps" in directories:
-            self._save_depth_maps(depth_maps, frame_files, directories["depth_maps"], None)
-
-        return depth_maps
-
-    def _generate_depth_maps_batch(
-        self, frames: np.ndarray, settings: dict[str, Any], progress_tracker
-    ) -> np.ndarray | None:
-        """
-        Full batch depth generation (no chunking).
-
-        Generate depth maps for all frames with temporal consistency.
-
-        Args:
-            frames: Numpy array of frame images
-            settings: Processing settings
-            progress_tracker: Optional progress tracker
-
-        Returns:
-            Numpy array of depth maps, or None if failed
-
-        Side effects:
-            - GPU memory operations
-            - Filesystem I/O
-        """
-        try:
-            # Use Video-Depth-Anything for temporal consistency
-            target_fps = settings.get("target_fps", DEFAULT_FALLBACK_FPS)
-            if target_fps is None or str(target_fps) == "None" or target_fps == "original":
-                target_fps = 30
-
-            # Use depth resolution from settings (default: auto/1080px)
-            depth_resolution = settings.get("depth_resolution", "auto")
-            if depth_resolution == "auto":
-                input_size = 1080  # Match typical 1080p video resolution
-            else:
-                try:
-                    input_size = int(depth_resolution)
-                except (ValueError, TypeError):
-                    input_size = 1080
-
-            depth_maps = self.depth_estimator.estimate_depth_batch(
-                frames, target_fps=target_fps, input_size=input_size, fp32=False
-            )
-
-            return depth_maps
-
-        except Exception as e:
-            print(f"Error generating depth maps: {e}")
-            return None
-
-    def _save_depth_maps(
-        self,
-        depth_maps: np.ndarray,
-        frame_files: list[Path],
-        depth_dir: Path,
-        progress_tracker=None,
-    ) -> None:
-        """
-        Save depth maps to disk.
-
-        Args:
-            depth_maps: Numpy array of depth maps
-            frame_files: List of frame files (for naming)
-            depth_dir: Output directory
-            progress_tracker: Optional progress tracker
-
-        Side effects:
-            - Writes depth map images to disk
-        """
-        for i, (depth_map, frame_file) in enumerate(zip(depth_maps, frame_files)):
-            depth_vis = (depth_map * DEPTH_MAP_SCALE).astype("uint8")
-            frame_name = frame_file.stem
-            depth_path = depth_dir / f"{frame_name}.png"
-            cv2.imwrite(str(depth_path), depth_vis)
-
-            # Send preview frame
-            if progress_tracker and hasattr(progress_tracker, "send_preview_frame"):
-                if i % PREVIEW_FRAME_SAMPLE_RATE == 0 or i == len(depth_maps) - 1:
-                    progress_tracker.send_preview_frame(depth_path, "depth_map", i + 1)
-
-    def _try_load_existing_depth_maps(
-        self, frame_files: list[Path], directories: dict[str, Path], progress_tracker
-    ) -> np.ndarray | None:
-        """
-        Try to load existing depth maps from output directory.
-
-        Args:
-            frame_files: List of frame file paths
-            directories: Dictionary of processing directories
-            progress_tracker: Optional progress tracker
-
-        Returns:
-            Numpy array of depth maps, or None if not found
-
-        Side effects:
-            - Filesystem I/O
-        """
-        depth_maps_dir = directories.get("depth_maps")
-        if not depth_maps_dir or not depth_maps_dir.exists():
-            return None
-
-        existing_depth_maps = sorted(list(depth_maps_dir.glob("*.png")))
-        if not existing_depth_maps or len(existing_depth_maps) < len(frame_files):
-            return None
-
-        print("Step 2/7: Skipping depth map generation (depth maps already exist)")
-        print(f"  Found {len(existing_depth_maps):04d} existing depth maps")
-        print(f"  Location: {depth_maps_dir}\n")
-
-        # Load existing depth maps
-        depth_maps = []
-        for depth_file in existing_depth_maps[: len(frame_files)]:
-            depth_img = cv2.imread(str(depth_file), cv2.IMREAD_GRAYSCALE)
-            if depth_img is not None:
-                depth_maps.append(depth_img.astype(float) / DEPTH_MAP_SCALE_FLOAT)
-
-        if len(depth_maps) == len(frame_files):
+            self._send_chunk_preview(normalized, emitted, progress_tracker)
+            del normalized
             if progress_tracker:
                 progress_tracker.update_progress(
-                    "Skipped depth map generation (already exists)",
+                    f"Depth maps {emitted}/{num_frames}",
                     phase="depth_estimation",
-                    frame_num=len(depth_maps),
+                    frame_num=emitted,
                     step_name="Depth Map Generation",
-                    step_progress=len(depth_maps),
-                    step_total=len(depth_maps),
+                    step_progress=emitted,
+                    step_total=num_frames,
                 )
-            return np.array(depth_maps)
-        return None
+            yield emitted
 
-    def _try_load_cached_depth_maps(
-        self, video_path: str, settings: dict[str, Any], num_frames: int, progress_tracker
-    ) -> np.ndarray | None:
+    @staticmethod
+    def finished_depth_maps(state_path: Path) -> int:
         """
-        Try to load from global depth cache.
+        Number of depth maps a saved stream state has finished (0 without a state).
 
-        Args:
-            video_path: Path to video file (for cache key)
-            settings: Processing settings for cache key
-            num_frames: Expected number of frames
-            progress_tracker: Optional progress tracker
+        Side effects:
+            - Reads the state file
+        """
+        try:
+            with np.load(state_path) as data:
+                return int(data["emitted"])
+        except (OSError, ValueError, KeyError):
+            return 0
+
+    @staticmethod
+    def mark_stream_complete(state_path: Path, num_frames: int) -> None:
+        """
+        Record that all depth maps exist (e.g. restored from the global cache).
+
+        Side effects:
+            - Writes the state file
+        """
+        DepthMapProcessor._write_state(state_path, {"emitted": np.array(num_frames)})
+
+    @staticmethod
+    def _load_stream_state(
+        state_path: Path, temporal: bool
+    ) -> tuple[int, DepthSequenceAligner, RunningDepthRange]:
+        """
+        Load the stream state, or start a new stream.
 
         Returns:
-            Numpy array of depth maps, or None if cache miss
+            Tuple of (finished depth maps, aligner, running depth range)
 
         Side effects:
-            - Filesystem I/O (cache reads)
+            - Reads the state file
         """
-        cached_depths = get_cached_depth_maps(video_path, settings, num_frames)
-        if cached_depths is None:
-            return None
+        aligner = DepthSequenceAligner(per_frame=not temporal)
+        depth_range = RunningDepthRange(half_life_frames=DEPTH_RANGE_HALF_LIFE_FRAMES)
+        try:
+            with np.load(state_path) as data:
+                emitted = int(data["emitted"])
+                aligner.restore({key: data[key] for key in ("tail", "reference") if key in data})
+                if "range" in data:
+                    depth_range.low, depth_range.high = (float(v) for v in data["range"])
+            return emitted, aligner, depth_range
+        except (OSError, ValueError, KeyError):
+            return 0, DepthSequenceAligner(per_frame=not temporal), depth_range
 
-        print("Step 2/7: Loading depth maps from global cache")
-        print(f"  Loaded {len(cached_depths):04d} cached depth maps")
-        cache_entries, cache_size_bytes = get_cache_size()
-        cache_size_mb = cache_size_bytes / (1024 * 1024)
-        print(f"  Cache: {cache_entries} entries, {cache_size_mb:.1f} MB total\n")
-
-        if progress_tracker:
-            progress_tracker.update_progress(
-                "Loaded depth maps from cache",
-                phase="depth_estimation",
-                frame_num=len(cached_depths),
-                step_name="Depth Map Generation",
-                step_progress=len(cached_depths),
-                step_total=len(cached_depths),
-            )
-        return cached_depths
-
-    def _save_to_depth_cache(
-        self, video_path: str, settings: dict[str, Any], depth_maps: np.ndarray
-    ):
+    @staticmethod
+    def _save_stream_state(
+        state_path: Path,
+        emitted: int,
+        aligner: DepthSequenceAligner,
+        depth_range: RunningDepthRange,
+    ) -> None:
         """
-        Save depth maps to global cache.
-
-        Args:
-            video_path: Path to video file (for cache key)
-            settings: Processing settings for cache key
-            depth_maps: Numpy array of depth maps
+        Save what's needed to continue the stream after the frames finished so far.
 
         Side effects:
-            - Filesystem I/O (cache writes)
+            - Writes the state file
         """
-        if save_depth_maps_to_cache(video_path, settings, depth_maps):
-            cache_entries, cache_size_bytes = get_cache_size()
-            cache_size_mb = cache_size_bytes / (1024 * 1024)
-            print("  Cached depth maps for future use")
-            print(f"  Cache: {cache_entries} entries, {cache_size_mb:.1f} MB total\n")
+        arrays: dict[str, np.ndarray] = {"emitted": np.array(emitted)}
+        arrays.update(aligner.state())
+        if depth_range.low is not None and depth_range.high is not None:
+            arrays["range"] = np.array([depth_range.low, depth_range.high], dtype=np.float64)
+        DepthMapProcessor._write_state(state_path, arrays)
+
+    @staticmethod
+    def _write_state(state_path: Path, arrays: dict[str, np.ndarray]) -> None:
+        """Write the state file atomically (an interrupted write keeps the old state)."""
+        temp_path = state_path.with_name(state_path.stem + ".tmp.npz")
+        np.savez(temp_path, **arrays)  # type: ignore[arg-type]
+        os.replace(temp_path, state_path)

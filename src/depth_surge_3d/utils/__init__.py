@@ -23,12 +23,6 @@ from .system import (
 
 # Domain utilities
 from .domain import (
-    get_cache_dir,
-    compute_cache_key,
-    get_cached_depth_maps,
-    save_depth_maps_to_cache,
-    clear_cache,
-    get_cache_size,
     parse_custom_resolution,
     get_resolution_dimensions,
     calculate_vr_output_dimensions,
@@ -89,12 +83,6 @@ __all__ = [
     "saved_to",
     "completion_banner",
     # Domain utilities
-    "get_cache_dir",
-    "compute_cache_key",
-    "get_cached_depth_maps",
-    "save_depth_maps_to_cache",
-    "clear_cache",
-    "get_cache_size",
     "parse_custom_resolution",
     "get_resolution_dimensions",
     "calculate_vr_output_dimensions",

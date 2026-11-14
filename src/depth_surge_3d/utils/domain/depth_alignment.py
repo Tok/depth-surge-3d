@@ -141,6 +141,42 @@ class DepthSequenceAligner:
         self._reference = (1.0 - decay) * self._reference + decay * aligned
         return aligned
 
+    def take(self, hold_back: int = 0) -> np.ndarray:
+        """
+        Remove and return the frames that are final, keeping the last ``hold_back``.
+
+        The frames kept back are the ones the next chunk repeats (its overlap): they are
+        still going to be crossfaded with the next prediction, so they aren't final yet.
+
+        Args:
+            hold_back: Number of newest frames to keep in the aligner
+
+        Returns:
+            Array [N, H, W] (float32) of final frames, possibly empty
+        """
+        count = max(0, len(self._frames) - max(0, hold_back))
+        if count == 0:
+            return np.empty((0, 0, 0), dtype=np.float32)
+        final = np.stack(self._frames[:count]).astype(np.float32, copy=False)
+        self._frames = self._frames[count:]
+        return final
+
+    def state(self) -> dict[str, np.ndarray]:
+        """Arrays needed to continue this sequence later (see ``restore``)."""
+        state: dict[str, np.ndarray] = {}
+        if self._frames:
+            state["tail"] = np.stack(self._frames).astype(np.float32, copy=False)
+        if self._reference is not None:
+            state["reference"] = np.asarray(self._reference, dtype=np.float32)
+        return state
+
+    def restore(self, state: dict[str, np.ndarray]) -> None:
+        """Continue a sequence from arrays returned by ``state``."""
+        tail = state.get("tail")
+        self._frames = [] if tail is None else [np.array(f, dtype=np.float32) for f in tail]
+        reference = state.get("reference")
+        self._reference = None if reference is None else np.array(reference, dtype=np.float32)
+
     def result(self) -> np.ndarray:
         """
         Return the aligned sequence as an array [N, H, W] (float32).
@@ -201,3 +237,93 @@ def normalize_depth_sequence(
     out /= high - low
     np.clip(out, 0.0, 1.0, out=out)
     return out
+
+
+class RunningDepthRange:
+    """
+    Normalizes a depth sequence to 0-1 chunk by chunk, without seeing the whole video.
+
+    The range of the first chunk is used as is. After that the range widens at once when a
+    chunk needs more room (nothing gets clipped for long) and narrows slowly when the scene
+    uses less of it, so a single close-up doesn't flatten the rest of the video. Within a
+    chunk the range moves linearly from the old to the new one: depth, and so stereo
+    disparity, never jumps between chunks.
+    """
+
+    def __init__(
+        self,
+        half_life_frames: float = 600.0,
+        low: float | None = None,
+        high: float | None = None,
+        low_percentile: float = 0.5,
+        high_percentile: float = 99.5,
+    ):
+        """
+        Args:
+            half_life_frames: Frames after which the range has narrowed halfway to a
+                smaller range of the content
+            low: Range start to continue from (resume)
+            high: Range end to continue from (resume)
+            low_percentile: Percentile of a chunk mapped to 0 (far)
+            high_percentile: Percentile of a chunk mapped to 1 (near)
+        """
+        self.half_life_frames = max(1.0, float(half_life_frames))
+        self.low = low
+        self.high = high
+        self.low_percentile = low_percentile
+        self.high_percentile = high_percentile
+
+    def _chunk_range(self, depths: np.ndarray, max_samples: int) -> tuple[float, float] | None:
+        """Robust (low, high) of a chunk, or None if it has no usable range."""
+        step = max(1, depths.size // max_samples)
+        sample = depths.reshape(-1)[::step]
+        sample = sample[np.isfinite(sample)]
+        if sample.size == 0:
+            return None
+        low, high = np.percentile(sample, [self.low_percentile, self.high_percentile])
+        if high - low < 1e-8:
+            return None
+        return float(low), float(high)
+
+    def normalize(self, depths: np.ndarray, max_samples: int = 2_000_000) -> np.ndarray:
+        """
+        Normalize the next chunk of aligned inverse depth and update the range.
+
+        Args:
+            depths: Array [N, H, W] of aligned inverse depth, in video order
+            max_samples: Maximum number of pixels used to estimate the chunk's range
+
+        Returns:
+            Array [N, H, W] in [0, 1] (float32)
+        """
+        out = np.array(depths, dtype=np.float32)
+        count = len(out)
+        if count == 0:
+            return out
+
+        chunk_range = self._chunk_range(out, max_samples)
+        if self.low is None or self.high is None:
+            if chunk_range is None:
+                out.fill(0.0)
+                return out
+            self.low, self.high = chunk_range
+            lows = np.full(count, self.low, dtype=np.float32)
+            highs = np.full(count, self.high, dtype=np.float32)
+        else:
+            old_low, old_high = self.low, self.high
+            if chunk_range is not None:
+                narrow = 1.0 - 0.5 ** (count / self.half_life_frames)
+                low, high = chunk_range
+                self.low = low if low < old_low else old_low + (low - old_low) * narrow
+                self.high = high if high > old_high else old_high + (high - old_high) * narrow
+            weights = np.linspace(0.0, 1.0, count + 1, dtype=np.float32)[1:]
+            lows = old_low + (self.low - old_low) * weights
+            highs = old_high + (self.high - old_high) * weights
+
+        np.nan_to_num(
+            out, copy=False, nan=float(lows[0]), posinf=float(highs[0]), neginf=float(lows[0])
+        )
+        out -= lows[:, None, None]
+        out /= (highs - lows)[:, None, None]
+        np.clip(out, 0.0, 1.0, out=out)
+        return out

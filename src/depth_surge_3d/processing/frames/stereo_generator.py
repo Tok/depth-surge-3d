@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import os
+import signal
 import traceback
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -15,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import cv2
-import numpy as np
 
+from ...io.operations import load_depth_map
 from ...utils import render_stereo_pair
 from ...core.constants import MAX_STEREO_WORKERS, PREVIEW_FRAME_SAMPLE_RATE
 
@@ -29,24 +30,37 @@ def _init_stereo_worker() -> None:
     machines (or containers with a pids limit) can exhaust thread/process limits.
     """
     cv2.setNumThreads(1)
+    # Ctrl+C is handled by the parent, which cancels the queued work and stops the pool
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def _process_single_stereo_pair(
-    args: tuple[np.ndarray, np.ndarray, str, str | None, str | None, dict[str, Any]],
+    args: tuple[str, str, str, str | None, str | None, dict[str, Any]],
 ) -> str:
     """
     Worker function to process a single stereo pair.
 
+    Frame and depth map are read here, in the worker: passing paths instead of arrays keeps
+    the parent's memory flat and avoids pickling full frames into every worker.
+
     Args:
-        args: Tuple of (frame, depth_map, frame_name, left_path, right_path, settings)
+        args: Tuple of (frame_path, depth_path, frame_name, left_path, right_path, settings)
 
     Returns:
         The frame name
 
     Side effects:
+        - Reads the frame and its depth map
         - Writes to left_path and right_path if provided
     """
-    frame, depth_map, frame_name, left_path, right_path, settings = args
+    frame_path, depth_path, frame_name, left_path, right_path, settings = args
+
+    frame = cv2.imread(frame_path)
+    if frame is None:
+        raise IOError(f"Failed to read {frame_path}")
+    depth_map = load_depth_map(depth_path)
+    if depth_map is None:
+        raise IOError(f"Failed to read {depth_path}")
 
     left_img, right_img = render_stereo_pair(frame, depth_map, settings)
 
@@ -88,23 +102,25 @@ class StereoPairGenerator:
             verbose: Enable verbose output
         """
         self.verbose = verbose
+        self._executor: ProcessPoolExecutor | None = None
+        self._executor_workers = 0
 
     def create_stereo_pairs(
         self,
-        frames: np.ndarray,
-        depth_maps: np.ndarray,
         frame_files: list[Path],
+        depth_files: list[Path],
         directories: dict[str, Path],
         settings: dict[str, Any],
         progress_tracker=None,
     ) -> bool:
         """
-        Generate stereo pairs using a process pool.
+        Generate stereo pairs for a batch of frames using a process pool.
+
+        The pool is kept for the next batch; call ``close()`` when done.
 
         Args:
-            frames: Array of frame images
-            depth_maps: Array of depth map images
-            frame_files: List of frame file paths
+            frame_files: Frame files of the batch
+            depth_files: Depth map files of the same frames
             directories: Dictionary of processing directories
             settings: Processing settings with baseline, focal_length, etc.
             progress_tracker: Optional progress tracker
@@ -117,52 +133,62 @@ class StereoPairGenerator:
             - Writes stereo pair images to disk
         """
         try:
-            if len(frames) != len(depth_maps):
-                print(
-                    f"Error: {len(frames)} frames but {len(depth_maps)} depth maps "
-                    "(stale depth cache? try --clear-cache)"
-                )
+            if len(frame_files) != len(depth_files):
+                print(f"Error: {len(frame_files)} frames but {len(depth_files)} depth maps")
                 return False
 
-            args_list = self._build_args(frames, depth_maps, frame_files, directories, settings)
+            args_list = self._build_args(frame_files, depth_files, directories, settings)
             if not args_list:
                 print("Error: No frames to process")
                 return False
 
             num_workers = get_stereo_worker_count(len(args_list))
             if num_workers <= 1:
-                print("  Generating stereo pairs in-process...")
                 self._run_sequential(args_list, 0, progress_tracker)
                 return True
 
-            print(f"  Using {num_workers} parallel workers for stereo generation...")
             try:
                 self._run_parallel(args_list, num_workers, progress_tracker)
             except BrokenProcessPool as e:
                 # A worker died without reporting (OOM killer, process limit, segfault).
                 # Redo the work in-process so the job finishes or surfaces the real error.
                 print(f"  Warning: stereo worker pool crashed ({e}); retrying in-process...")
+                self.close()
                 self._run_sequential(args_list, 0, progress_tracker)
 
             return True
 
+        except (InterruptedError, KeyboardInterrupt):
+            self.close()  # stop requested: drop the queued pairs instead of finishing them
+            raise
         except Exception as e:
             print(f"Error creating stereo pairs: {e}")
             traceback.print_exc()
             return False
 
+    def close(self) -> None:
+        """
+        Shut down the worker pool (queued work is cancelled).
+
+        Side effects:
+            - Stops worker processes
+        """
+        if self._executor is not None:
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            self._executor = None
+            self._executor_workers = 0
+
     @staticmethod
     def _build_args(
-        frames: np.ndarray,
-        depth_maps: np.ndarray,
         frame_files: list[Path],
+        depth_files: list[Path],
         directories: dict[str, Path],
         settings: dict[str, Any],
     ) -> list[tuple]:
         """PURE: Build worker argument tuples."""
         # Stereo pairs are always written: the distortion/crop steps read them from disk
         args_list = []
-        for frame, depth_map, frame_file in zip(frames, depth_maps, frame_files):
+        for frame_file, depth_file in zip(frame_files, depth_files):
             frame_name = frame_file.stem
             left_path = (
                 str(directories["left_frames"] / f"{frame_name}.png")
@@ -174,25 +200,73 @@ class StereoPairGenerator:
                 if "right_frames" in directories
                 else None
             )
-            args_list.append((frame, depth_map, frame_name, left_path, right_path, settings))
+            args_list.append(
+                (str(frame_file), str(depth_file), frame_name, left_path, right_path, settings)
+            )
         return args_list
 
-    def _run_parallel(self, args_list: list[tuple], num_workers: int, progress_tracker) -> None:
+    def _get_executor(self, num_workers: int) -> ProcessPoolExecutor:
         """
-        Process pairs in a pool. Raises BrokenProcessPool if a worker dies.
+        Worker pool, created on first use and reused for later batches.
 
         Workers are started with "spawn", not "fork": by this point the parent has torch,
         CUDA and OpenCV worker threads running, and a forked child inherits any lock one
         of those threads held at fork time, then blocks on it forever (#17).
         """
-        with ProcessPoolExecutor(
-            max_workers=num_workers,
-            mp_context=mp.get_context("spawn"),
-            initializer=_init_stereo_worker,
-        ) as executor:
-            results = executor.map(_process_single_stereo_pair, args_list, chunksize=1)
-            for i, _ in enumerate(results):
-                self._report_progress(i, args_list, progress_tracker)
+        if self._executor is None or self._executor_workers < num_workers:
+            self.close()
+            self._executor = ProcessPoolExecutor(
+                max_workers=num_workers,
+                mp_context=mp.get_context("spawn"),
+                initializer=_init_stereo_worker,
+            )
+            self._executor_workers = num_workers
+        return self._executor
+
+    def _run_parallel(self, args_list: list[tuple], num_workers: int, progress_tracker) -> None:
+        """Process pairs in the pool. Raises BrokenProcessPool if a worker dies."""
+        executor = self._get_executor(num_workers)
+        results = executor.map(_process_single_stereo_pair, args_list, chunksize=1)
+        for i, _ in enumerate(results):
+            self._report_progress(i, args_list, progress_tracker)
+
+    def map_in_pool(self, function, tasks: list, on_result=None) -> None:
+        """
+        Run a picklable function over tasks in the worker pool, in order.
+
+        Uses the same pool as stereo generation. With a single worker, or after the pool
+        crashed, the tasks run in this process instead.
+
+        Args:
+            function: Module-level function taking one task
+            tasks: Task arguments
+            on_result: Called with the task index after each task finished (in order).
+                An exception it raises (e.g. a stop request) propagates.
+
+        Side effects:
+            - Parallel processing via multiprocessing
+        """
+
+        def sequential() -> None:
+            for index, task in enumerate(tasks):
+                function(task)
+                if on_result:
+                    on_result(index)
+
+        num_workers = get_stereo_worker_count(len(tasks))
+        if num_workers <= 1:
+            sequential()
+            return
+        try:
+            results = self._get_executor(num_workers).map(function, tasks, chunksize=1)
+            for index, _ in enumerate(results):
+                if on_result:
+                    on_result(index)
+        except BrokenProcessPool as e:
+            # A worker died without reporting (OOM killer, process limit, segfault)
+            print(f"  Warning: worker pool crashed ({e}); retrying in-process...")
+            self.close()
+            sequential()
 
     def _run_sequential(self, args_list: list[tuple], start: int, progress_tracker) -> None:
         """Process pairs in the current process."""

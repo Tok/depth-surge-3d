@@ -146,8 +146,8 @@ class TestApplyDistortion:
             fake_left, fake_right, directories, settings, mock_progress_tracker
         )
 
-        # Should still return True (just skips bad frames with warning)
-        assert result is True
+        # A missing frame fails the step (a silently skipped frame would leave a gap)
+        assert result is False
 
     def test_apply_distortion_exception_handling(self, temp_frames, mock_progress_tracker):
         """Test exception handling during distortion."""

@@ -14,15 +14,11 @@ class TestEntryPointImports:
         sys.path.insert(0, str(project_root / "src"))
 
         # Test CLI imports (without actually running the script)
-        from depth_surge_3d.utils.domain.depth_cache import (
-            get_cache_size,
-            get_cache_dir,
-            clear_cache,
-        )
+        from depth_surge_3d.processing import assemble_partial_video
+        from depth_surge_3d.utils.domain.progress import TqdmProgressTracker
 
-        assert callable(get_cache_size)
-        assert callable(get_cache_dir)
-        assert callable(clear_cache)
+        assert callable(assemble_partial_video)
+        assert callable(TqdmProgressTracker)
 
     def test_app_imports(self):
         """Test that web UI (app.py) imports work."""
@@ -80,7 +76,7 @@ class TestEntryPointImports:
             path_utils,
         )
         from depth_surge_3d.utils.domain import (  # noqa: F401
-            depth_cache,
+            depth_alignment,
             progress,
             resolution,
         )
@@ -142,21 +138,20 @@ class TestNoOrphanedImports:
 
         assert bad_imports == [], f"Found old resolution imports in: {bad_imports}"
 
-    def test_no_old_depth_cache_imports(self):
-        """Verify no code uses old utils.depth_cache path."""
+    def test_nothing_is_written_to_the_user_cache_directory(self):
+        """The app keeps its files in the project and batch directories, not in ~/.cache."""
         project_root = Path(__file__).parent.parent.parent
 
-        bad_imports = []
-        for py_file in project_root.glob("**/*.py"):
-            if ".venv" in str(py_file) or "__pycache__" in str(py_file):
-                continue
-
+        offenders = []
+        for py_file in list((project_root / "src").glob("**/*.py")) + [
+            project_root / "app.py",
+            project_root / "depth_surge_3d.py",
+        ]:
             content = py_file.read_text()
-            # Check for old import pattern (but not the new one)
-            if "utils.depth_cache" in content and "utils.domain.depth_cache" not in content:
-                bad_imports.append(str(py_file.relative_to(project_root)))
+            if '".cache"' in content or "XDG_CACHE_HOME" in content:
+                offenders.append(str(py_file.relative_to(project_root)))
 
-        assert bad_imports == [], f"Found old depth_cache imports in: {bad_imports}"
+        assert offenders == []
 
     def test_no_old_video_processor_imports(self):
         """Verify no code uses old processing.video_processor path."""

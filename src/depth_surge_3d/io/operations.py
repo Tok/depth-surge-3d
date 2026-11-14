@@ -20,11 +20,14 @@ import time
 from pathlib import Path
 from typing import Any
 import cv2
+import numpy as np
 
 from ..core.constants import (
     SUPPORTED_VIDEO_FORMATS,
     SUPPORTED_IMAGE_FORMATS,
     INTERMEDIATE_DIRS,
+    DEPTH_MAP_PNG_SCALE,
+    PIPELINE_STATE_FILE,
 )
 from ..utils.path_utils import (
     generate_output_filename,
@@ -167,10 +170,51 @@ def get_video_info_ffprobe(video_path: str) -> dict[str, Any]:
     return {}
 
 
+def save_depth_map(path: Path | str, depth_map: np.ndarray) -> bool:
+    """
+    Write a normalized depth map (0-1) as a 16-bit grayscale PNG.
+
+    Args:
+        path: Output file path
+        depth_map: Depth map [H, W] with values in [0, 1]
+
+    Returns:
+        True if the file was written
+
+    Side Effects:
+        Writes an image file
+    """
+    scaled = np.round(np.clip(depth_map, 0.0, 1.0) * DEPTH_MAP_PNG_SCALE).astype(np.uint16)
+    return bool(cv2.imwrite(str(path), scaled))
+
+
+def load_depth_map(path: Path | str) -> np.ndarray | None:
+    """
+    Read a depth map PNG (16-bit, or 8-bit from older versions) as float32 in [0, 1].
+
+    Args:
+        path: Depth map file path
+
+    Returns:
+        Depth map [H, W], or None if the file can't be read
+
+    Side Effects:
+        Reads an image file
+    """
+    image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if image is None:
+        return None
+    if image.ndim == 3:
+        image = image[..., 0]
+    scale = DEPTH_MAP_PNG_SCALE if image.dtype == np.uint16 else 255
+    return image.astype(np.float32) / scale
+
+
 # Directories later pipeline steps read from; always created and written, even when
 # intermediates aren't kept (they're removed after a successful run instead).
 PIPELINE_DIRS = [
     "frames",
+    "depth_maps",
     "left_frames",
     "right_frames",
     "left_distorted",
@@ -180,6 +224,7 @@ PIPELINE_DIRS = [
     "left_upscaled",
     "right_upscaled",
     "vr_frames",
+    "video_segments",
 ]
 
 
@@ -615,9 +660,12 @@ def find_settings_file(output_dir: Path, batch_name: str | None = None) -> Path 
             if settings_file.exists():
                 return settings_file
         else:
-            # Find any settings file
-            for file_path in output_dir.glob("*-settings.json"):
-                return file_path
+            # Newest settings file (older versions wrote a new one on every resume)
+            candidates = sorted(
+                output_dir.glob("*-settings.json"), key=lambda path: path.stat().st_mtime
+            )
+            if candidates:
+                return candidates[-1]
 
         return None
 
@@ -697,7 +745,9 @@ def can_resume_processing(output_dir: Path) -> dict[str, Any]:
         return result
 
 
-def analyze_processing_progress(output_dir: Path, settings_data: dict[str, Any]) -> dict[str, Any]:
+def analyze_processing_progress(  # noqa: C901
+    output_dir: Path, settings_data: dict[str, Any]
+) -> dict[str, Any]:
     """
     Analyze how much processing has been completed.
 
@@ -723,6 +773,11 @@ def analyze_processing_progress(output_dir: Path, settings_data: dict[str, Any])
     }
 
     try:
+        pipeline_state = read_pipeline_progress(output_dir)
+        if pipeline_state:
+            progress["total_frames"] = pipeline_state["total_frames"]
+            progress["steps_done"] = pipeline_state["done"]
+
         # Check each intermediate directory
         for stage_name, dir_name in INTERMEDIATE_DIRS.items():
             stage_dir = output_dir / dir_name
@@ -737,7 +792,12 @@ def analyze_processing_progress(output_dir: Path, settings_data: dict[str, Any])
                     progress["vr_frames_created"] = frame_count
 
         # Determine overall progress
-        if progress["vr_frames_created"] > 0:
+        if pipeline_state:
+            finished = int(pipeline_state["done"].get("assemble", 0))
+            progress["vr_frames_created"] = finished
+            progress["frames_processed"] = finished
+            progress["can_resume_from_intermediates"] = True
+        elif progress["vr_frames_created"] > 0:
             progress["frames_processed"] = progress["vr_frames_created"]
             progress["can_resume_from_intermediates"] = True
         elif "depth_maps" in progress["intermediate_stages"]:
@@ -751,3 +811,30 @@ def analyze_processing_progress(output_dir: Path, settings_data: dict[str, Any])
     except Exception as e:
         print(f"Warning: Could not analyze processing progress: {e}")
         return progress
+
+
+def read_pipeline_progress(output_dir: Path) -> dict[str, Any] | None:
+    """
+    Read how far the pipeline got in a batch directory.
+
+    Args:
+        output_dir: Batch output directory
+
+    Returns:
+        Dict with ``total_frames``, ``done`` (frames finished per step key) and ``segments``
+        (frame ranges of the encoded video segments), or None if the directory has no
+        pipeline state
+
+    Side Effects:
+        Reads the pipeline state file
+    """
+    try:
+        with open(Path(output_dir) / PIPELINE_STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {
+            "total_frames": int(data.get("total_frames", 0)),
+            "done": {key: int(value) for key, value in dict(data.get("done", {})).items()},
+            "segments": [[int(a), int(b)] for a, b in data.get("segments", [])],
+        }
+    except (OSError, ValueError, TypeError):
+        return None

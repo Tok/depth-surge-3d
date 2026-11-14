@@ -33,21 +33,25 @@ class FrameUpscalerProcessor:
             verbose: Enable verbose output
         """
         self.verbose = verbose
-        self.upscaler = None
+        self.upscaler: Any = None  # loaded on first use, kept for later batches
 
     def apply_upscaling(
         self,
         directories: dict[str, Path],
         settings: dict[str, Any],
         progress_tracker=None,
+        frame_names: list[str] | None = None,
     ) -> bool:
         """
         Apply AI upscaling to stereo frames.
+
+        The model stays loaded for the next batch; call ``close()`` when done.
 
         Args:
             directories: Dictionary of processing directories
             settings: Processing settings with upscale_model parameter
             progress_tracker: Optional progress tracker
+            frame_names: Frame names (file stems) to upscale; all frames if None
 
         Returns:
             True if successful, False otherwise
@@ -58,41 +62,63 @@ class FrameUpscalerProcessor:
             - Modifies GPU memory state
         """
         try:
-            from ...inference import create_upscaler
-
             # Get source directories (cropped frames)
             source_left, source_right = self._get_upscaling_source_dirs(directories, settings)  # type: ignore[misc]
             if source_left is None or source_right is None:
                 return False
 
-            # Create upscaler
-            upscaler = create_upscaler(
-                model_name=settings["upscale_model"],
-                device=settings.get("device", "auto"),
+            if self.upscaler is None:
+                from ...inference import create_upscaler
+
+                upscaler = create_upscaler(
+                    model_name=settings["upscale_model"],
+                    device=settings.get("device", "auto"),
+                )
+                if upscaler is None:
+                    return True  # No upscaling
+                if not upscaler.load_model():
+                    print("Failed to load upscaling model")
+                    return False
+                self.upscaler = upscaler
+
+            return self._process_upscaling_frames(
+                self.upscaler,
+                source_left,
+                source_right,
+                directories,
+                settings,
+                progress_tracker,
+                frame_names,
             )
 
-            if upscaler is None:
-                return True  # No upscaling
-
-            if not upscaler.load_model():
-                print("Failed to load upscaling model")
-                return False
-
-            try:
-                return self._process_upscaling_frames(
-                    upscaler, source_left, source_right, directories, settings, progress_tracker
-                )
-            finally:
-                upscaler.unload_model()
-
+        except InterruptedError:
+            raise
         except Exception as e:
             print(f"Error applying upscaling: {e}")
 
             traceback.print_exc()
             return False
 
+    def close(self) -> None:
+        """
+        Unload the upscaling model.
+
+        Side effects:
+            - Frees GPU memory
+        """
+        if self.upscaler is not None:
+            self.upscaler.unload_model()
+            self.upscaler = None
+
     def _process_upscaling_frames(
-        self, upscaler, left_dir, right_dir, directories, settings, progress_tracker
+        self,
+        upscaler,
+        left_dir,
+        right_dir,
+        directories,
+        settings,
+        progress_tracker,
+        frame_names: list[str] | None = None,
     ) -> bool:
         """
         Process frames in batches with model management.
@@ -104,17 +130,21 @@ class FrameUpscalerProcessor:
             directories: Dictionary of processing directories
             settings: Processing settings
             progress_tracker: Optional progress tracker
+            frame_names: Frame names (file stems) to upscale; all frames if None
 
         Returns:
             True if successful, False otherwise
 
         Side effects:
-            - Loads/unloads upscaling model
             - GPU memory operations
             - Filesystem I/O
         """
-        left_files = sorted(list(left_dir.glob("*.png")))
-        right_files = sorted(list(right_dir.glob("*.png")))
+        if frame_names is not None:
+            left_files = [left_dir / f"{name}.png" for name in frame_names]
+            right_files = [right_dir / f"{name}.png" for name in frame_names]
+        else:
+            left_files = sorted(list(left_dir.glob("*.png")))
+            right_files = sorted(list(right_dir.glob("*.png")))
 
         if len(left_files) != len(right_files):
             print(f"Frame count mismatch: {len(left_files)} left, {len(right_files)} right")
