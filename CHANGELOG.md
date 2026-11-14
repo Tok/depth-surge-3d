@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list shows the running job, the queue and unfinished jobs, each with Resume / Assemble / Open.
 - **Disk space estimate** before starting (web UI and CLI), with a warning if it exceeds the
   free space. Sizes per pixel were measured on a 1080p camera video; other content differs.
+- **Framing preview** next to Frame Cropping: a schematic of how the frame sits in each eye's
+  view with the current fisheye, frame fit and crop settings, with the share of the frame that
+  is visible and the share of the view that is black.
 - Stopping a job in the web UI offers to create a video from the frames finished so far.
 - CLI: `--depth-resolution`, `--super-sample`, `--video-encoder`, and `--reuse DIR` to run in an
   existing output directory with new settings, reusing its frames and depth maps.

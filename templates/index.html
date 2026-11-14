@@ -317,6 +317,64 @@
             background-image: linear-gradient(45deg, var(--accent-green) 0%, var(--accent-lime) 100%);
         }
 
+        /* Framing preview: schematic of how the frame sits in each eye's view */
+        .crop-preview {
+            background-color: #0a0a0a;
+            border: 1px solid var(--bs-border-color);
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .crop-preview-title {
+            font-size: 0.8rem;
+            color: var(--accent-lime);
+            font-family: 'Courier New', monospace;
+            margin-bottom: 0.4rem;
+        }
+
+        .crop-preview-title span {
+            color: #9a9a9a;
+        }
+
+        #cropPreview {
+            display: block;
+            width: 100%;
+            max-width: 280px;
+            margin: 0 auto;
+        }
+
+        #cropPreview .view { fill: #000; stroke: var(--accent-lime); stroke-width: 0.03; }
+        #cropPreview .picture { fill: rgba(57, 255, 20, 0.2); stroke: var(--accent-lime); stroke-width: 0.02; }
+        #cropPreview .grid { fill: none; stroke: rgba(57, 255, 20, 0.45); stroke-width: 0.008; }
+        #cropPreview .cut { fill: rgba(255, 255, 255, 0.05); stroke: #8a8a8a; stroke-width: 0.015; stroke-dasharray: 0.05 0.04; }
+
+        .crop-preview-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem 0.9rem;
+            font-size: 0.72rem;
+            color: #9a9a9a;
+            margin-top: 0.5rem;
+        }
+
+        .legend-swatch {
+            display: inline-block;
+            width: 0.7rem;
+            height: 0.7rem;
+            vertical-align: -1px;
+            margin-right: 0.2rem;
+        }
+
+        .legend-visible { background: rgba(57, 255, 20, 0.35); border: 1px solid var(--accent-lime); }
+        .legend-black { background: #000; border: 1px solid var(--accent-lime); }
+        .legend-cut { background: rgba(255, 255, 255, 0.05); border: 1px dashed #8a8a8a; }
+
+        .crop-preview-numbers {
+            font-family: 'Courier New', monospace;
+            font-size: 0.78rem;
+            margin-top: 0.4rem;
+        }
+
         /* Selected preset button */
         .btn-outline-success.active {
             background-color: var(--accent-lime) !important;
@@ -1223,6 +1281,8 @@
                             <span class="step-number">5</span>
                             <h6 class="step-title">Frame Cropping</h6>
                         </div>
+                        <div class="row">
+                            <div class="col-lg-8">
                         <div class="mb-3">
                             <label class="form-label">Crop Factor (Standard) <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="Applied when fisheye is disabled. Crops from center to remove stereo edge artifacts. 1.0 = no crop, 0.5 = keep center 50%."></i></label>
                             <input type="number" class="form-control" id="cropFactor" value="1.0" step="0.05" min="0.5" max="1.0">
@@ -1238,6 +1298,20 @@
     <i class="fas fa-search-plus"></i> How much of the fisheye circle is kept; the video is fitted into it, so edges are never stretched<br>
     <strong>0.5</strong> = zoomed in | <strong>0.7</strong> = balanced (default) | <strong>1.0</strong> = full circle | <strong>>1.0</strong> = wider, with black corners
 </small>
+                        </div>
+                            </div>
+                            <div class="col-lg-4">
+                                <div class="crop-preview">
+                                    <div class="crop-preview-title">Framing Preview <span id="cropPreviewSource"></span></div>
+                                    <svg id="cropPreview" viewBox="-1.6 -1.6 3.2 3.2" role="img" aria-label="How the video frame is placed in each eye's view"></svg>
+                                    <div class="crop-preview-legend">
+                                        <span><i class="legend-swatch legend-visible"></i> picture in the view</span>
+                                        <span><i class="legend-swatch legend-black"></i> black</span>
+                                        <span><i class="legend-swatch legend-cut"></i> cut off</span>
+                                    </div>
+                                    <div class="crop-preview-numbers" id="cropPreviewNumbers">--</div>
+                                </div>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Hole Filling <i class="fas fa-info-circle" data-bs-toggle="tooltip" title="When the viewpoint shifts, background hidden behind near objects becomes visible. These areas are filled by mirroring the neighbouring background texture (never the foreground), the same way every frame, so the fill does not flicker."></i></label>
@@ -2610,6 +2684,152 @@
             return null;  // auto and the wide presets follow the video
         }
 
+        // Fisheye geometry, the same as the pipeline's: a point of the square view at
+        // distance rho from its centre shows the frame at distance scale * shape(theta)
+        const FISHEYE_SHAPES = {
+            stereographic: {forward: t => Math.tan(t / 2), inverse: r => 2 * Math.atan(r)},
+            equidistant: {forward: t => t, inverse: r => r},
+            equisolid: {forward: t => Math.sin(t / 2), inverse: r => (r <= 1 ? 2 * Math.asin(r) : null)},
+            orthogonal: {forward: t => Math.sin(t), inverse: r => (r <= 1 ? Math.asin(r) : null)}
+        };
+
+        function fisheyeGeometry(width, height) {
+            const shape = FISHEYE_SHAPES[document.getElementById('fisheyeProjection').value] || FISHEYE_SHAPES.stereographic;
+            const halfFov = (parseFloat(document.getElementById('fisheyeFov').value) || 180) * Math.PI / 360;
+            const crop = Math.max(0.5, Math.min(2, parseFloat(document.getElementById('fisheyeCropFactor').value) || 0.7));
+            const fit = Math.max(0, Math.min(1, parseFloat(document.getElementById('fisheyeFrameFit').value) || 0));
+            const shortHalf = Math.min(width, height) / 2;
+            const zoom = 1 + fit * (Math.max(width, height) / Math.min(width, height) - 1);
+            const fitRho = Math.min(crop, 1);  // radius (of the inscribed circle) fitted to the frame
+            const scale = zoom * shortHalf / shape.forward(fitRho * halfFov);
+            return {
+                // frame point (relative to the frame centre) -> view coordinates (-1..1), or null
+                toView(x, y) {
+                    const theta = shape.inverse(Math.hypot(x, y) / scale);
+                    if (theta === null) return null;
+                    const rho = theta / halfFov / crop;
+                    const angle = Math.atan2(y, x);
+                    return [rho * Math.cos(angle), rho * Math.sin(angle)];
+                },
+                // view coordinates -> is the frame visible there?
+                showsFrame(u, v) {
+                    const theta = Math.hypot(u, v) * crop * halfFov;
+                    if (theta >= Math.PI) return false;
+                    const r = scale * shape.forward(theta);
+                    const angle = Math.atan2(v, u);
+                    return Math.abs(r * Math.cos(angle)) <= width / 2 && Math.abs(r * Math.sin(angle)) <= height / 2;
+                }
+            };
+        }
+
+        // Share of the frame that is visible and share of the view that is black (sampled)
+        function fisheyeCoverage(width, height) {
+            const geometry = fisheyeGeometry(width, height);
+            const steps = 60;
+            let visible = 0;
+            let covered = 0;
+            for (let i = 0; i < steps; i++) {
+                for (let j = 0; j < steps; j++) {
+                    const a = (i + 0.5) / steps - 0.5;
+                    const b = (j + 0.5) / steps - 0.5;
+                    const point = geometry.toView(a * width, b * height);
+                    if (point && Math.abs(point[0]) <= 1 && Math.abs(point[1]) <= 1) visible++;
+                    if (geometry.showsFrame(a * 2, b * 2)) covered++;
+                }
+            }
+            return {visibleFrame: visible / (steps * steps), blackView: 1 - covered / (steps * steps)};
+        }
+
+        function svgElement(name, attributes) {
+            const element = document.createElementNS('http://www.w3.org/2000/svg', name);
+            Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+            return element;
+        }
+
+        function eyeAspect(videoAspect) {
+            const resolution = document.getElementById('vrResolution').value;
+            if (resolution.startsWith('square')) return 1;
+            if (resolution.startsWith('cinema')) return 2048 / 858;
+            if (resolution === 'custom') {
+                const w = parseFloat(document.getElementById('customWidth').value);
+                const h = parseFloat(document.getElementById('customHeight').value);
+                return w > 0 && h > 0 ? w / h : videoAspect;
+            }
+            return resolution === 'auto' ? videoAspect : 16 / 9;
+        }
+
+        // Schematic of how the frame ends up in one eye's view with the current settings
+        function updateCropPreview() {
+            const svg = document.getElementById('cropPreview');
+            const info = currentVideoInfo;
+            const width = info ? info.width : 1920;
+            const height = info ? info.height : 1080;
+            document.getElementById('cropPreviewSource').textContent =
+                info ? `(${width}×${height} video)` : '(example: 16:9 video)';
+            const numbers = document.getElementById('cropPreviewNumbers');
+            const percent = value => `${Math.round(value * 100)}%`;
+            const parts = [];
+
+            if (document.getElementById('applyDistortion').checked) {
+                const geometry = fisheyeGeometry(width, height);
+                const line = (x0, y0, x1, y1) => {
+                    const points = [];
+                    for (let i = 0; i <= 48; i++) {
+                        const point = geometry.toView(x0 + (x1 - x0) * i / 48, y0 + (y1 - y0) * i / 48);
+                        if (point) points.push(point.map(c => c.toFixed(3)).join(','));
+                    }
+                    return points.join(' ');
+                };
+                const w = width / 2;
+                const h = height / 2;
+                const outline = [line(-w, -h, w, -h), line(w, -h, w, h), line(w, h, -w, h), line(-w, h, -w, -h)].join(' ');
+                const clip = svgElement('clipPath', {id: 'cropPreviewView'});
+                clip.appendChild(svgElement('rect', {x: -1, y: -1, width: 2, height: 2}));
+                const inView = svgElement('g', {'clip-path': 'url(#cropPreviewView)'});
+                inView.appendChild(svgElement('polygon', {class: 'picture', points: outline}));
+                for (let i = 1; i < 8; i++) {
+                    const x = -w + width * i / 8;
+                    inView.appendChild(svgElement('polyline', {class: 'grid', points: line(x, -h, x, h)}));
+                }
+                for (let i = 1; i < 4; i++) {
+                    const y = -h + height * i / 4;
+                    inView.appendChild(svgElement('polyline', {class: 'grid', points: line(-w, y, w, y)}));
+                }
+                parts.push(
+                    svgElement('polygon', {class: 'cut', points: outline}),
+                    svgElement('rect', {class: 'view', x: -1, y: -1, width: 2, height: 2}),
+                    clip,
+                    inView
+                );
+                const coverage = fisheyeCoverage(width, height);
+                numbers.textContent = `Visible: ${percent(coverage.visibleFrame)} of the frame · Black: ${percent(coverage.blackView)} of the view`;
+            } else {
+                // Flat 3D: centre crop, then fitted into the eye with black bars if the shapes differ
+                const crop = Math.max(0.5, Math.min(1, parseFloat(document.getElementById('cropFactor').value) || 1));
+                const videoAspect = width / height;
+                const aspect = eyeAspect(videoAspect);
+                const eyeW = aspect >= 1 ? 1.2 : 1.2 * aspect;
+                const eyeH = aspect >= 1 ? 1.2 / aspect : 1.2;
+                const fitScale = Math.min(eyeW / videoAspect, eyeH);   // half-height of the picture
+                const picW = fitScale * videoAspect;
+                const picH = fitScale;
+                parts.push(
+                    svgElement('rect', {class: 'view', x: -eyeW, y: -eyeH, width: 2 * eyeW, height: 2 * eyeH}),
+                    svgElement('rect', {class: 'cut', x: -picW / crop, y: -picH / crop, width: 2 * picW / crop, height: 2 * picH / crop}),
+                    svgElement('rect', {class: 'picture', x: -picW, y: -picH, width: 2 * picW, height: 2 * picH})
+                );
+                const black = 1 - (picW * picH) / (eyeW * eyeH);
+                numbers.textContent = `Visible: ${percent(crop * crop)} of the frame · Black: ${percent(black)} of the view`;
+            }
+            svg.replaceChildren(...parts);
+        }
+
+        ['fisheyeProjection', 'fisheyeFov', 'fisheyeCropFactor', 'cropFactor', 'vrFormat'].forEach(id => {
+            const element = document.getElementById(id);
+            element.addEventListener('change', updateAspectWarning);
+            element.addEventListener('input', updateAspectWarning);
+        });
+
         function setFrameFit(value) {
             const slider = document.getElementById('fisheyeFrameFit');
             slider.value = value;
@@ -2646,8 +2866,7 @@
                 if (fisheye) {
                     // Same calculation as the pipeline: zoom from 1 (fill) to long/short (whole frame)
                     const cut = (1 - fit) * (1 - shortSide / longSide);
-                    const zoom = 1 + fit * (longSide / shortSide - 1);
-                    const bars = 1 - 1 / zoom;
+                    const bars = fisheyeCoverage(info.width, info.height).blackView;
                     const longName = wide ? 'width' : 'height';
                     const cutEdges = wide ? 'left and right edges' : 'top and bottom';
                     const barsWhere = wide ? 'above and below' : 'left and right';
@@ -2673,6 +2892,8 @@
                     }
                 }
             }
+
+            updateCropPreview();
 
             document.querySelectorAll('.aspect-warning').forEach(box => {
                 box.replaceChildren();
